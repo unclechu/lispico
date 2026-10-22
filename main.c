@@ -8,6 +8,8 @@
 // Maximum Symbol name length (including \0 terminator).
 #define SYMBOL_NAME_SIZE 128u
 
+#define ERR_MSG_SIZE 4096u
+
 // A discriminator for the `Symbol` type
 typedef enum {
   SYM_EMPTY = 0,
@@ -17,6 +19,18 @@ typedef enum {
   SYM_NATIVE_FUNCTION,
 } SymbolKind;
 
+// Get a string representation of `SymbolKind` value
+const char* show_SymbolKind(SymbolKind kind) {
+  switch (kind) {
+    case SYM_EMPTY: return "SYM_EMPTY";
+    case SYM_VARIABLE: return "SYM_VARIABLE";
+    case SYM_ARRAY: return "SYM_ARRAY";
+    case SYM_LABEL: return "SYM_LABEL";
+    case SYM_NATIVE_FUNCTION: return "SYM_NATIVE_FUNCTION";
+    default: return "( ! Unexpected SymbolKind for show_SymbolKind ! )";
+  }
+}
+
 // Allowed data types for a value
 typedef enum {
   TYPE_VOID = 0,
@@ -25,6 +39,18 @@ typedef enum {
   TYPE_F32,
   TYPE_STRING,
 } ValueType;
+
+// Get a string representation of `ValueType` value
+const char* show_ValueType(ValueType type) {
+  switch (type) {
+    case TYPE_VOID: return "TYPE_VOID";
+    case TYPE_U32: return "TYPE_U32";
+    case TYPE_I32: return "TYPE_I32";
+    case TYPE_F32: return "TYPE_F32";
+    case TYPE_STRING: return "TYPE_STRING";
+    default: return "( ! Unexpected ValueType for show_ValueType ! )";
+  }
+}
 
 typedef struct {
   const char *data;
@@ -207,7 +233,161 @@ static Symbol* symbol_define(const char *name, SymbolKind kind) {
   return NULL; // `symbols` hash-table is full (error)
 }
 
+// An evaluator failure reported string.
+// Evaluator must check after every native function call that first element
+// is `\0` (means success), if not, the failure was reported and evaluator must
+// stop and fail. The first element must be reset to `\0` at the beginning of
+// evaluation in order to ignore previous evaluation state.
+static char eval_fail_msg[ERR_MSG_SIZE] = {'\0'};
+
+// Branching between different kinds of standard library printing functions
+typedef enum {
+  STD_PRINT,
+  STD_PRINTLN,
+  STD_EPRINT,
+  STD_EPRINTLN,
+} StdPrintVariant;
+
+// Get a string representation of `show_StdPrintVariant` value
+const char* show_StdPrintVariant(StdPrintVariant variant) {
+  switch (variant) {
+    case STD_PRINT: return "(print)";
+    case STD_PRINTLN: return "(println)";
+    case STD_EPRINT: return "(eprint)";
+    case STD_EPRINTLN: return "(eprintln)";
+    default: return "( ! Unexpected StdPrintVariant for show_StdPrintVariant ! )";
+  }
+}
+
+// Generic standard library printing implementation
+Value std_generic_print(StdPrintVariant variant, const Value *args, size_t argc) {
+  Value return_value = (Value) { .type = TYPE_VOID };
+
+  if (argc != 1) {
+    snprintf(
+      eval_fail_msg,
+      sizeof(eval_fail_msg),
+      "%s expects exactly 1 argument, got instead: %d",
+      show_StdPrintVariant(variant),
+      (int)argc
+    );
+    return return_value;
+  } else if (args[0].type != TYPE_STRING) {
+    snprintf(
+      eval_fail_msg,
+      sizeof(eval_fail_msg),
+      "%s argument must be a string, got instead: %s",
+      show_StdPrintVariant(variant),
+      show_ValueType(args[0].type)
+    );
+    return return_value;
+  }
+
+  FILE *stream =
+    (variant == STD_EPRINT || variant == STD_EPRINTLN)
+      ? stderr
+      : stdout;
+
+  fwrite(
+    args[0].as.string.data,
+    sizeof(char),
+    args[0].as.string.length,
+    stream
+  );
+
+  if (variant == STD_PRINTLN || variant == STD_EPRINTLN) fputc('\n', stream);
+
+  return return_value;
+}
+
+Value std_print(const Value *args, size_t argc) {
+  return std_generic_print(STD_PRINT, args, argc);
+}
+
+Value std_println(const Value *args, size_t argc) {
+  return std_generic_print(STD_PRINTLN, args, argc);
+}
+
+Value std_eprint(const Value *args, size_t argc) {
+  return std_generic_print(STD_EPRINT, args, argc);
+}
+
+Value std_eprintln(const Value *args, size_t argc) {
+  return std_generic_print(STD_EPRINTLN, args, argc);
+}
+
+// Populate the `symbols` with “standard library” definitions
+static int populate_std() {
+  char error_message[ERR_MSG_SIZE] = {'\0'};
+  const char *symbol_name;
+
+  symbol_name = "print";
+  Symbol *std_print_sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
+  if (std_print_sym == NULL) goto symbol_define_fail;
+  std_print_sym->as.native_function = std_print;
+
+  symbol_name = "println";
+  Symbol *std_println_sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
+  if (std_println_sym == NULL) goto symbol_define_fail;
+  std_println_sym->as.native_function = std_println;
+
+  symbol_name = "eprint";
+  Symbol *std_eprint_sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
+  if (std_eprint_sym == NULL) goto symbol_define_fail;
+  std_eprint_sym->as.native_function = std_eprint;
+
+  symbol_name = "eprintln";
+  Symbol *std_eprintln_sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
+  if (std_eprintln_sym == NULL) goto symbol_define_fail;
+  std_eprintln_sym->as.native_function = std_eprintln;
+
+  return 0;
+
+  symbol_define_fail:
+    snprintf(error_message, sizeof(error_message), "symbol_define for “%s”: ", symbol_name);
+    switch (symbol_define_error) {
+      case INCORRECT_INPUT:
+        snprintf(
+          error_message + strlen(error_message),
+          sizeof(error_message) - strlen(error_message),
+          "Received incorrect input"
+        );
+        break;
+      case ALREADY_DEFINED:
+        snprintf(
+          error_message + strlen(error_message),
+          sizeof(error_message) - strlen(error_message),
+          "Name is already defined"
+        );
+        break;
+      case TABLE_IS_FULL:
+        snprintf(
+          error_message + strlen(error_message),
+          sizeof(error_message) - strlen(error_message),
+          "Failed because symbols hash-table is full"
+        );
+        break;
+      default:
+        snprintf(
+          error_message + strlen(error_message),
+          sizeof(error_message) - strlen(error_message),
+          "Undefined error type (should never happen)"
+        );
+    }
+    goto fail;
+
+  fail:
+    fprintf(stderr, "[FAIL] populate_std: %s\n", error_message);
+    return 1;
+}
+
 int main() {
-  printf("TODO: implement\n");
+  int fail_code = 0;
+
+  if ((fail_code = populate_std()) != 0) {
+    fprintf(stderr, "[FAIL] populate_std failed with code: %d\n", fail_code);
+    return 1;
+  }
+
   return 0;
 }
