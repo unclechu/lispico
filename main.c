@@ -2,6 +2,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
+
+// *** Constants ***
 
 // Must be a power of two (for bitwise-modulo optimizations to work — &)
 #define SYMBOL_CAPACITY 256u
@@ -9,6 +12,8 @@
 #define SYMBOL_NAME_SIZE 128u
 
 #define ERR_MSG_SIZE 4096u
+
+// *** `symbols` (definitions) hash-table ***
 
 // A discriminator for the `Symbol` type
 typedef enum {
@@ -159,7 +164,7 @@ static Symbol* symbol_lookup(const char *name) {
 
 // Error outcomes for the `symbol_define` function.
 typedef enum {
-  INCORRECT_INPUT,
+  INCORRECT_INPUT = 0,
   ALREADY_DEFINED,
   TABLE_IS_FULL,
 } symbol_define_error_t;
@@ -233,16 +238,45 @@ static Symbol* symbol_define(const char *name, SymbolKind kind) {
   return NULL; // `symbols` hash-table is full (error)
 }
 
-// An evaluator failure reported string.
-// Evaluator must check after every native function call that first element
-// is `\0` (means success), if not, the failure was reported and evaluator must
-// stop and fail. The first element must be reset to `\0` at the beginning of
-// evaluation in order to ignore previous evaluation state.
-static char eval_fail_msg[ERR_MSG_SIZE] = {'\0'};
+// *** Evaluator ***
+
+typedef enum {
+  EVAL_OK = 0,
+  EVAL_EXIT,
+  EVAL_FAIL,
+} EvalOutcomeKind;
+
+typedef struct {
+  EvalOutcomeKind kind;
+  Value value; // Resulting value of expression evaluation
+  union {
+    // `kind == EVAL_EXIT`
+    int exit_code;
+    // `kind == EVAL_FAIL`
+    char fail_msg[ERR_MSG_SIZE];
+  } as;
+} EvalOutcome;
+
+// Current expression evaluation result.
+//
+// Evaluator must reset this value at the beginning of the program evaluation
+// (to prevent stale evaluation state).
+//
+// When `kind` is either `EVAL_EXIT` or `EVAL_FAIL` the evaluator must stop
+// evaluating the program.
+//
+// When a `NativeFunction` fails it must set `kind` to `EVAL_FAIL` and provide
+// `fail_msg`.
+static EvalOutcome eval_outcome = (EvalOutcome) {
+  .kind = EVAL_OK,
+  .value = (Value) { .type = TYPE_VOID },
+};
+
+// *** Standard library ***
 
 // Branching between different kinds of standard library printing functions
 typedef enum {
-  STD_PRINT,
+  STD_PRINT = 0,
   STD_PRINTLN,
   STD_EPRINT,
   STD_EPRINTLN,
@@ -264,18 +298,20 @@ Value std_generic_print(StdPrintVariant variant, const Value *args, size_t argc)
   Value return_value = (Value) { .type = TYPE_VOID };
 
   if (argc != 1) {
+    eval_outcome.kind = EVAL_FAIL;
     snprintf(
-      eval_fail_msg,
-      sizeof(eval_fail_msg),
+      eval_outcome.as.fail_msg,
+      sizeof(eval_outcome.as.fail_msg),
       "%s expects exactly 1 argument, got instead: %d",
       show_StdPrintVariant(variant),
       (int)argc
     );
     return return_value;
   } else if (args[0].type != TYPE_STRING) {
+    eval_outcome.kind = EVAL_FAIL;
     snprintf(
-      eval_fail_msg,
-      sizeof(eval_fail_msg),
+      eval_outcome.as.fail_msg,
+      sizeof(eval_outcome.as.fail_msg),
       "%s argument must be a string, got instead: %s",
       show_StdPrintVariant(variant),
       show_ValueType(args[0].type)
@@ -380,6 +416,8 @@ static int populate_std() {
     fprintf(stderr, "[FAIL] populate_std: %s\n", error_message);
     return 1;
 }
+
+// *** Main program ***
 
 int main() {
   int fail_code = 0;
