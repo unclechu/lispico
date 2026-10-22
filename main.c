@@ -12,17 +12,24 @@
 typedef enum {
   SYM_EMPTY = 0,
   SYM_VARIABLE,
+  SYM_ARRAY,
   SYM_LABEL,
   SYM_NATIVE_FUNCTION,
 } SymbolKind;
 
-// Allowed data types
+// Allowed data types for a value
 typedef enum {
   TYPE_VOID = 0,
   TYPE_U32,
   TYPE_I32,
   TYPE_F32,
+  TYPE_STRING,
 } ValueType;
+
+typedef struct {
+  const char *data;
+  size_t length;
+} String;
 
 // A value of a specific type
 typedef struct {
@@ -31,6 +38,7 @@ typedef struct {
     uint32_t u32; // `uint32`/`TYPE_U32` type
     int32_t i32; // `int32`/`TYPE_I32` type
     float f32; // `float`/`TYPE_F32` type
+    String string; // String `TYPE_STRING` type
   } as;
 } Value;
 
@@ -40,12 +48,21 @@ typedef struct {
 typedef Value (*NativeFunction)(const Value *args, size_t argc);
 
 typedef struct {
+  ValueType element_type;
+  uint32_t length;
+  void *data;
+} Array;
+
+typedef struct {
   char name[SYMBOL_NAME_SIZE];
   SymbolKind kind;
 
   union {
     // `kind == SYM_VARIABLE`
     Value variable;
+
+    // `kind == SYM_ARRAY`
+    Array array;
 
     // `kind == SYM_LABEL`
     // Index of the instruction to execute when jumping to this label.
