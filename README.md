@@ -40,6 +40,13 @@ features:
   * `(type int32 (type float 123.321))` — Returns `123` (truncated)
   * `(type int32 (type float -123.321))` — Returns `-123` (truncated)
 
+  Invalid out-of-bounds numeric literals are rejected:
+
+  * `4294967295` → OK
+  * `4294967296` (`uint32` that is bigger than `UINT32_MAX`) → Failure
+  * `-2147483648` → OK
+  * `-2147483649` (`int32` that is smaller than `INT32_MIN`) → Failure
+
 - Arrays
 
   * `(arr uint32 16 foo)` where 16 is an array size and `foo` is the name
@@ -58,15 +65,16 @@ features:
 
     + `(+ 2 3)` — Addition
     + `(- 3 2)` — Subtraction
-      (you might want to convert the values to `int32` explicitly, since in this
-      case the default result type is `uint32` since the input arguments are
-      defaulting to `uint32`, so negative number result will end up with number
-      underflow)
+      (both operands default to `uint32`, so the result is also `uint32`; if
+      subtraction would mathematically produce a negative result, unsigned
+      arithmetic wraps modulo `2^32`; use explicit `int32` operands when
+      negative results are required)
     + `(* 2 3)` — Multiplication
     + `(/ 10.0 5.0)` — Floating-point division
-      (attempt to divide by zero results into a failures;
+      (attempt to divide by zero results in failure;
       be aware that `(/ 10 5)` will result into default `uint32` type,
-      so it would behave like `(div)` and you will loose the remainder)
+      so it would behave like `(div)` and you will lose the fractional part of
+      the quotient)
     + `(div 10 4)` — Integer division
     + `(mod 5 3)` — Modulo
     + `(floor 123.321)` — Get a floor of a fractional number
@@ -89,8 +97,6 @@ features:
     - `(/ 7 2)` — Result is `3` (`uint32`)
     - `(div 7 2)` — Result is `3` (`uint32`)
     - `(div -7.5 2.0)` — Result is `-3.0` (`float`)
-    - `(div 10 4)` — Division with the fractional part of the
-      quotient truncated toward zero. Preserves the operand type.
     - `(div -7 2)` — Failure (`int32` vs. `uint32` type mismatch).
       Use explicit type conversion (`(div -7 (type int32 2))`)
     - `(mod 5.5 2.0)` — Result is `1.5`
@@ -101,21 +107,6 @@ features:
       convert the values to `int32` first when expecting negative value as a
       result of the expression `(- (type int32 2) (type int32 3))` to get
       `int32` resulting type)
-
-    Note that number overflow/underflow is preserving C behavior:
-
-    - `uint32_t` overflow/underflow — Well-defined wrapping modulo (`pow(2, 32)`)
-    - `int32_t` overflow — Undefined behavior
-      (e.g. `(/ (type int32 -2147483648) (type int32 -1))`)
-    - `float` overflow — Depends on the floating-point implementation;
-      commonly produces infinity (`INFINITY` from `math.h`)
-    - `INT32_MIN / -1` — Undefined behavior on 32-bit signed integers
-      Out-of-range `float` → `int32_t` conversion
-
-    Exceptions:
-
-    - In C integer division by zero is undefined behavior, but this interpreter
-      checks it and fails on the attempt
 
   * Variables
     + `(var foo uint32 123)` — Define a variable (can be defined only once)
@@ -131,7 +122,7 @@ features:
 
     + Comparison functions/operators
 
-      Note that the result of this functions is always of `uint32` type.
+      Note that the result of these functions is always of `uint32` type.
       The rule for the arguments is the same. All arguments must be of the same
       type. Otherwise the interpreter will refuse to evaluate and fail.
 
@@ -184,6 +175,27 @@ features:
 - When you need to pass input values for the program you just pre-populate the
   symbols/definitions hash-table with values that can be read then inside the
   program
+
+### Undefined behavior
+
+Note that number overflow/underflow is preserving C behavior:
+
+- `uint32_t` overflow/underflow — Well-defined wrapping modulo `2^32`
+- `int32_t` arithmetic overflow — Undefined behavior
+- `INT32_MIN / -1` — Undefined behavior (signed division overflow)
+- Out-of-range `float` → `int32_t` or `uint32_t` conversion —
+  Undefined behavior
+- `float` overflow — Depends on the floating-point implementation;
+  commonly produces infinity (`INFINITY` from `math.h`)
+
+#### Undefined behavior exceptions
+
+In C integer division by zero is undefined behavior, but this interpreter checks
+it and fails on the attempt.
+
+- `(/ 10 0)` / `(/ 10.0 0.0)` → Failure
+- `(div 10 0)` / `(div 10.0 0.0)`  → Failure
+- `(mod 10 0)` / `(mod 10.0 0.0)` → Failure
 
 ## License
 
