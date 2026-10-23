@@ -11,7 +11,8 @@
 // Maximum Symbol name length (including \0 terminator).
 #define SYMBOL_NAME_SIZE 128u
 
-#define ERR_MSG_SIZE 4096u
+// Maximum error message size
+#define ERR_MSG_SIZE 2048u
 
 // *** `symbols` (definitions) hash-table ***
 
@@ -238,6 +239,42 @@ static Symbol* symbol_define(const char *name, SymbolKind kind) {
   return NULL; // `symbols` hash-table is full (error)
 }
 
+void extract_error_message_from_symbol_define_error(
+  char (*error_message)[ERR_MSG_SIZE],
+  const char *symbol_name
+) {
+  snprintf(*error_message, sizeof(*error_message), "symbol_define for “%s”: ", symbol_name);
+  switch (symbol_define_error) {
+    case INCORRECT_INPUT:
+      snprintf(
+        *error_message + strlen(*error_message),
+        sizeof(*error_message) - strlen(*error_message),
+        "Received incorrect input"
+      );
+      break;
+    case ALREADY_DEFINED:
+      snprintf(
+        *error_message + strlen(*error_message),
+        sizeof(*error_message) - strlen(*error_message),
+        "Name is already defined"
+      );
+      break;
+    case TABLE_IS_FULL:
+      snprintf(
+        *error_message + strlen(*error_message),
+        sizeof(*error_message) - strlen(*error_message),
+        "Failed because symbols hash-table is full"
+      );
+      break;
+    default:
+      snprintf(
+        *error_message + strlen(*error_message),
+        sizeof(*error_message) - strlen(*error_message),
+        "Undefined error type (should never happen)"
+      );
+  }
+}
+
 // *** Evaluator ***
 
 typedef enum {
@@ -257,6 +294,8 @@ typedef struct {
   } as;
 } EvalOutcome;
 
+static bool populate_std(char (*error_message)[ERR_MSG_SIZE]);
+
 // Current expression evaluation result.
 //
 // Evaluator must reset this value at the beginning of the program evaluation
@@ -267,10 +306,41 @@ typedef struct {
 //
 // When a `NativeFunction` fails it must set `kind` to `EVAL_FAIL` and provide
 // `fail_msg`.
-static EvalOutcome eval_outcome = (EvalOutcome) {
+static EvalOutcome eval_outcome = {
   .kind = EVAL_OK,
-  .value = (Value) { .type = TYPE_VOID },
+  .value = { .type = TYPE_VOID },
 };
+
+EvalOutcome evaluate() {
+  // Reset evaluation state
+  eval_outcome = (EvalOutcome) {
+    .kind = EVAL_OK,
+    .value = { .type = TYPE_VOID },
+  };
+
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  char fail_prefix[64] = {'\0'};
+
+  snprintf(fail_prefix, sizeof(fail_prefix), "populate_std failed: ");
+  if (!populate_std(&fail_msg)) goto fail;
+
+  return eval_outcome;
+
+  fail:
+    EvalOutcome result = {
+      .kind = EVAL_FAIL,
+      .value = { .type = TYPE_VOID },
+      .as.fail_msg = {'\0'},
+    };
+    snprintf(
+      result.as.fail_msg,
+      sizeof(result.as.fail_msg),
+      "%s%s",
+      fail_prefix,
+      fail_msg
+    );
+    return result;
+}
 
 // *** Standard library ***
 
@@ -295,7 +365,7 @@ const char* show_StdPrintVariant(StdPrintVariant variant) {
 
 // Generic standard library printing implementation
 Value std_generic_print(StdPrintVariant variant, const Value *args, size_t argc) {
-  Value return_value = (Value) { .type = TYPE_VOID };
+  Value return_value = { .type = TYPE_VOID };
 
   if (argc != 1) {
     eval_outcome.kind = EVAL_FAIL;
@@ -353,8 +423,7 @@ Value std_eprintln(const Value *args, size_t argc) {
 }
 
 // Populate the `symbols` with “standard library” definitions
-static int populate_std() {
-  char error_message[ERR_MSG_SIZE] = {'\0'};
+static bool populate_std(char (*error_message)[ERR_MSG_SIZE]) {
   const char *symbol_name;
 
   symbol_name = "print";
@@ -377,55 +446,52 @@ static int populate_std() {
   if (std_eprintln_sym == NULL) goto symbol_define_fail;
   std_eprintln_sym->as.native_function = std_eprintln;
 
-  return 0;
+  return true;
 
   symbol_define_fail:
-    snprintf(error_message, sizeof(error_message), "symbol_define for “%s”: ", symbol_name);
-    switch (symbol_define_error) {
-      case INCORRECT_INPUT:
-        snprintf(
-          error_message + strlen(error_message),
-          sizeof(error_message) - strlen(error_message),
-          "Received incorrect input"
-        );
-        break;
-      case ALREADY_DEFINED:
-        snprintf(
-          error_message + strlen(error_message),
-          sizeof(error_message) - strlen(error_message),
-          "Name is already defined"
-        );
-        break;
-      case TABLE_IS_FULL:
-        snprintf(
-          error_message + strlen(error_message),
-          sizeof(error_message) - strlen(error_message),
-          "Failed because symbols hash-table is full"
-        );
-        break;
-      default:
-        snprintf(
-          error_message + strlen(error_message),
-          sizeof(error_message) - strlen(error_message),
-          "Undefined error type (should never happen)"
-        );
-    }
-    goto fail;
-
-  fail:
-    fprintf(stderr, "[FAIL] populate_std: %s\n", error_message);
-    return 1;
+    extract_error_message_from_symbol_define_error(error_message, symbol_name);
+    return false;
 }
 
 // *** Main program ***
 
 int main() {
-  int fail_code = 0;
+  EvalOutcome eval_outcome = evaluate();
 
-  if ((fail_code = populate_std()) != 0) {
-    fprintf(stderr, "[FAIL] populate_std failed with code: %d\n", fail_code);
-    return 1;
+  switch (eval_outcome.kind) {
+    case EVAL_OK:
+    case EVAL_EXIT:
+      const char* value_type = show_ValueType(eval_outcome.value.type);
+      switch (eval_outcome.value.type) {
+        case TYPE_VOID:
+          printf("Value %s: void\n", value_type);
+          break;
+        case TYPE_U32:
+          printf("Value %s: %d\n", value_type, eval_outcome.value.as.u32);
+          break;
+        case TYPE_I32:
+          printf("Value %s: %d\n", value_type, eval_outcome.value.as.i32);
+          break;
+        case TYPE_F32:
+          printf("Value %s: %.06f\n", value_type, eval_outcome.value.as.f32);
+          break;
+        case TYPE_STRING:
+          printf("Value %s: %s\n", value_type, eval_outcome.value.as.string.data);
+          break;
+        default:
+          fprintf(stderr, "[FAIL] Unexpected result type: %d\n", eval_outcome.value.type);
+          return 1;
+      }
+      if (eval_outcome.kind == EVAL_EXIT) {
+        printf("[OK] Evaluation finished with exit code: %d\n", eval_outcome.as.exit_code);
+        return eval_outcome.as.exit_code;
+      } else {
+        printf("[OK] Evaluation was okay\n");
+        return 0;
+      }
+      break;
+    default:
+      fprintf(stderr, "[FAIL] Unexpected EvalOutcome kind: %d\n", eval_outcome.kind);
+      return 1;
   }
-
-  return 0;
 }
