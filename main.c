@@ -311,18 +311,115 @@ static EvalOutcome eval_outcome = {
   .value = { .type = TYPE_VOID },
 };
 
-EvalOutcome evaluate() {
+typedef struct EvalSettingsInterface {
+  void *context; // Internal context
+  void *state;
+
+  // Caller is expect to stop settings callback evaluation if `NULL` is returned
+  // (it indicates a failure, which is automatically forwarded to `EvalOutcome`).
+  Symbol* (*define_symbol)(
+    const struct EvalSettingsInterface *self,
+    const char *name,
+    SymbolKind kind
+  );
+
+  Symbol* (*symbol_lookup)(
+    const struct EvalSettingsInterface *self,
+    const char *name
+  );
+
+  void (*report_failure)(
+    const struct EvalSettingsInterface *self,
+    const char *err_msg
+  );
+} EvalSettingsInterface;
+
+typedef struct {
+  bool is_failed;
+  char fail_msg[ERR_MSG_SIZE];
+} EvalSettingsInterfaceContext;
+
+static Symbol* define_symbol_interface(
+  const struct EvalSettingsInterface *self,
+  const char *name,
+  SymbolKind kind
+) {
+  EvalSettingsInterfaceContext *ctx = (EvalSettingsInterfaceContext*) self->context;
+  if (ctx->is_failed) return NULL; // Already failed, can’t continue
+  Symbol *sym = symbol_define(name, kind);
+  if (sym == NULL) {
+    extract_error_message_from_symbol_define_error(&ctx->fail_msg, name);
+    return NULL;
+  } else {
+    return sym;
+  }
+}
+
+static Symbol* symbol_lookup_interface(
+  const struct EvalSettingsInterface*,
+  const char *name
+) {
+  return symbol_lookup(name);
+}
+
+static void report_failure_interface(
+  const struct EvalSettingsInterface *self,
+  const char *err_msg
+) {
+  EvalSettingsInterfaceContext *ctx = (EvalSettingsInterfaceContext*) self->context;
+  ctx->is_failed = true;
+  char err_msg_prefix[] = "settings callback failure report: ";
+  snprintf(ctx->fail_msg, sizeof(ctx->fail_msg), "%s%s", err_msg_prefix, err_msg);
+}
+
+/*
+  Evaluate an expression.
+
+  Set `settings_cb` and `state` to `NULL` if you don’t need to modify any settings.
+  `state` is forwarded to `settings_cb` via `EvalSettingsInterface`
+  (see `EvalSettingsInterface::state`).
+*/
+EvalOutcome evaluate(
+  void (*settings_cb)(EvalSettingsInterface*),
+  void *state
+) {
   // Reset evaluation state
   eval_outcome = (EvalOutcome) {
     .kind = EVAL_OK,
     .value = { .type = TYPE_VOID },
   };
 
-  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  EvalSettingsInterfaceContext settings_ctx = {
+    .is_failed = false,
+    .fail_msg = {'\0'},
+  };
+
   char fail_prefix[64] = {'\0'};
 
-  snprintf(fail_prefix, sizeof(fail_prefix), "populate_std failed: ");
-  if (!populate_std(&fail_msg)) goto fail;
+  snprintf(settings_ctx.fail_msg, sizeof(settings_ctx.fail_msg), "populate_std failed: ");
+  if (!populate_std(&settings_ctx.fail_msg)) goto fail;
+
+  EvalSettingsInterface settings_interface = {
+    .context = &settings_ctx,
+    .state = state,
+    .define_symbol = define_symbol_interface,
+    .symbol_lookup = symbol_lookup_interface,
+    .report_failure = report_failure_interface,
+  };
+
+  if (settings_cb != NULL) {
+    snprintf(settings_ctx.fail_msg, sizeof(settings_ctx.fail_msg), "EvalSettingsCallback failed: ");
+    settings_cb(&settings_interface);
+    if (settings_ctx.is_failed) goto fail;
+  }
+
+  // TODO: remove later (just for testing purposes)
+  if (eval_outcome.kind == EVAL_OK) {
+    const Symbol *foo_sym = symbol_lookup("foo");
+    if (foo_sym->kind == SYM_VARIABLE) {
+      eval_outcome.value = foo_sym->as.variable;
+    }
+  }
 
   return eval_outcome;
 
@@ -337,7 +434,7 @@ EvalOutcome evaluate() {
       sizeof(result.as.fail_msg),
       "%s%s",
       fail_prefix,
-      fail_msg
+      settings_ctx.fail_msg
     );
     return result;
 }
@@ -455,8 +552,32 @@ static bool populate_std(char (*error_message)[ERR_MSG_SIZE]) {
 
 // *** Main program ***
 
+typedef struct {
+  char *foo;
+} SettingsState;
+
+static void eval_settings_cb(EvalSettingsInterface *interface) {
+  SettingsState *state = (SettingsState*) interface->state;
+
+  Symbol *foo_sym = interface->define_symbol(interface, "foo", SYM_VARIABLE);
+  if (foo_sym == NULL) return;
+  foo_sym->as.variable = (Value) {
+    .type = TYPE_STRING,
+    .as.string = (String) {
+      .data = state->foo,
+      .length = strlen(state->foo),
+    },
+  };
+
+  // interface->report_failure(interface, "test failure report");
+}
+
 int main() {
-  EvalOutcome eval_outcome = evaluate();
+  // EvalOutcome eval_outcome = evaluate(NULL, NULL);
+
+  char foo[] = "some test string value\0";
+  SettingsState state = { .foo = foo };
+  EvalOutcome eval_outcome = evaluate(eval_settings_cb, (void*) &state);
 
   switch (eval_outcome.kind) {
     case EVAL_OK:
@@ -490,6 +611,9 @@ int main() {
         return 0;
       }
       break;
+    case EVAL_FAIL:
+      fprintf(stderr, "[FAIL] Evaluation failed: %s\n", eval_outcome.as.fail_msg);
+      return 1;
     default:
       fprintf(stderr, "[FAIL] Unexpected EvalOutcome kind: %d\n", eval_outcome.kind);
       return 1;
