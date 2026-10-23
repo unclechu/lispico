@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdlib.h>
+#include <inttypes.h>
 
 // *** Constants ***
 
@@ -58,10 +60,41 @@ const char* show_ValueType(ValueType type) {
   }
 }
 
+// Note that `\0` is not expected in the `data` string.
+// These strings are not terminated, use `length`.
 typedef struct {
   const char *data;
   size_t length;
 } String;
+
+// `show_String` into a specified pointer.
+//
+// Requires a buffer of at least (string.length + 3) chars.
+// Writes '\0' terminator at the end and wraps the string into double quotes.
+static void show_String_to_pointer(char *dest, String string) {
+  dest[0] = '"';
+  // +1 to shift quotation mark
+  if (string.length > 0) memcpy(dest + 1, string.data, sizeof(char) * string.length);
+  dest[string.length + 1] = '"';
+  dest[string.length + 2] = '\0';
+}
+
+// Make a printable string representation of a `String`.
+//
+// Will wrap the string into quotation marks.
+// Note that `\0` is not expected in the `String` value.
+// Will return `NULL` in case of failure (e.g. `malloc`).
+//
+// WARNING! Caller must free the allocated resulting string!
+char* show_String(String string) {
+  // Plus two quotation marks and one '\0' terminator.
+  size_t shown_string_length = string.length + 3;
+  size_t shown_string_size = sizeof(char) * shown_string_length;
+  char *shown_string = malloc(shown_string_size);
+  if (shown_string == NULL) return NULL; // Likely OOM
+  show_String_to_pointer(shown_string, string);
+  return shown_string;
+}
 
 // A value of a specific type
 typedef struct {
@@ -74,16 +107,179 @@ typedef struct {
   } as;
 } Value;
 
-// A native C-function pointer to be stored in a `Symbol`.
-// Allowing you to make wrapper functions compatible with the interpreted
-// language that would execute arbitrary C-code (e.g. FFI bindings for IO).
-typedef Value (*NativeFunction)(const Value *args, size_t argc);
+// Writes a `Value` into the provided buffer.
+//
+// When `dest == NULL` and `capacity == 0`, only calculates
+// the required number of characters (excluding '\0').
+//
+// Returns the number of characters, or -1 on failure.
+static int show_Value_to_pointer(char *dest, size_t capacity, Value value, bool include_type) {
+  const char *shown_type = show_ValueType(value.type);
+  switch (value.type) {
+    case TYPE_VOID: return include_type
+      ? snprintf(dest, capacity, "%s(void)", shown_type)
+      : snprintf(dest, capacity, "void");
+    case TYPE_U32: return include_type
+      ? snprintf(dest, capacity, "%s(%" PRIu32 ")", shown_type, value.as.u32)
+      : snprintf(dest, capacity, "%" PRIu32, value.as.u32);
+    case TYPE_I32: return include_type
+      ? snprintf(dest, capacity, "%s(%" PRId32 ")", shown_type, value.as.i32)
+      : snprintf(dest, capacity, "%" PRId32, value.as.i32);
+    case TYPE_F32: return include_type
+      ? snprintf(dest, capacity, "%s(%.6f)", shown_type, value.as.f32)
+      : snprintf(dest, capacity, "%.6f", value.as.f32);
+    case TYPE_STRING: {
+      String string = value.as.string;
+      size_t type_length = include_type ? strlen(shown_type) : 0;
+
+      // +2 for quotation marks, +2 for parentheses if `include_type`
+      size_t length = type_length + string.length + 2 + (include_type ? 2 : 0);
+
+      if (dest != NULL) {
+        if (capacity <= length) return -1;
+        size_t pos = 0;
+        if (include_type) {
+          memcpy(dest, shown_type, sizeof(char) * type_length);
+          pos += type_length;
+          dest[pos++] = '(';
+        }
+        show_String_to_pointer(dest + pos, string);
+        pos += string.length + 2; // Account for quotation marks from `show_String_to_pointer`
+        if (include_type) dest[pos++] = ')'; // Overwrites `\0` from `show_String_to_pointer`
+        dest[pos] = '\0';
+      }
+
+      return (int)length;
+    }
+    default: return snprintf(dest, capacity, "( ! Unexpected ValueType for show_Value ! )");
+  }
+}
+
+// Make a printable string representation of a `Value`.
+//
+// Will return `NULL` in case of failure (e.g. `malloc`).
+//
+// WARNING! Caller must free the allocated resulting string!
+char* show_Value(Value value) {
+  int length = show_Value_to_pointer(NULL, 0, value, true);
+  if (length < 0) return NULL;
+  size_t size = sizeof(char) * ((size_t)length + 1); // +1 for `\0`.
+  char *shown = malloc(size);
+  if (shown == NULL) return NULL; // Likely OOM
+  if (show_Value_to_pointer(shown, size, value, true) < 0) {
+    free(shown);
+    return NULL;
+  }
+  return shown;
+}
 
 typedef struct {
   ValueType element_type;
   uint32_t length;
-  void *data;
+  void *data; // An array pointer with raw C types (except `String` is used for strings)
 } Array;
+
+// Write `Array` element (taken by its index) into `Value` pointer.
+static bool write_Array_item_to_Value(const Array *array, uint32_t index, Value *value) {
+  value->type = array->element_type;
+  switch (array->element_type) {
+    case TYPE_VOID: return true; // Void does not have associated value
+    case TYPE_U32:
+      value->as.u32 = ((const uint32_t*)array->data)[index];
+      return true;
+    case TYPE_I32:
+      value->as.i32 = ((const int32_t*)array->data)[index];
+      return true;
+    case TYPE_F32:
+      value->as.f32 = ((const float*)array->data)[index];
+      return true;
+    case TYPE_STRING:
+      value->as.string = ((const String*)array->data)[index];
+      return true;
+    default: return false; // Unexpected type ()
+  }
+}
+
+// Make a printable string representation of an `Array` value.
+//
+// Note that `\0` is not expected in the `String` values.
+// Will return `NULL` in case of failure (e.g. `malloc` or `snprintf` error).
+//
+// WARNING! Caller must free the allocated resulting string!
+char* show_Array(Array array) {
+  const char *shown_type = show_ValueType(array.element_type);
+
+  // Calculate prefix length.
+  const int prefix_length = snprintf(NULL, 0, "ARRAY(%s, [", shown_type);
+  if (prefix_length < 0) return NULL;
+
+  // Include two closing characters: "])".
+  size_t length = (size_t)prefix_length + 2;
+
+  // Calculate memory required for all elements.
+  for (uint32_t i = 0; i < array.length; ++i) {
+    Value element;
+    if (!write_Array_item_to_Value(&array, i, &element)) return NULL;
+    int part_length = show_Value_to_pointer(NULL, 0, element, false);
+    if (part_length < 0) return NULL;
+    length += (size_t)part_length;
+    // Comma and space between elements.
+    if (i != 0) length += 2;
+  }
+
+  // Allocate resulting string, +1 for '\0'.
+  const size_t size = sizeof(char) * (length + 1);
+  char *shown = malloc(size);
+  if (shown == NULL) return NULL; // Likely OOM
+
+  // Write prefix.
+  int written = snprintf(shown, size, "ARRAY(%s, [", shown_type);
+
+  if (written < 0 || (size_t)written >= size) {
+    free(shown);
+    return NULL;
+  }
+
+  size_t pos = (size_t)written;
+
+  // Write array elements directly into allocated memory.
+  for (uint32_t i = 0; i < array.length; ++i) {
+    Value element;
+    if (!write_Array_item_to_Value(&array, i, &element)) {
+      free(shown);
+      return NULL;
+    }
+
+    // Add separator
+    if (i != 0) {
+      const char separator[] = ", ";
+      const size_t separator_length = strlen(separator);
+      // Not include `\0` terminator (automatically added to the string literal).
+      // So not taking `sizeof(separator)` because of this.
+      memcpy(shown + pos, separator, sizeof(char) * separator_length);
+      pos += separator_length;
+    }
+
+    int part_length = show_Value_to_pointer(shown + pos, size - pos, element, false);
+    if (part_length < 0) {
+      free(shown);
+      return NULL;
+    }
+
+    pos += (size_t)part_length;
+  }
+
+  // Write closing brackets and '\0' (string literals are terminated).
+  const char suffix[] = "])";
+  memcpy(shown + pos, suffix, sizeof(suffix));
+
+  return shown;
+}
+
+// A native C-function pointer to be stored in a `Symbol`.
+// Allowing you to make wrapper functions compatible with the interpreted
+// language that would execute arbitrary C-code (e.g. FFI bindings for IO).
+typedef Value (*NativeFunction)(const Value *args, size_t argc);
 
 typedef struct {
   char name[SYMBOL_NAME_SIZE];
@@ -284,8 +480,16 @@ typedef enum {
 } EvalOutcomeKind;
 
 typedef struct {
+  SymbolKind kind; // Only one of these: SYM_EMPTY, SYM_VARIABLE, SYM_ARRAY
+  union {
+    Value value; // `kind == SYM_VARIABLE`
+    Array array; // `kind == SYM_ARRAY`
+  } as;
+} EvalResult;
+
+typedef struct {
   EvalOutcomeKind kind;
-  Value value; // Resulting value of expression evaluation
+  EvalResult result; // Result of expression evaluation
   union {
     // `kind == EVAL_EXIT`
     int exit_code;
@@ -308,7 +512,7 @@ static bool populate_std(char (*error_message)[ERR_MSG_SIZE]);
 // `fail_msg`.
 static EvalOutcome eval_outcome = {
   .kind = EVAL_OK,
-  .value = { .type = TYPE_VOID },
+  .result = { .kind = SYM_EMPTY },
 };
 
 typedef struct EvalSettingsInterface {
@@ -386,7 +590,7 @@ EvalOutcome evaluate(
   // Reset evaluation state
   eval_outcome = (EvalOutcome) {
     .kind = EVAL_OK,
-    .value = { .type = TYPE_VOID },
+    .result = { .kind = SYM_EMPTY },
   };
 
   EvalSettingsInterfaceContext settings_ctx = {
@@ -415,9 +619,17 @@ EvalOutcome evaluate(
 
   // TODO: remove later (just for testing purposes)
   if (eval_outcome.kind == EVAL_OK) {
-    const Symbol *foo_sym = symbol_lookup("foo");
-    if (foo_sym->kind == SYM_VARIABLE) {
-      eval_outcome.value = foo_sym->as.variable;
+    const Symbol *sym = symbol_lookup("argv");
+    if (sym->kind == SYM_VARIABLE) {
+      eval_outcome.result = (EvalResult) {
+        .kind = sym->kind,
+        .as.value = sym->as.variable,
+      };
+    } else if (sym->kind == SYM_ARRAY) {
+      eval_outcome.result = (EvalResult) {
+        .kind = sym->kind,
+        .as.array = sym->as.array,
+      };
     }
   }
 
@@ -426,7 +638,7 @@ EvalOutcome evaluate(
   fail:
     EvalOutcome result = {
       .kind = EVAL_FAIL,
-      .value = { .type = TYPE_VOID },
+      .result = { .kind = SYM_EMPTY },
       .as.fail_msg = {'\0'},
     };
     snprintf(
@@ -554,6 +766,8 @@ static bool populate_std(char (*error_message)[ERR_MSG_SIZE]) {
 
 typedef struct {
   char *foo;
+  int argc;
+  Array argv;
 } SettingsState;
 
 static void eval_settings_cb(EvalSettingsInterface *interface) {
@@ -569,53 +783,99 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
     },
   };
 
+  Symbol *argc_sym = interface->define_symbol(interface, "argc", SYM_VARIABLE);
+  if (argc_sym == NULL) return;
+  argc_sym->as.variable = (Value) { .type = TYPE_U32, .as.u32 = state->argc };
+
+  Symbol *argv_sym = interface->define_symbol(interface, "argv", SYM_ARRAY);
+  if (argv_sym == NULL) return;
+  argv_sym->as.array = state->argv;
+
   // interface->report_failure(interface, "test failure report");
 }
 
-int main() {
+int main(int argc, char **argv) {
+  char foo[] = "some test string value\0";
+
+  Array argv_as_Array = {
+    .element_type = TYPE_STRING,
+    .length = argc,
+    .data = malloc(sizeof(String) * argc),
+  };
+  if (argv_as_Array.data == NULL) goto malloc_fail;
+  for (int i = 0; i < argc; ++i) {
+    String arg = { .data = argv[i], .length = strlen(argv[i]) };
+    ((String*) argv_as_Array.data)[i] = arg;
+  }
+
+  SettingsState state = { .foo = foo, .argc = argc, .argv = argv_as_Array };
+  EvalOutcome eval_outcome = evaluate(eval_settings_cb, (void*) &state);
   // EvalOutcome eval_outcome = evaluate(NULL, NULL);
 
-  char foo[] = "some test string value\0";
-  SettingsState state = { .foo = foo };
-  EvalOutcome eval_outcome = evaluate(eval_settings_cb, (void*) &state);
+  int exit_code = 0;
 
   switch (eval_outcome.kind) {
     case EVAL_OK:
     case EVAL_EXIT:
-      const char* value_type = show_ValueType(eval_outcome.value.type);
-      switch (eval_outcome.value.type) {
-        case TYPE_VOID:
-          printf("Value %s: void\n", value_type);
-          break;
-        case TYPE_U32:
-          printf("Value %s: %d\n", value_type, eval_outcome.value.as.u32);
-          break;
-        case TYPE_I32:
-          printf("Value %s: %d\n", value_type, eval_outcome.value.as.i32);
-          break;
-        case TYPE_F32:
-          printf("Value %s: %.06f\n", value_type, eval_outcome.value.as.f32);
-          break;
-        case TYPE_STRING:
-          printf("Value %s: %s\n", value_type, eval_outcome.value.as.string.data);
-          break;
+      printf("Evaluation result kind: %s\n", show_SymbolKind(eval_outcome.result.kind));
+
+      switch (eval_outcome.result.kind) {
+        case SYM_EMPTY: goto done;
+
+        case SYM_VARIABLE:
+          char *shown_value = show_Value(eval_outcome.result.as.value);
+          if (shown_value == NULL) {
+            fprintf(stderr, "[FAIL] show_Value failed (OOM?)\n");
+            exit_code = 1;
+            goto done;
+          }
+          printf("[OK] Result: %s\n", shown_value);
+          free(shown_value);
+          goto done;
+
+        case SYM_ARRAY:
+          char *shown_array = show_Array(eval_outcome.result.as.array);
+          if (shown_array == NULL) {
+            fprintf(stderr, "[FAIL] show_Array failed (OOM?)\n");
+            exit_code = 1;
+            goto done;
+          }
+          printf("Result: %s\n", shown_array);
+          free(shown_array);
+          goto done;
+
         default:
-          fprintf(stderr, "[FAIL] Unexpected result type: %d\n", eval_outcome.value.type);
-          return 1;
+          fprintf(stderr, "[FAIL] Unexpected result kind: %d\n", eval_outcome.result.kind);
+          exit_code = 1;
+          goto done;
       }
+
       if (eval_outcome.kind == EVAL_EXIT) {
         printf("[OK] Evaluation finished with exit code: %d\n", eval_outcome.as.exit_code);
-        return eval_outcome.as.exit_code;
+        exit_code = eval_outcome.as.exit_code;
+        goto done;
       } else {
         printf("[OK] Evaluation was okay\n");
-        return 0;
+        goto done;
       }
       break;
+
     case EVAL_FAIL:
       fprintf(stderr, "[FAIL] Evaluation failed: %s\n", eval_outcome.as.fail_msg);
-      return 1;
+      exit_code = 1;
+      goto done;
+
     default:
       fprintf(stderr, "[FAIL] Unexpected EvalOutcome kind: %d\n", eval_outcome.kind);
-      return 1;
+      exit_code = 1;
+      goto done;
   }
+
+  malloc_fail:
+    fprintf(stderr, "[FAIL] malloc failed (OOM?)\n");
+    return 1;
+
+  done:
+    free(argv_as_Array.data);
+    return exit_code;
 }
