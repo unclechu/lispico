@@ -197,6 +197,22 @@ it and fails on the attempt.
 - `(div 10 0)` / `(div 10.0 0.0)`  → Failure
 - `(mod 10 0)` / `(mod 10.0 0.0)` → Failure
 
+## Local Vim configuration example
+
+```vim
+se cc=81,101 tw=100
+
+augroup force_c_headers
+  autocmd!
+  autocmd BufReadPost,BufNewFile *.h setlocal filetype=c
+augroup END
+
+let g:ale_linters_explicit = 1
+let g:ale_linters = {'c': ['cc']}
+let g:ale_c_cc_executable = 'gcc'
+let g:ale_c_cc_options = '-std=c23 -Wall -Wextra -Wpedantic -Wno-pragma-once-outside-header'
+```
+
 ## License
 
 SPDX: MIT
