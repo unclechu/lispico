@@ -165,6 +165,19 @@ features:
     + `(exit 0 123)` where `0` is exit status code and `123` is returned value
       (defaulting to `uint32` type)
 
+  * Expression sequences
+
+    + `(do (+ 1 2) (+ 3 4))` — Evaluates expressions sequentially and returns
+      the last expression’s result (`7` in this case).
+
+    + Top-level program is also a sequence of expressions
+      (last expression is the result of the program)
+
+      ```lisp
+      (+ 1 2)
+      (+ 3 4) ; Program returns 7
+      ```
+
 - Comments
 
   Conventional LISP comments:

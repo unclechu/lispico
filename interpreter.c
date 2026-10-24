@@ -36,36 +36,116 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   // interface->report_failure(interface, "test failure report");
 }
 
-// (+ 2 3)
+/*
+  (do
+    (+ 2 3)
+    (do
+      (+ (last-val) 4)
+      (+ (last-val) 5)
+    )
+  )
+  (+ (last-val) 10)
+*/
 void make_test_addition_expression() {
+  // (do
+  //   (+ 2 3)
+  //   (do
+  //     (+ (last-val) 4)
+  //     (+ (last-val) 5)
+  //   )
+  // )
   expressions[0] = (Expression) {
-    .kind = EXPR_LIST,
-    .first_child = 1,
-    .next = EXPR_NONE,
+    .kind = EXPR_LIST, .first_child = 1, .next = 18,
   };
 
+  // do
   expressions[1] = (Expression) {
-    .kind = EXPR_NAME,
-    .first_child = EXPR_NONE,
-    .next = 2,
-    .as.text = "+",
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 2, .as.text = "do",
   };
 
+  // (+ 2 3)
   expressions[2] = (Expression) {
-    .kind = EXPR_U32,
-    .first_child = EXPR_NONE,
-    .next = 3,
-    .as.u32 = 2,
+    .kind = EXPR_LIST, .first_child = 3, .next = 6,
   };
-
   expressions[3] = (Expression) {
-    .kind = EXPR_U32,
-    .first_child = EXPR_NONE,
-    .next = EXPR_NONE,
-    .as.u32 = 3,
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 4, .as.text = "+",
+  };
+  expressions[4] = (Expression) {
+    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = 5, .as.u32 = 2,
+  };
+  expressions[5] = (Expression) {
+    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.u32 = 3,
   };
 
-  expression_count = 4;
+  // (do
+  //   (+ (last-val) 4)
+  //   (+ (last-val) 5)
+  // )
+  expressions[6] = (Expression) {
+    .kind = EXPR_LIST, .first_child = 7, .next = EXPR_NONE,
+  };
+  expressions[7] = (Expression) {
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 8, .as.text = "do",
+  };
+
+  // (+ (last-val) 4)
+  expressions[8] = (Expression) {
+    .kind = EXPR_LIST, .first_child = 9, .next = 13,
+  };
+  expressions[9] = (Expression) {
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 10, .as.text = "+",
+  };
+
+  // (last-val)
+  expressions[10] = (Expression) {
+    .kind = EXPR_LIST, .first_child = 11, .next = 12,
+  };
+  expressions[11] = (Expression) {
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.text = "last-val",
+  };
+  expressions[12] = (Expression) {
+    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.u32 = 4,
+  };
+
+  // (+ (last-val) 5)
+  expressions[13] = (Expression) {
+    .kind = EXPR_LIST, .first_child = 14, .next = EXPR_NONE,
+  };
+  expressions[14] = (Expression) {
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 15, .as.text = "+",
+  };
+
+  // (last-val)
+  expressions[15] = (Expression) {
+    .kind = EXPR_LIST, .first_child = 16, .next = 17,
+  };
+  expressions[16] = (Expression) {
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.text = "last-val",
+  };
+  expressions[17] = (Expression) {
+    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.u32 = 5,
+  };
+
+  // (+ (last-val) 10)
+  expressions[18] = (Expression) {
+    .kind = EXPR_LIST, .first_child = 19, .next = EXPR_NONE,
+  };
+  expressions[19] = (Expression) {
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 20, .as.text = "+",
+  };
+
+  // (last-val)
+  expressions[20] = (Expression) {
+    .kind = EXPR_LIST, .first_child = 21, .next = 22,
+  };
+  expressions[21] = (Expression) {
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.text = "last-val",
+  };
+  expressions[22] = (Expression) {
+    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.u32 = 10,
+  };
+
+  expression_count = 23;
 }
 
 int main(int argc, char **argv) {

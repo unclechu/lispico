@@ -14,7 +14,7 @@
 // Maximum limit for a string literal in an expression
 #define EXPR_TEXT_SIZE 256u
 
-// Maximum arguments limit for an expression
+// Maximum arguments limit for an expression to have
 #define EVAL_ARG_CAPACITY 16u
 
 static_assert(

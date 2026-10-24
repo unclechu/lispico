@@ -60,3 +60,5 @@ EvalOutcome evaluate(
 
 void report_evaluation_failure(char *fail_msg);
 void clean_evaluation();
+
+bool get_last_evaluation_value(Value *value);

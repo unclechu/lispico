@@ -51,22 +51,27 @@ Value std_generic_print(StdPrintVariant variant, const Value *args, size_t argc)
   return return_value;
 }
 
+// (print)
 Value std_print(const Value *args, size_t argc) {
   return std_generic_print(STD_PRINT, args, argc);
 }
 
+// (println)
 Value std_println(const Value *args, size_t argc) {
   return std_generic_print(STD_PRINTLN, args, argc);
 }
 
+// (eprint)
 Value std_eprint(const Value *args, size_t argc) {
   return std_generic_print(STD_EPRINT, args, argc);
 }
 
+// (eprintln)
 Value std_eprintln(const Value *args, size_t argc) {
   return std_generic_print(STD_EPRINTLN, args, argc);
 }
 
+// (+)
 Value std_add(const Value *args, size_t argc) {
   Value return_value = { .type = TYPE_VOID };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
@@ -114,34 +119,82 @@ Value std_add(const Value *args, size_t argc) {
   return return_value;
 }
 
+// (last-val) — Read last evaluation result in a sequence of expressions
+Value std_last_val(const Value*, size_t argc) {
+  Value return_value = { .type = TYPE_VOID };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+
+  if (argc != 0) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(last-val) does not take any arguments, got %zu arguments",
+      argc
+    );
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+  }
+
+  if (!get_last_evaluation_value(&return_value)) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(last-val) no previous value is available"
+    );
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+  }
+
+  return return_value;
+}
+
 // Populate the `symbols` with “standard library” definitions
 bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   const char *symbol_name;
 
-  symbol_name = "print";
-  Symbol *std_print_sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
-  if (std_print_sym == NULL) goto symbol_define_fail;
-  std_print_sym->as.native_function = std_print;
+  {
+    symbol_name = "print";
+    Symbol *sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
+    if (sym == NULL) goto symbol_define_fail;
+    sym->as.native_function = std_print;
+  }
 
-  symbol_name = "println";
-  Symbol *std_println_sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
-  if (std_println_sym == NULL) goto symbol_define_fail;
-  std_println_sym->as.native_function = std_println;
+  {
+    symbol_name = "println";
+    Symbol *sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
+    if (sym == NULL) goto symbol_define_fail;
+    sym->as.native_function = std_println;
+  }
 
-  symbol_name = "eprint";
-  Symbol *std_eprint_sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
-  if (std_eprint_sym == NULL) goto symbol_define_fail;
-  std_eprint_sym->as.native_function = std_eprint;
+  {
+    symbol_name = "eprint";
+    Symbol *sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
+    if (sym == NULL) goto symbol_define_fail;
+    sym->as.native_function = std_eprint;
+  }
 
-  symbol_name = "eprintln";
-  Symbol *std_eprintln_sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
-  if (std_eprintln_sym == NULL) goto symbol_define_fail;
-  std_eprintln_sym->as.native_function = std_eprintln;
+  {
+    symbol_name = "eprintln";
+    Symbol *sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
+    if (sym == NULL) goto symbol_define_fail;
+    sym->as.native_function = std_eprintln;
+  }
 
-  symbol_name = "+";
-  Symbol *std_add_sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
-  if (std_add_sym == NULL) goto symbol_define_fail;
-  std_add_sym->as.native_function = std_add;
+  {
+    symbol_name = "+";
+    Symbol *sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
+    if (sym == NULL) goto symbol_define_fail;
+    sym->as.native_function = std_add;
+  }
+
+  {
+    symbol_name = "last-val";
+    Symbol *sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
+    if (sym == NULL) goto symbol_define_fail;
+    sym->as.native_function = std_last_val;
+  }
 
   return true;
 

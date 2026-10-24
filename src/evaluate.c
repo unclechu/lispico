@@ -60,16 +60,42 @@ static void report_failure_interface(
   snprintf(ctx->fail_msg, sizeof(ctx->fail_msg), "%s%s", err_msg_prefix, err_msg);
 }
 
-static bool evaluate_expression(
-  uint32_t index,
-  Value *result
-) {
-  if (index == EXPR_NONE || index >= expression_count) {
+static bool evaluate_expression(uint32_t current_expression_index, Value *result);
+
+// Evaluate top-level or `(do)` expressions sequence
+static bool evaluate_sequence(uint32_t current_expression_index, Value *result) {
+  *result = (Value) { .type = TYPE_VOID };
+
+  while (current_expression_index != EXPR_NONE) {
+    if (current_expression_index >= expression_count) {
+      report_evaluation_failure("Invalid expression index");
+      return false;
+    }
+
+    if (!evaluate_expression(current_expression_index, result)) {
+      return false;
+    }
+
+    // Save the result of the most recently completed expression.
+    eval_outcome.result = (EvalResult) {
+      .kind = SYM_VARIABLE,
+      .as.value = *result,
+    };
+
+    // Move to the next expression in the sequence.
+    current_expression_index = expressions[current_expression_index].next;
+  }
+
+  return true;
+}
+
+static bool evaluate_expression(uint32_t current_expression_index, Value *result) {
+  if (current_expression_index == EXPR_NONE || current_expression_index >= expression_count) {
     report_evaluation_failure("Invalid expression index");
     return false;
   }
 
-  const Expression *expr = &expressions[index];
+  const Expression *expr = &expressions[current_expression_index];
 
   switch (expr->kind) {
     case EXPR_U32:
@@ -95,22 +121,27 @@ static bool evaluate_expression(
       return true;
 
     case EXPR_LIST: {
-      uint32_t operator_index = expr->first_child;
+      uint32_t fn_name_index = expr->first_child;
 
-      if (operator_index == EXPR_NONE || operator_index >= expression_count) {
-        report_evaluation_failure("Expression list has no valid operator");
+      if (fn_name_index == EXPR_NONE || fn_name_index >= expression_count) {
+        report_evaluation_failure("Expression list has no valid function name");
         return false;
       }
 
-      const Expression *op = &expressions[operator_index];
+      const Expression *fn = &expressions[fn_name_index];
 
-      if (op->kind != EXPR_NAME) {
-        report_evaluation_failure("Expression operator must be a name");
+      if (fn->kind != EXPR_NAME) {
+        report_evaluation_failure("Expression function name must be a name");
         return false;
+      }
+
+      // Special form: evaluate child expressions sequentially.
+      if (strcmp(fn->as.text, "do") == 0) {
+        return evaluate_sequence(fn->next, result);
       }
 
       // Resolve the function from the existing global symbol table.
-      const Symbol *symbol = symbol_lookup(op->as.text);
+      const Symbol *symbol = symbol_lookup(fn->as.text);
 
       if (symbol == NULL) {
         report_evaluation_failure("Undefined function");
@@ -123,7 +154,7 @@ static bool evaluate_expression(
       // Evaluate all arguments before calling the function.
       Value args[EVAL_ARG_CAPACITY] = {0};
       size_t argc = 0;
-      uint32_t arg_index = op->next;
+      uint32_t arg_index = fn->next;
 
       while (arg_index != EXPR_NONE) {
         if (arg_index >= expression_count) {
@@ -177,7 +208,8 @@ EvalOutcome evaluate(
   // Wipe leftovers of previous evaluation
   clean_evaluation();
 
-  // Wipe global expressions table if expressions are coming from somewhere else
+  // Wipe global expressions table if expressions are coming from somewhere else.
+  // TODO: Copy `eval_expressions` into the global `expressions`.
   if (eval_expressions != expressions) {
     clean_expressions();
   }
@@ -214,12 +246,13 @@ EvalOutcome evaluate(
     if (settings_ctx.is_failed) goto fail;
   }
 
-  Value result_value = {0};
-  if (evaluate_expression(0, &result_value)) {
-    eval_outcome.result = (EvalResult) {
-      .kind = SYM_VARIABLE,
-      .as.value = result_value,
-    };
+  if (expression_count != 0) {
+    Value result_value = { .type = TYPE_VOID };
+
+    // Evaluate all top-level expressions sequentially.
+    // Discard returned boolean, the result is already reported to `eval_outcome`.
+    (void)evaluate_sequence(0, &result_value);
+
     wipe_memory(&result_value, sizeof(result_value));
   }
 
@@ -250,4 +283,10 @@ void clean_evaluation() {
 void report_evaluation_failure(char *fail_msg) {
   eval_outcome.kind = EVAL_FAIL;
   snprintf(eval_outcome.as.fail_msg, sizeof(eval_outcome.as.fail_msg), "%s", fail_msg);
+}
+
+bool get_last_evaluation_value(Value *value) {
+  if (eval_outcome.result.kind != SYM_VARIABLE) return false;
+  *value = eval_outcome.result.as.value;
+  return true;
 }
