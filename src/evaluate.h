@@ -1,6 +1,7 @@
 #pragma once
 
 #include "symbol.h"
+#include "expression.h"
 
 typedef enum {
   EVAL_OK = 0,
@@ -50,6 +51,12 @@ typedef struct EvalSettingsInterface {
   );
 } EvalSettingsInterface;
 
-EvalOutcome evaluate(void (*settings_cb)(EvalSettingsInterface*), void *state);
+EvalOutcome evaluate(
+  const Expression *eval_expressions,
+  uint32_t eval_expression_count,
+  void (*settings_cb)(EvalSettingsInterface*),
+  void *state
+);
+
 void report_evaluation_failure(char *fail_msg);
-void wipe_evaluation_data();
+void clean_evaluation();

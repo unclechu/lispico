@@ -67,6 +67,53 @@ Value std_eprintln(const Value *args, size_t argc) {
   return std_generic_print(STD_EPRINTLN, args, argc);
 }
 
+Value std_add(const Value *args, size_t argc) {
+  Value return_value = { .type = TYPE_VOID };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+
+  if (argc != 2) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(+) expects exactly 2 arguments, got instead: %zu",
+      argc
+    );
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+  } else if (args[0].type != args[1].type) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(+) expects both arguments be of the same type, got instead: (%s, %s)",
+      show_ValueType(args[0].type),
+      show_ValueType(args[1].type)
+    );
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+  }
+
+  switch (args[0].type) {
+    case TYPE_U32: return_value.as.u32 = args[0].as.u32 + args[1].as.u32; break;
+    case TYPE_I32: return_value.as.i32 = args[0].as.i32 + args[1].as.i32; break;
+    case TYPE_F32: return_value.as.f32 = args[0].as.f32 + args[1].as.f32; break;
+    default:
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(+) received a value of an unexpected type: %s",
+        show_ValueType(args[0].type)
+      );
+      report_evaluation_failure(fail_msg);
+      wipe_memory(fail_msg, sizeof(fail_msg));
+      return return_value;
+  }
+
+  return_value.type = args[0].type;
+  return return_value;
+}
+
 // Populate the `symbols` with “standard library” definitions
 bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   const char *symbol_name;
@@ -90,6 +137,11 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   Symbol *std_eprintln_sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
   if (std_eprintln_sym == NULL) goto symbol_define_fail;
   std_eprintln_sym->as.native_function = std_eprintln;
+
+  symbol_name = "+";
+  Symbol *std_add_sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION);
+  if (std_add_sym == NULL) goto symbol_define_fail;
+  std_add_sym->as.native_function = std_add;
 
   return true;
 

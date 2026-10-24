@@ -8,6 +8,15 @@
 // Maximum error message size
 #define ERR_MSG_SIZE 2048u
 
+// Maximum expression storage capacity
+#define EXPR_CAPACITY 2048u
+
+// Maximum limit for a string literal in an expression
+#define EXPR_TEXT_SIZE 256u
+
+// Maximum arguments limit for an expression
+#define EVAL_ARG_CAPACITY 16u
+
 static_assert(
   SYMBOL_CAPACITY > 0 &&
   (SYMBOL_CAPACITY & (SYMBOL_CAPACITY - 1u)) == 0,

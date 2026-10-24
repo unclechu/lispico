@@ -4,6 +4,7 @@
 #include "src/symbol.h"
 #include "src/symbol-print.h"
 #include "src/evaluate.h"
+#include "src/expression.h"
 
 typedef struct {
   char *foo;
@@ -35,6 +36,38 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   // interface->report_failure(interface, "test failure report");
 }
 
+// (+ 2 3)
+void make_test_addition_expression() {
+  expressions[0] = (Expression) {
+    .kind = EXPR_LIST,
+    .first_child = 1,
+    .next = EXPR_NONE,
+  };
+
+  expressions[1] = (Expression) {
+    .kind = EXPR_NAME,
+    .first_child = EXPR_NONE,
+    .next = 2,
+    .as.text = "+",
+  };
+
+  expressions[2] = (Expression) {
+    .kind = EXPR_U32,
+    .first_child = EXPR_NONE,
+    .next = 3,
+    .as.u32 = 2,
+  };
+
+  expressions[3] = (Expression) {
+    .kind = EXPR_U32,
+    .first_child = EXPR_NONE,
+    .next = EXPR_NONE,
+    .as.u32 = 3,
+  };
+
+  expression_count = 4;
+}
+
 int main(int argc, char **argv) {
   char foo[] = "some test string value\0";
 
@@ -50,8 +83,17 @@ int main(int argc, char **argv) {
   }
 
   SettingsState state = { .foo = foo, .argc = argc, .argv = argv_as_Array };
-  EvalOutcome eval_outcome = evaluate(eval_settings_cb, (void*) &state);
-  // EvalOutcome eval_outcome = evaluate(NULL, NULL);
+
+  // TODO: remove, just for testing
+  make_test_addition_expression();
+
+  EvalOutcome eval_outcome = evaluate(
+    expressions,
+    expression_count,
+    eval_settings_cb,
+    (void*) &state
+  );
+  // EvalOutcome eval_outcome = evaluate(expressions, expression_count, NULL, NULL);
 
   int exit_code = 0;
 

@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "evaluate.h"
 #include "symbol-error.h"
@@ -59,6 +60,104 @@ static void report_failure_interface(
   snprintf(ctx->fail_msg, sizeof(ctx->fail_msg), "%s%s", err_msg_prefix, err_msg);
 }
 
+static bool evaluate_expression(
+  uint32_t index,
+  Value *result
+) {
+  if (index == EXPR_NONE || index >= expression_count) {
+    report_evaluation_failure("Invalid expression index");
+    return false;
+  }
+
+  const Expression *expr = &expressions[index];
+
+  switch (expr->kind) {
+    case EXPR_U32:
+      *result = (Value) { .type = TYPE_U32, .as.u32 = expr->as.u32 };
+      return true;
+
+    case EXPR_I32:
+      *result = (Value) { .type = TYPE_I32, .as.i32 = expr->as.i32 };
+      return true;
+
+    case EXPR_F32:
+      *result = (Value) { .type = TYPE_F32, .as.f32 = expr->as.f32 };
+      return true;
+
+    case EXPR_STRING:
+      *result = (Value) {
+        .type = TYPE_STRING,
+        .as.string = {
+          .data = expr->as.text,
+          .length = strlen(expr->as.text),
+        },
+      };
+      return true;
+
+    case EXPR_LIST: {
+      uint32_t operator_index = expr->first_child;
+
+      if (operator_index == EXPR_NONE || operator_index >= expression_count) {
+        report_evaluation_failure("Expression list has no valid operator");
+        return false;
+      }
+
+      const Expression *op = &expressions[operator_index];
+
+      if (op->kind != EXPR_NAME) {
+        report_evaluation_failure("Expression operator must be a name");
+        return false;
+      }
+
+      // Resolve the function from the existing global symbol table.
+      const Symbol *symbol = symbol_lookup(op->as.text);
+
+      if (symbol == NULL) {
+        report_evaluation_failure("Undefined function");
+        return false;
+      } else if (symbol->kind != SYM_NATIVE_FUNCTION) {
+        report_evaluation_failure("Symbol is not a native function");
+        return false;
+      }
+
+      // Evaluate all arguments before calling the function.
+      Value args[EVAL_ARG_CAPACITY] = {0};
+      size_t argc = 0;
+      uint32_t arg_index = op->next;
+
+      while (arg_index != EXPR_NONE) {
+        if (arg_index >= expression_count) {
+          report_evaluation_failure("Invalid argument expression index");
+          return false;
+        } else if (argc >= EVAL_ARG_CAPACITY) {
+          report_evaluation_failure("Too many function arguments");
+          return false;
+        }
+
+        uint32_t next_index = expressions[arg_index].next;
+
+        // Evaluate child expressions recursively
+        if (!evaluate_expression(arg_index, &args[argc])) {
+          return false;
+        }
+
+        ++argc;
+        arg_index = next_index;
+      }
+
+      // Call the function pointer already registered in the symbol table.
+      *result = symbol->as.native_function(args, argc);
+
+      // Native functions report failures through the evaluation state.
+      return eval_outcome.kind == EVAL_OK;
+    }
+
+    default:
+      report_evaluation_failure("Unsupported expression kind");
+      return false;
+  }
+}
+
 /*
   Evaluate an expression.
 
@@ -66,12 +165,24 @@ static void report_failure_interface(
   `state` is forwarded to `settings_cb` via `EvalSettingsInterface`
   (see `EvalSettingsInterface::state`).
 */
-EvalOutcome evaluate(void (*settings_cb)(EvalSettingsInterface*), void *state) {
+EvalOutcome evaluate(
+  const Expression *eval_expressions,
+  uint32_t eval_expression_count,
+  void (*settings_cb)(EvalSettingsInterface*),
+  void *state
+) {
   // Reset symbols
   clean_symbols();
 
   // Wipe leftovers of previous evaluation
-  wipe_evaluation_data();
+  clean_evaluation();
+
+  // Wipe global expressions table if expressions are coming from somewhere else
+  if (eval_expressions != expressions) {
+    clean_expressions();
+  }
+
+  expression_count = eval_expression_count;
 
   // Reset evaluation state
   eval_outcome = (EvalOutcome) {
@@ -103,20 +214,13 @@ EvalOutcome evaluate(void (*settings_cb)(EvalSettingsInterface*), void *state) {
     if (settings_ctx.is_failed) goto fail;
   }
 
-  // TODO: remove later (just for testing purposes)
-  if (eval_outcome.kind == EVAL_OK) {
-    const Symbol *sym = symbol_lookup("argv");
-    if (sym->kind == SYM_VARIABLE) {
-      eval_outcome.result = (EvalResult) {
-        .kind = sym->kind,
-        .as.value = sym->as.variable,
-      };
-    } else if (sym->kind == SYM_ARRAY) {
-      eval_outcome.result = (EvalResult) {
-        .kind = sym->kind,
-        .as.array = sym->as.array,
-      };
-    }
+  Value result_value = {0};
+  if (evaluate_expression(0, &result_value)) {
+    eval_outcome.result = (EvalResult) {
+      .kind = SYM_VARIABLE,
+      .as.value = result_value,
+    };
+    wipe_memory(&result_value, sizeof(result_value));
   }
 
   return eval_outcome;
@@ -138,7 +242,7 @@ EvalOutcome evaluate(void (*settings_cb)(EvalSettingsInterface*), void *state) {
     return result;
 }
 
-void wipe_evaluation_data() {
+void clean_evaluation() {
   // TODO: cleanup references (such as allocated arrays and strings)
   wipe_memory(&eval_outcome, sizeof(eval_outcome));
 }
