@@ -329,63 +329,34 @@ static bool get_variable_name(const Datum *datum, char (*name)[SYMBOL_NAME_SIZE]
   return true;
 }
 
-// (var) — Define a new variable
+// (var) — Define a new variable, inferring its type from the initial value
 Datum std_var(const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "var";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
 
-  if (!validate_argc(fn_name, &fail_msg, 3, argc)) return return_value;
+  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
 
   if (!get_variable_name(&args[0], &symbol_name)) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
     goto fail;
   }
 
-  if (
-    args[1].kind != SYM_VARIABLE ||
-    args[1].as.value.type != TYPE_U32 ||
-    args[2].kind != SYM_VARIABLE
-  ) {
-    snprintf(
-      fail_msg,
-      sizeof(fail_msg),
-      "(%s) expects a u32 type identifier and a scalar value",
-      fn_name
-    );
+  if (args[1].kind != SYM_VARIABLE) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a scalar value", fn_name);
     goto fail;
   }
 
-  uint32_t type_id = args[1].as.value.as.u32;
-  ValueType variable_type;
-
-  // TODO: add support for arrays and strings
-  switch (type_id) {
-    case TYPE_U32: variable_type = TYPE_U32; break;
-    case TYPE_I32: variable_type = TYPE_I32; break;
-    case TYPE_F32: variable_type = TYPE_F32; break;
+  // TODO: Add support for arrays and dynamically allocated strings.
+  switch (args[1].as.value.type) {
+    case TYPE_U32:
+    case TYPE_I32:
+    case TYPE_F32:
+      break;
     default:
-      snprintf(
-        fail_msg,
-        sizeof(fail_msg),
-        "(%s) unsupported variable type identifier: %" PRIu32,
-        fn_name,
-        type_id
-      );
-      goto fail;
-  }
-
-  if (args[2].as.value.type != variable_type) {
-    snprintf(
-      fail_msg,
-      sizeof(fail_msg),
-      "(%s) variable type mismatch: expected %s, got %s",
-      fn_name,
-      show_ValueType(variable_type),
-      show_ValueType(args[2].as.value.type)
-    );
-    goto fail;
+      report_unexpected_value_type(fn_name, &fail_msg, args[1].as.value.type);
+      return return_value;
   }
 
   Symbol *symbol = symbol_define(symbol_name, SYM_VARIABLE);
@@ -395,8 +366,8 @@ Datum std_var(const Datum *args, size_t argc) {
     goto fail;
   }
 
-  symbol->as.variable = args[2].as.value;
-  return_value = args[2];
+  symbol->as.variable = args[1].as.value;
+  return_value = args[1];
   return return_value;
 
   fail:

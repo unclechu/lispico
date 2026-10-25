@@ -109,7 +109,9 @@ features:
       `i32` resulting type)
 
   * Variables
-    + `(var "foo" u32 123)` — Define a variable (can be defined only once)
+    + `(var "foo" 123)` — Define a variable (`u32` type; can be defined only once)
+    + `(var "foo" (type i32 123))` — Define a variable with `i32` type
+      (variable type is infered from the default value type)
     + `(set "foo" (+ foo 3))` — Set a value to an already defined variable
 
   * If-conditions and comparisons:
@@ -246,7 +248,7 @@ Hello, World!
 SYM_EMPTY
 
 $ ./simple-lisp-interpreter <<'LISP'
-(var "foo" u32 123)
+(var "foo" 123)
 (set "foo" (+ foo 3))
 (type f32 foo)
 LISP
