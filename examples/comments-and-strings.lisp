@@ -1,0 +1,7 @@
+; Line comments work between expressions.
+#| Block comments can include ( and ) and "quotes".
+   #| The parser also accepts nested block comments. |#
+|#
+(println "A quoted string: \"hello\"")
+(println "Tab:\tend")
+"Hello, World!" ; Final result: a string literal

@@ -1,2 +1,3 @@
 ; A simple hello-world program
-#| Will print “Hello, World!” to stdout |# (println "Hello, World!")
+
+#| Will print “Hello, World!” to |# (println "Hello, World!") ; standard output
