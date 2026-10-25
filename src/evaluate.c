@@ -277,6 +277,41 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
       return eval_outcome.kind == EVAL_OK;
     }
 
+    // Resolving variable reference by name
+    case EXPR_NAME: {
+      const ExpressionAllocation *allocation = get_expression_allocation(expr->data);
+
+      if (
+        allocation == NULL ||
+        allocation->data == NULL ||
+        allocation->length >= allocation->size ||
+        ((const char *)allocation->data)[allocation->length] != '\0'
+      ) {
+        report_evaluation_failure("Invalid expression name allocation");
+        return false;
+      }
+
+      const char *symbol_name = allocation->data;
+      const Symbol *symbol = symbol_lookup(symbol_name);
+
+      if (symbol == NULL) {
+        report_evaluation_failure("Undefined variable");
+        return false;
+      }
+
+      switch (symbol->kind) {
+        case SYM_VARIABLE:
+          *result = (Datum) { .kind = SYM_VARIABLE, .as.value = symbol->as.variable };
+          return true;
+        case SYM_ARRAY:
+          *result = (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
+          return true;
+        default:
+          report_evaluation_failure("Symbol is not a variable or array");
+          return false;
+      }
+    }
+
     default:
       report_evaluation_failure("Unsupported expression kind");
       return false;
