@@ -1,6 +1,6 @@
 # Simple LISP-ish Interpreter Written in C
 
-**WORK IN PROGRESS: Not ready to use.**
+**WORK IN PROGRESS: Not all features are implemented yet.**
 
 This is not really a conventional LISP interpreter, only relevant in terms of
 syntax (for the sake of parser implementation simplicity). It’s more like a
@@ -215,6 +215,32 @@ it and fails on the attempt.
 - `(/ 10 0)` / `(/ 10.0 0.0)` → Failure
 - `(div 10 0)` / `(div 10.0 0.0)` → Failure
 - `(mod 10 0)` / `(mod 10.0 0.0)` → Failure
+
+## Usage examples
+
+Enter a nix-shell (for supplying dependencies):
+
+```sh
+nix-shell
+```
+
+Build the interpreter:
+
+```sh
+./build.sh
+```
+
+Try something:
+
+```console
+$ ./simple-lisp-interpreter <<< '(println "hello")'
+hello
+SYM_EMPTY
+
+$ ./simple-lisp-interpreter <<< '(println "hello")(+ 10 5)(+ (last-val) 3)'
+hello
+SYM_VARIABLE(TYPE_U32(18))
+```
 
 ## Local Vim configuration example
 
