@@ -2,7 +2,7 @@
 set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 
 : "${MAIN_SOURCE_FILE:=interpreter.c}"
-: "${OUTPUT_EXECUTABLE_NAME:=simple-lisp-c-interpreter}"
+: "${OUTPUT_EXECUTABLE_NAME:=simple-lisp-interpreter}"
 
 : "${CC:=cc}"
 : "${CFLAGS:=}"

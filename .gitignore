@@ -5,3 +5,4 @@ result-*
 # GCC build artifacts
 *.o
 simple-lisp-c-interpreter
+simple-lisp-interpreter

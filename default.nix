@@ -7,24 +7,22 @@
 
 let
   shell = pkgs.mkShell {
-    nativeBuildInputs = [
+    packages = [
       pkgs.gcc
       pkgs.pkg-config
     ];
-
-    buildInputs = [
-      # …
-    ];
   };
 
-  simple-lisp-c-interpreter = stdenv.mkDerivation (lib.fix (self: {
-    pname = "simple-lisp-c-interpreter";
+  simple-lisp-interpreter = stdenv.mkDerivation (lib.fix (self: {
+    pname = "simple-lisp-interpreter";
     meta.mainProgram = self.pname;
     version = "0.0.0";
 
-    src = ./main.c; # todo
+    src = pkgs.nix-gitignore.gitignoreFilterRecursiveSource (path: type:
+      (type == "directory" && builtins.baseNameOf path == "src") ||
+      (type == "regular" && (lib.hasSuffix ".c" path || lib.hasSuffix ".h" path))
+    ) [] ./.;
 
-    dontUnpack = true;
     dontConfigure = true;
 
     nativeBuildInputs = [
@@ -39,7 +37,7 @@ let
       runHook preBuild
       (
         set -- # Clear "$@" in this subshell
-        MAIN_SOURCE_FILE=$src
+        MAIN_SOURCE_FILE=interpreter.c
         OUTPUT_EXECUTABLE_NAME=${lib.escapeShellArg self.pname}
         ${builtins.readFile ./build.sh}
       )
@@ -57,5 +55,5 @@ let
 in
 
 (if inNixShell then shell else {}) // {
-  inherit shell simple-lisp-c-interpreter;
+  inherit shell simple-lisp-interpreter;
 }
