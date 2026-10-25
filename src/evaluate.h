@@ -64,3 +64,5 @@ void report_evaluation_failure(char *fail_msg);
 void clean_evaluation();
 
 bool get_last_evaluation_value(Datum *result);
+
+void report_evaluation_exit(int exit_code, Datum result);

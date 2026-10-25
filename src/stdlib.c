@@ -1,6 +1,7 @@
 #include <math.h>
 #include <inttypes.h>
 #include <string.h>
+#include <limits.h>
 
 #include "stdlib.h"
 #include "symbol-error.h"
@@ -524,6 +525,50 @@ ADD_COMPARISON_FN(std_greater_equal, ">=", >=)
 ADD_COMPARISON_FN(std_equal, "==", ==)
 ADD_COMPARISON_FN(std_not_equal, "!=", !=)
 
+// (exit) — Stop program evaluation and return the provided result
+Datum std_exit(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "exit";
+
+  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+
+  if (args[0].kind != SYM_VARIABLE) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code must be a numeric value", fn_name);
+    goto fail;
+  }
+
+  int exit_code;
+
+  switch (args[0].as.value.type) {
+    case TYPE_U32:
+      if (args[0].as.value.as.u32 > INT_MAX) goto out_of_range;
+      exit_code = (int)args[0].as.value.as.u32;
+      break;
+
+    case TYPE_I32:
+      exit_code = (int)args[0].as.value.as.i32;
+      break;
+
+    default:
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code must be uint32 or int32", fn_name);
+      goto fail;
+  }
+
+  return_value = args[1];
+  report_evaluation_exit(exit_code, return_value);
+  return return_value;
+
+  out_of_range:
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code is out of range for int", fn_name);
+    goto fail;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // Populate the `symbols` with “standard library” definitions
 bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   const char *symbol_name;
@@ -568,6 +613,8 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   ADD_FN_SYMBOL(">=", std_greater_equal);
   ADD_FN_SYMBOL("==", std_equal);
   ADD_FN_SYMBOL("!=", std_not_equal);
+
+  ADD_FN_SYMBOL("exit", std_exit);
 
   return true;
 

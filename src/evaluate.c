@@ -384,3 +384,9 @@ bool get_last_evaluation_value(Datum *result) {
   *result = eval_outcome.result;
   return true;
 }
+
+void report_evaluation_exit(int exit_code, Datum result) {
+  eval_outcome.kind = EVAL_EXIT;
+  eval_outcome.as.exit_code = exit_code;
+  eval_outcome.result = result;
+}
