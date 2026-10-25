@@ -5,6 +5,8 @@
 #include "src/symbol-print.h"
 #include "src/evaluate.h"
 #include "src/expression.h"
+#include "src/read-file.h"
+#include "src/parse.h"
 
 typedef struct {
   char *foo;
@@ -15,16 +17,6 @@ typedef struct {
 static void eval_settings_cb(EvalSettingsInterface *interface) {
   SettingsState *state = (SettingsState*) interface->state;
 
-  Symbol *foo_sym = interface->define_symbol(interface, "foo", SYM_VARIABLE);
-  if (foo_sym == NULL) return;
-  foo_sym->as.variable = (Value) {
-    .type = TYPE_STRING,
-    .as.string = (String) {
-      .data = state->foo,
-      .length = strlen(state->foo),
-    },
-  };
-
   Symbol *argc_sym = interface->define_symbol(interface, "argc", SYM_VARIABLE);
   if (argc_sym == NULL) return;
   argc_sym->as.variable = (Value) { .type = TYPE_U32, .as.u32 = state->argc };
@@ -32,132 +24,12 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   Symbol *argv_sym = interface->define_symbol(interface, "argv", SYM_ARRAY);
   if (argv_sym == NULL) return;
   argv_sym->as.array = state->argv;
-
-  // interface->report_failure(interface, "test failure report");
-}
-
-/*
-  (do
-    (+ 2 3)
-    (do
-      (+ (last-val) 4)
-      (+ (last-val) 5)
-    )
-  )
-  (+ (last-val) 10)
-*/
-bool populate_test_expressions(void) {
-  uint32_t do_index, add_index, last_val_index;
-
-  if (!allocate_expression_data(
-    "do", sizeof("do"), TYPE_STRING, sizeof("do") - 1, &do_index
-  )) return false;
-
-  if (!allocate_expression_data(
-    "+", sizeof("+"), TYPE_STRING, sizeof("+") - 1, &add_index
-  )) return false;
-
-  if (!allocate_expression_data(
-    "last-val", sizeof("last-val"), TYPE_STRING, sizeof("last-val") - 1, &last_val_index
-  )) return false;
-
-  // (do
-  //   (+ 2 3)
-  //   (do
-  //     (+ (last-val) 4)
-  //     (+ (last-val) 5)
-  //   )
-  // )
-  expressions[0] = (Expression) {
-    .kind = EXPR_LIST, .first_child = 1, .next = 18,
-  };
-  expressions[1] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 2, .data = do_index,
-  };
-
-  // (+ 2 3)
-  expressions[2] = (Expression) {
-    .kind = EXPR_LIST, .first_child = 3, .next = 6,
-  };
-  expressions[3] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 4, .data = add_index,
-  };
-  expressions[4] = (Expression) {
-    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = 5, .data = 2,
-  };
-  expressions[5] = (Expression) {
-    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = 3,
-  };
-
-  // (do
-  //   (+ (last-val) 4)
-  //   (+ (last-val) 5)
-  // )
-  expressions[6] = (Expression) {
-    .kind = EXPR_LIST, .first_child = 7, .next = EXPR_NONE,
-  };
-  expressions[7] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 8, .data = do_index,
-  };
-
-  // (+ (last-val) 4)
-  expressions[8] = (Expression) {
-    .kind = EXPR_LIST, .first_child = 9, .next = 13,
-  };
-  expressions[9] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 10, .data = add_index,
-  };
-  expressions[10] = (Expression) {
-    .kind = EXPR_LIST, .first_child = 11, .next = 12,
-  };
-  expressions[11] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = last_val_index,
-  };
-  expressions[12] = (Expression) {
-    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = 4,
-  };
-
-  // (+ (last-val) 5)
-  expressions[13] = (Expression) {
-    .kind = EXPR_LIST, .first_child = 14, .next = EXPR_NONE,
-  };
-  expressions[14] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 15, .data = add_index,
-  };
-  expressions[15] = (Expression) {
-    .kind = EXPR_LIST, .first_child = 16, .next = 17,
-  };
-  expressions[16] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = last_val_index,
-  };
-  expressions[17] = (Expression) {
-    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = 5,
-  };
-
-  // (+ (last-val) 10)
-  expressions[18] = (Expression) {
-    .kind = EXPR_LIST, .first_child = 19, .next = EXPR_NONE,
-  };
-  expressions[19] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 20, .data = add_index,
-  };
-  expressions[20] = (Expression) {
-    .kind = EXPR_LIST, .first_child = 21, .next = 22,
-  };
-  expressions[21] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = last_val_index,
-  };
-  expressions[22] = (Expression) {
-    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = 10,
-  };
-
-  expression_count = 23;
-  return true;
 }
 
 int main(int argc, char **argv) {
   int exit_code = 0;
-  char foo[] = "some test string value\0";
+
+  char parse_error[ERR_MSG_SIZE] = {'\0'};
 
   Array argv_as_Array = {
     .element_type = TYPE_STRING,
@@ -170,11 +42,21 @@ int main(int argc, char **argv) {
     ((String*) argv_as_Array.data)[i] = arg;
   }
 
-  SettingsState state = { .foo = foo, .argc = argc, .argv = argv_as_Array };
+  SettingsState state = { .argc = argc, .argv = argv_as_Array };
 
-  // TODO: remove, just for testing
-  if (!populate_test_expressions()) {
-    fprintf(stderr, "[FAIL] Failed to make a test expression\n");
+  static char source[SOURCE_CAPACITY];
+  size_t source_size = 0;
+
+  const char *source_path = argc > 1 ? argv[1] : "/dev/stdin";
+
+  if (!read_file_contents(source_path, &source, &source_size)) {
+    exit_code = 1;
+    goto done;
+  }
+
+  if (!parse_source(source, source_size, &parse_error)) {
+    fprintf(stderr, "Parse error: %s\n", parse_error);
+    exit_code = 1;
     goto done;
   }
 
@@ -184,15 +66,17 @@ int main(int argc, char **argv) {
     eval_settings_cb,
     (void*) &state
   );
-  // EvalOutcome eval_outcome = evaluate(expressions, expression_count, NULL, NULL);
 
   switch (eval_outcome.kind) {
     case EVAL_OK:
     case EVAL_EXIT:
-      printf("Evaluation result kind: %s\n", show_SymbolKind(eval_outcome.result.kind));
+      if (eval_outcome.kind == EVAL_EXIT) exit_code = eval_outcome.as.exit_code;
+      const char *shown_symbol_kind = show_SymbolKind(eval_outcome.result.kind);
 
       switch (eval_outcome.result.kind) {
-        case SYM_EMPTY: goto done;
+        case SYM_EMPTY:
+          printf("%s\n", shown_symbol_kind);
+          goto done;
 
         case SYM_VARIABLE:
           char *shown_value = show_Value(eval_outcome.result.as.value);
@@ -201,7 +85,7 @@ int main(int argc, char **argv) {
             exit_code = 1;
             goto done;
           }
-          printf("[OK] Result: %s\n", shown_value);
+          printf("%s(%s)\n", shown_symbol_kind, shown_value);
           free(shown_value);
           goto done;
 
@@ -212,7 +96,7 @@ int main(int argc, char **argv) {
             exit_code = 1;
             goto done;
           }
-          printf("Result: %s\n", shown_array);
+          printf("%s(%s)\n", shown_symbol_kind, shown_array);
           free(shown_array);
           goto done;
 
@@ -222,14 +106,6 @@ int main(int argc, char **argv) {
           goto done;
       }
 
-      if (eval_outcome.kind == EVAL_EXIT) {
-        printf("[OK] Evaluation finished with exit code: %d\n", eval_outcome.as.exit_code);
-        exit_code = eval_outcome.as.exit_code;
-        goto done;
-      } else {
-        printf("[OK] Evaluation was okay\n");
-        goto done;
-      }
       break;
 
     case EVAL_FAIL:
