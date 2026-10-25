@@ -30,15 +30,15 @@ features:
   `int32`, fractional numbers default to `float`. When you want specific type
   for a number you can use `(type)` expression:
 
-  * `(type int32 123)`
-  * `(type float 123)`
+  * `(type (int32) 123)`
+  * `(type (float) 123)`
 
   Same `(type)` can be used for type-conversion
   (be aware of type bounds and number overflows):
 
-  * `(type int32 (type uint32 123))`
-  * `(type int32 (type float 123.321))` — Returns `123` (truncated)
-  * `(type int32 (type float -123.321))` — Returns `-123` (truncated)
+  * `(type (int32) (type (uint32) 123))`
+  * `(type (int32) (type (float) 123.321))` — Returns `123` (truncated)
+  * `(type (int32) (type (float) -123.321))` — Returns `-123` (truncated)
 
   Invalid out-of-bounds numeric literals are rejected:
 
@@ -98,14 +98,14 @@ features:
     - `(div 7 2)` — Result is `3` (`uint32`)
     - `(div -7.5 2.0)` — Result is `-3.0` (`float`)
     - `(div -7 2)` — Failure (`int32` vs. `uint32` type mismatch).
-      Use explicit type conversion (`(div -7 (type int32 2))`)
+      Use explicit type conversion (`(div -7 (type (int32) 2))`)
     - `(mod 5.5 2.0)` — Result is `1.5`
       (C `fmodf` behavior for `float`;
       for `uint32` and `int32` C `%` is used instead)
     - `(- 2 3)` — Result is `UINT32_MAX`/`4294967295`
       (defaulting to `uint32`, number underflow, you might want to explicitly
       convert the values to `int32` first when expecting negative value as a
-      result of the expression `(- (type int32 2) (type int32 3))` to get
+      result of the expression `(- (type (int32) 2) (type (int32) 3))` to get
       `int32` resulting type)
 
   * Variables

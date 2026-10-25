@@ -1,4 +1,6 @@
 #include <math.h>
+#include <inttypes.h>
+#include <string.h>
 
 #include "stdlib.h"
 #include "symbol-error.h"
@@ -76,6 +78,139 @@ Datum std_last_val(const Datum*, size_t argc) {
   }
 
   return return_value;
+}
+
+#define ADD_TYPE_FN(name, expr_name, value_type) \
+Datum name(const Datum*, size_t argc) { \
+  Datum return_value = { .kind = SYM_EMPTY }; \
+  char fail_msg[ERR_MSG_SIZE] = {'\0'}; \
+  if (!validate_argc(expr_name, &fail_msg, 0, argc)) return return_value; \
+  return_value.kind = SYM_VARIABLE; \
+  return_value.as.value.type = TYPE_U32; \
+  return_value.as.value.as.u32 = value_type; \
+  return return_value; \
+}
+
+ADD_TYPE_FN(std_uint32, "uint32", TYPE_U32)
+ADD_TYPE_FN(std_int32, "int32", TYPE_I32)
+ADD_TYPE_FN(std_float, "float", TYPE_F32)
+
+// (type) — Explicit numeric type conversion
+Datum std_type(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "type";
+
+  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+
+  if (
+    args[0].kind != SYM_VARIABLE ||
+    args[0].as.value.type != TYPE_U32 ||
+    args[1].kind != SYM_VARIABLE
+  ) {
+    snprintf(
+      fail_msg, sizeof(fail_msg),
+      "(%s) expects a uint32 type identifier and a scalar value",
+      fn_name
+    );
+    goto fail;
+  }
+
+  uint32_t type_id = args[0].as.value.as.u32;
+  Value source = args[1].as.value;
+  ValueType target_type;
+
+  switch (type_id) {
+    case TYPE_U32: target_type = TYPE_U32; break;
+    case TYPE_I32: target_type = TYPE_I32; break;
+    case TYPE_F32: target_type = TYPE_F32; break;
+    default:
+      snprintf(
+        fail_msg, sizeof(fail_msg),
+        "(%s) unknown target type identifier: %" PRIu32,
+        fn_name,
+        type_id
+      );
+      goto fail;
+  }
+
+  Value converted = { .type = target_type };
+
+  switch (source.type) {
+    case TYPE_U32:
+      switch (target_type) {
+        case TYPE_U32: converted.as.u32 = source.as.u32; break;
+        case TYPE_I32:
+          if (source.as.u32 > INT32_MAX) goto out_of_range;
+          converted.as.i32 = (int32_t)source.as.u32;
+          break;
+        case TYPE_F32: converted.as.f32 = (float)source.as.u32; break;
+        default: goto unsupported;
+      }
+      break;
+
+    case TYPE_I32:
+      switch (target_type) {
+        case TYPE_U32:
+          if (source.as.i32 < 0) goto out_of_range;
+          converted.as.u32 = (uint32_t)source.as.i32;
+          break;
+        case TYPE_I32: converted.as.i32 = source.as.i32; break;
+        case TYPE_F32: converted.as.f32 = (float)source.as.i32; break;
+        default: goto unsupported;
+      }
+      break;
+
+    case TYPE_F32:
+      switch (target_type) {
+        case TYPE_U32:
+          if (!(source.as.f32 >= 0.0f && source.as.f32 < 4294967296.0f))
+            goto out_of_range;
+          converted.as.u32 = (uint32_t)source.as.f32;
+          break;
+        case TYPE_I32:
+          if (!(source.as.f32 >= -2147483648.0f && source.as.f32 < 2147483648.0f))
+            goto out_of_range;
+          converted.as.i32 = (int32_t)source.as.f32;
+          break;
+        case TYPE_F32: converted.as.f32 = source.as.f32; break;
+        default: goto unsupported;
+      }
+      break;
+
+    default:
+      goto unsupported;
+  }
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = converted,
+  };
+
+  return return_value;
+
+  out_of_range:
+    snprintf(
+      fail_msg, sizeof(fail_msg),
+      "(%s) value is out of range for %s",
+      fn_name,
+      show_ValueType(target_type)
+    );
+    goto fail;
+
+  unsupported:
+    snprintf(
+      fail_msg, sizeof(fail_msg),
+      "(%s) unsupported source type: %s",
+      fn_name,
+      show_ValueType(source.type)
+    );
+    goto fail;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
 }
 
 // Generic standard library printing implementation
@@ -328,6 +463,14 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
 
   // Value accessing
   ADD_SYMBOL("last-val", std_last_val);
+
+  // Type identifiers
+  ADD_SYMBOL("uint32", std_uint32);
+  ADD_SYMBOL("int32", std_int32);
+  ADD_SYMBOL("float", std_float);
+
+  // Type conversion
+  ADD_SYMBOL("type", std_type);
 
   // Printing
   ADD_SYMBOL("print", std_print);
