@@ -310,26 +310,26 @@ static bool parse_number(Parser *parser, const char *text, uint32_t *index) {
     if (!new_expression(parser, EXPR_F32, index)) return false;
     memcpy(&expressions[*index].data, &number, sizeof(number));
   }
-  // Parse integer (negative numbers are automatically detected as `int32` type)
+  // Parse integer (negative numbers are automatically detected as `i32` type)
   else if (text[0] == '-') {
     errno = 0; // Reset global error
     char *end;
     // Reserving large enough number type to detect out-of-bound
     long long number = strtoll(text, &end, 10);
     if (errno == ERANGE || *end != '\0' || number < INT32_MIN || number > INT32_MAX)
-      return parser_fail(parser, "int32 literal out of range");
+      return parser_fail(parser, "i32 literal out of range");
     if (!new_expression(parser, EXPR_I32, index)) return false;
     int32_t n = (int32_t)number;
     memcpy(&expressions[*index].data, &n, sizeof(n));
   }
-  // Parse unsigned integer (positive numbers are automatically detected as `uint32` type)
+  // Parse unsigned integer (positive numbers are automatically detected as `u32` type)
   else {
     errno = 0; // Reset global error
     char *end;
     // Reserving large enough number type to detect out-of-bound
     unsigned long long number = strtoull(text, &end, 10);
     if (errno == ERANGE || *end != '\0' || number > UINT32_MAX)
-      return parser_fail(parser, "uint32 literal out of range");
+      return parser_fail(parser, "u32 literal out of range");
     if (!new_expression(parser, EXPR_U32, index)) return false;
     expressions[*index].data = (uint32_t)number;
   }

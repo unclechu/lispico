@@ -22,37 +22,37 @@ features:
 
 - Primitive data types
 
-  * `uint32`
-  * `int32`
-  * `float` (32-bit `float`)
+  * `u32`
+  * `i32`
+  * `f32` (32-bit `float` in C)
 
-  Non-negative numbers are defaulting to `uint32`, negative ones defaulting to
-  `int32`, fractional numbers default to `float`. When you want specific type
+  Non-negative numbers are defaulting to `u32`, negative ones defaulting to
+  `i32`, fractional numbers default to `f32`. When you want specific type
   for a number you can use `(type)` expression:
 
-  * `(type int32 123)`
-  * `(type float 123)`
+  * `(type i32 123)`
+  * `(type f32 123)`
 
   Same `(type)` can be used for type-conversion
   (be aware of type bounds and number overflows):
 
-  * `(type int32 (type uint32 123))`
-  * `(type int32 (type float 123.321))` — Returns `123` (truncated)
-  * `(type int32 (type float -123.321))` — Returns `-123` (truncated)
+  * `(type i32 (type u32 123))`
+  * `(type i32 (type f32 123.321))` — Returns `123` (truncated)
+  * `(type i32 (type f32 -123.321))` — Returns `-123` (truncated)
 
   Invalid out-of-bounds numeric literals are rejected:
 
   * `4294967295` → OK
-  * `4294967296` (`uint32` that is bigger than `UINT32_MAX`) → Failure
+  * `4294967296` (`u32` that is bigger than `UINT32_MAX`) → Failure
   * `-2147483648` → OK
-  * `-2147483649` (`int32` that is smaller than `INT32_MIN`) → Failure
+  * `-2147483649` (`i32` that is smaller than `INT32_MIN`) → Failure
 
 - Arrays
 
-  * `(arr uint32 16 foo)` where 16 is an array size and `foo` is the name
+  * `(arr u32 16 foo)` where 16 is an array size and `foo` is the name
   * `(arr-get foo 0)` to get an array element by index 0
   * `(arr-set foo 0 123)` to set an array element by index 0 to `123` value
-  * `(arr-size foo)` to get `foo` array size (e.g. `16` of `uint32` type)
+  * `(arr-size foo)` to get `foo` array size (e.g. `16` of `u32` type)
 
 - There are no user-defined functions (at least for now)
 
@@ -65,14 +65,14 @@ features:
 
     + `(+ 2 3)` — Addition
     + `(- 3 2)` — Subtraction
-      (both operands default to `uint32`, so the result is also `uint32`; if
+      (both operands default to `u32`, so the result is also `u32`; if
       subtraction would mathematically produce a negative result, unsigned
-      arithmetic wraps modulo `2^32`; use explicit `int32` operands when
+      arithmetic wraps modulo `2^32`; use explicit `i32` operands when
       negative results are required)
     + `(* 2 3)` — Multiplication
     + `(/ 10.0 5.0)` — Floating-point division
       (attempt to divide by zero results in failure;
-      be aware that `(/ 10 5)` will result into default `uint32` type,
+      be aware that `(/ 10 5)` will result into default `u32` type,
       so it would behave like `(div)` and you will lose the fractional part of
       the quotient)
     + `(div 10 4)` — Integer division
@@ -92,24 +92,24 @@ features:
 
     Here are some examples of different types behavior:
 
-    - `(/ 7.5 2.0)` — Result is `3.75` (`float`)
-    - `(div 7.5 2.0)` — Result is `3.0` (`float`)
-    - `(/ 7 2)` — Result is `3` (`uint32`)
-    - `(div 7 2)` — Result is `3` (`uint32`)
-    - `(div -7.5 2.0)` — Result is `-3.0` (`float`)
-    - `(div -7 2)` — Failure (`int32` vs. `uint32` type mismatch).
-      Use explicit type conversion (`(div -7 (type int32 2))`)
+    - `(/ 7.5 2.0)` — Result is `3.75` (`f32`)
+    - `(div 7.5 2.0)` — Result is `3.0` (`f32`)
+    - `(/ 7 2)` — Result is `3` (`u32`)
+    - `(div 7 2)` — Result is `3` (`u32`)
+    - `(div -7.5 2.0)` — Result is `-3.0` (`f32`)
+    - `(div -7 2)` — Failure (`i32` vs. `u32` type mismatch).
+      Use explicit type conversion (`(div -7 (type i32 2))`)
     - `(mod 5.5 2.0)` — Result is `1.5`
-      (C `fmodf` behavior for `float`;
-      for `uint32` and `int32` C `%` is used instead)
+      (C `fmodf` behavior for `f32`;
+      for `u32` and `i32` C `%` is used instead)
     - `(- 2 3)` — Result is `UINT32_MAX`/`4294967295`
-      (defaulting to `uint32`, number underflow, you might want to explicitly
-      convert the values to `int32` first when expecting negative value as a
-      result of the expression `(- (type int32 2) (type int32 3))` to get
-      `int32` resulting type)
+      (defaulting to `u32`, number underflow, you might want to explicitly
+      convert the values to `i32` first when expecting negative value as a
+      result of the expression `(- (type i32 2) (type i32 3))` to get
+      `i32` resulting type)
 
   * Variables
-    + `(var "foo" uint32 123)` — Define a variable (can be defined only once)
+    + `(var "foo" u32 123)` — Define a variable (can be defined only once)
     + `(set "foo" (+ foo 3))` — Set a value to an already defined variable
 
   * If-conditions and comparisons:
@@ -122,7 +122,7 @@ features:
 
     + Comparison functions/operators
 
-      Note that the result of these functions is always of `uint32` type.
+      Note that the result of these functions is always of `u32` type.
       The rule for the arguments is the same. All arguments must be of the same
       type. Otherwise the interpreter will refuse to evaluate and fail.
 
@@ -169,7 +169,7 @@ features:
   * Early exit (by default last expression is returned from the program)
 
     + `(exit 0 123)` where `0` is exit status code and `123` is returned value
-      (defaulting to `uint32` type)
+      (defaulting to `u32` type)
 
   * Expression sequences
 
@@ -240,6 +240,17 @@ SYM_EMPTY
 $ ./simple-lisp-interpreter <<< '(println "hello")(+ 10 5)(+ (last-val) 3)'
 hello
 SYM_VARIABLE(TYPE_U32(18))
+
+$ ./simple-lisp-interpreter examples/hello-world.lisp
+Hello, World!
+SYM_EMPTY
+
+$ ./simple-lisp-interpreter <<'LISP'
+(var "foo" u32 123)
+(set "foo" (+ foo 3))
+(type f32 foo)
+LISP
+SYM_VARIABLE(TYPE_F32(126.000000))
 ```
 
 ## Local Vim configuration example

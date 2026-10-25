@@ -1,3 +1,3 @@
-(var "answer" uint32 10)
+(var "answer" u32 10)
 (exit 0 (+ answer 2)) ; Return TYPE_U32(12) with exit status 0
 (set "answer" 99) ; Not executed

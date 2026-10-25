@@ -36,7 +36,7 @@ typedef struct {
   // Index pointer to next sibling expression
   uint32_t next;
 
-  // Contains either scalar bits (`uint32`, `int32`, `float`)
+  // Contains either scalar bits (`u32`, `i32`, `f32`)
   // or an index pointing to an entry of `expression_allocations` array
   // (for `kind == EXPR_STRING` or `kind == EXPR_ARRAY`).
   uint32_t data;

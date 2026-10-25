@@ -81,21 +81,6 @@ Datum std_last_val(const Datum*, size_t argc) {
   return return_value;
 }
 
-#define ADD_TYPE_FN(name, expr_name, value_type) \
-Datum name(const Datum*, size_t argc) { \
-  Datum return_value = { .kind = SYM_EMPTY }; \
-  char fail_msg[ERR_MSG_SIZE] = {'\0'}; \
-  if (!validate_argc(expr_name, &fail_msg, 0, argc)) return return_value; \
-  return_value.kind = SYM_VARIABLE; \
-  return_value.as.value.type = TYPE_U32; \
-  return_value.as.value.as.u32 = value_type; \
-  return return_value; \
-}
-
-ADD_TYPE_FN(std_uint32, "uint32", TYPE_U32)
-ADD_TYPE_FN(std_int32, "int32", TYPE_I32)
-ADD_TYPE_FN(std_float, "float", TYPE_F32)
-
 // (type) — Explicit numeric type conversion
 Datum std_type(const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
@@ -111,7 +96,7 @@ Datum std_type(const Datum *args, size_t argc) {
   ) {
     snprintf(
       fail_msg, sizeof(fail_msg),
-      "(%s) expects a uint32 type identifier and a scalar value",
+      "(%s) expects a u32 type identifier and a scalar value",
       fn_name
     );
     goto fail;
@@ -309,7 +294,7 @@ Datum std_exit(const Datum *args, size_t argc) {
       break;
 
     default:
-      snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code must be uint32 or int32", fn_name);
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code must be u32 or i32", fn_name);
       goto fail;
   }
 
@@ -366,7 +351,7 @@ Datum std_var(const Datum *args, size_t argc) {
     snprintf(
       fail_msg,
       sizeof(fail_msg),
-      "(%s) expects a uint32 type identifier and a scalar value",
+      "(%s) expects a u32 type identifier and a scalar value",
       fn_name
     );
     goto fail;
@@ -745,9 +730,9 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   ADD_FN_SYMBOL("last-val", std_last_val);
 
   // Type identifiers
-  ADD_VAR_SYMBOL("uint32", TYPE_U32, u32, TYPE_U32);
-  ADD_VAR_SYMBOL("int32", TYPE_U32, u32, TYPE_I32);
-  ADD_VAR_SYMBOL("float", TYPE_U32, u32, TYPE_F32);
+  ADD_VAR_SYMBOL("u32", TYPE_U32, u32, TYPE_U32);
+  ADD_VAR_SYMBOL("i32", TYPE_U32, u32, TYPE_I32);
+  ADD_VAR_SYMBOL("f32", TYPE_U32, u32, TYPE_F32);
 
   // Type conversion
   ADD_FN_SYMBOL("type", std_type);
