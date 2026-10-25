@@ -14,6 +14,8 @@ typedef enum {
   STD_EPRINTLN,
 } StdPrintVariant;
 
+Datum std_last_val(const Datum*, size_t argc);
+
 // Printing functions
 Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc);
 Datum std_print(const Datum *args, size_t argc);
