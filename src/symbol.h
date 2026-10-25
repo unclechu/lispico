@@ -34,9 +34,9 @@ typedef struct {
 typedef struct {
   ValueType type;
   union {
-    uint32_t u32; // `uint32`/`TYPE_U32` type
-    int32_t i32; // `int32`/`TYPE_I32` type
-    float f32; // `float`/`TYPE_F32` type
+    uint32_t u32; // `TYPE_U32` type
+    int32_t i32; // `TYPE_I32` type
+    float f32; // `TYPE_F32` type
     String string; // String `TYPE_STRING` type
   } as;
 } Value;
