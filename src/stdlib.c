@@ -283,6 +283,218 @@ Datum std_eprintln(const Datum *args, size_t argc) {
   return std_generic_print(STD_EPRINTLN, args, argc);
 }
 
+// (exit) — Stop program evaluation and return the provided result
+Datum std_exit(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "exit";
+
+  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+
+  if (args[0].kind != SYM_VARIABLE) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code must be a numeric value", fn_name);
+    goto fail;
+  }
+
+  int exit_code;
+
+  switch (args[0].as.value.type) {
+    case TYPE_U32:
+      if (args[0].as.value.as.u32 > INT_MAX) goto out_of_range;
+      exit_code = (int)args[0].as.value.as.u32;
+      break;
+
+    case TYPE_I32:
+      exit_code = (int)args[0].as.value.as.i32;
+      break;
+
+    default:
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code must be uint32 or int32", fn_name);
+      goto fail;
+  }
+
+  return_value = args[1];
+  report_evaluation_exit(exit_code, return_value);
+  return return_value;
+
+  out_of_range:
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code is out of range for int", fn_name);
+    goto fail;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
+static bool get_variable_name(const Datum *datum, char (*name)[SYMBOL_NAME_SIZE]) {
+  if (datum->kind != SYM_VARIABLE || datum->as.value.type != TYPE_STRING) return false;
+  String string = datum->as.value.as.string;
+
+  if (
+    string.data == NULL ||
+    string.length == 0 ||
+    string.length >= sizeof(*name) ||
+    // The string length must no include string terminator
+    memchr(string.data, '\0', string.length) != NULL
+  ) return false;
+
+  memcpy(*name, string.data, string.length);
+  (*name)[string.length] = '\0';
+  return true;
+}
+
+// (var) — Define a new variable
+Datum std_var(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "var";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (!validate_argc(fn_name, &fail_msg, 3, argc)) return return_value;
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
+    goto fail;
+  }
+
+  if (
+    args[1].kind != SYM_VARIABLE ||
+    args[1].as.value.type != TYPE_U32 ||
+    args[2].kind != SYM_VARIABLE
+  ) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects a uint32 type identifier and a scalar value",
+      fn_name
+    );
+    goto fail;
+  }
+
+  uint32_t type_id = args[1].as.value.as.u32;
+  ValueType variable_type;
+
+  // TODO: add support for arrays and strings
+  switch (type_id) {
+    case TYPE_U32: variable_type = TYPE_U32; break;
+    case TYPE_I32: variable_type = TYPE_I32; break;
+    case TYPE_F32: variable_type = TYPE_F32; break;
+    default:
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) unsupported variable type identifier: %" PRIu32,
+        fn_name,
+        type_id
+      );
+      goto fail;
+  }
+
+  if (args[2].as.value.type != variable_type) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) variable type mismatch: expected %s, got %s",
+      fn_name,
+      show_ValueType(variable_type),
+      show_ValueType(args[2].as.value.type)
+    );
+    goto fail;
+  }
+
+  Symbol *symbol = symbol_define(symbol_name, SYM_VARIABLE);
+
+  if (symbol == NULL) {
+    extract_error_message_from_symbol_define_error(&fail_msg, symbol_name);
+    goto fail;
+  }
+
+  symbol->as.variable = args[2].as.value;
+  return_value = args[2];
+  return return_value;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
+// (set) — Overwrite an existing variable
+Datum std_set(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "set";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
+    goto fail;
+  }
+
+  if (args[1].kind != SYM_VARIABLE) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a scalar value", fn_name);
+    goto fail;
+  }
+
+  Symbol *symbol = symbol_lookup(symbol_name);
+
+  if (symbol == NULL) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) variable “%s” is not defined",
+      fn_name,
+      symbol_name
+    );
+    goto fail;
+  }
+
+  if (symbol->kind != SYM_VARIABLE) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) symbol “%s” is not a variable",
+      fn_name,
+      symbol_name
+    );
+    goto fail;
+  }
+
+  if (symbol->as.variable.type != args[1].as.value.type) {
+    snprintf(
+      fail_msg, sizeof(fail_msg),
+      "(%s) variable type mismatch: expected %s, got %s",
+      fn_name,
+      show_ValueType(symbol->as.variable.type),
+      show_ValueType(args[1].as.value.type)
+    );
+    goto fail;
+  }
+
+  // TODO: add support for arrays and strings
+  switch (args[1].as.value.type) {
+    case TYPE_U32:
+    case TYPE_I32:
+    case TYPE_F32:
+      break;
+    default:
+      report_unexpected_value_type(fn_name, &fail_msg, args[1].as.value.type);
+      return return_value;
+  }
+
+  symbol->as.variable = args[1].as.value;
+  return_value = args[1];
+  return return_value;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // Validate arithmetic inputs and report failure if validation fails
 static bool validate_arithmetic_inputs(
   const char *fn_name,
@@ -525,50 +737,6 @@ ADD_COMPARISON_FN(std_greater_equal, ">=", >=)
 ADD_COMPARISON_FN(std_equal, "==", ==)
 ADD_COMPARISON_FN(std_not_equal, "!=", !=)
 
-// (exit) — Stop program evaluation and return the provided result
-Datum std_exit(const Datum *args, size_t argc) {
-  Datum return_value = { .kind = SYM_EMPTY };
-  char fail_msg[ERR_MSG_SIZE] = {'\0'};
-  const char fn_name[] = "exit";
-
-  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
-
-  if (args[0].kind != SYM_VARIABLE) {
-    snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code must be a numeric value", fn_name);
-    goto fail;
-  }
-
-  int exit_code;
-
-  switch (args[0].as.value.type) {
-    case TYPE_U32:
-      if (args[0].as.value.as.u32 > INT_MAX) goto out_of_range;
-      exit_code = (int)args[0].as.value.as.u32;
-      break;
-
-    case TYPE_I32:
-      exit_code = (int)args[0].as.value.as.i32;
-      break;
-
-    default:
-      snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code must be uint32 or int32", fn_name);
-      goto fail;
-  }
-
-  return_value = args[1];
-  report_evaluation_exit(exit_code, return_value);
-  return return_value;
-
-  out_of_range:
-    snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code is out of range for int", fn_name);
-    goto fail;
-
-  fail:
-    report_evaluation_failure(fail_msg);
-    wipe_memory(fail_msg, sizeof(fail_msg));
-    return return_value;
-}
-
 // Populate the `symbols` with “standard library” definitions
 bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   const char *symbol_name;
@@ -589,6 +757,12 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   ADD_FN_SYMBOL("println", std_println);
   ADD_FN_SYMBOL("eprint", std_eprint);
   ADD_FN_SYMBOL("eprintln", std_eprintln);
+
+  ADD_FN_SYMBOL("exit", std_exit);
+
+  // Variables
+  ADD_FN_SYMBOL("var", std_var);
+  ADD_FN_SYMBOL("set", std_set);
 
   // Arithmetics
   ADD_FN_SYMBOL("+", std_add);
@@ -613,8 +787,6 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   ADD_FN_SYMBOL(">=", std_greater_equal);
   ADD_FN_SYMBOL("==", std_equal);
   ADD_FN_SYMBOL("!=", std_not_equal);
-
-  ADD_FN_SYMBOL("exit", std_exit);
 
   return true;
 

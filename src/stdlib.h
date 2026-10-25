@@ -27,6 +27,12 @@ ADD_STDLIB_FN_TYPE_DEF(std_println);
 ADD_STDLIB_FN_TYPE_DEF(std_eprint);
 ADD_STDLIB_FN_TYPE_DEF(std_eprintln);
 
+ADD_STDLIB_FN_TYPE_DEF(std_exit);
+
+// Variables
+ADD_STDLIB_FN_TYPE_DEF(std_var);
+ADD_STDLIB_FN_TYPE_DEF(std_set);
+
 // Arithmetics
 ADD_STDLIB_FN_TYPE_DEF(std_add);
 ADD_STDLIB_FN_TYPE_DEF(std_subtract);
@@ -46,5 +52,3 @@ ADD_STDLIB_FN_TYPE_DEF(std_greater);
 ADD_STDLIB_FN_TYPE_DEF(std_greater_equal);
 ADD_STDLIB_FN_TYPE_DEF(std_equal);
 ADD_STDLIB_FN_TYPE_DEF(std_not_equal);
-
-ADD_STDLIB_FN_TYPE_DEF(std_exit);

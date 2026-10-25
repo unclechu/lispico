@@ -109,8 +109,8 @@ features:
       `int32` resulting type)
 
   * Variables
-    + `(var foo uint32 123)` — Define a variable (can be defined only once)
-    + `(set foo (+ foo 3))` — Set a value to an already defined variable
+    + `(var "foo" uint32 123)` — Define a variable (can be defined only once)
+    + `(set "foo" (+ foo 3))` — Set a value to an already defined variable
 
   * If-conditions and comparisons:
 
