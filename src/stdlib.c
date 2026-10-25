@@ -450,11 +450,21 @@ ADD_UNARY_ROUNDING_FN(std_ceiling, "ceiling", ceilf(x))
 ADD_UNARY_ROUNDING_FN(std_round, "round", roundf(x))
 ADD_UNARY_ROUNDING_FN(std_trunc, "trunc", truncf(x))
 
-#define ADD_SYMBOL(name, fn) { \
+#define ADD_FN_SYMBOL(name, fn) { \
   symbol_name = name; \
   Symbol *sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION); \
   if (sym == NULL) goto symbol_define_fail; \
   sym->as.native_function = fn; \
+}
+
+#define ADD_VAR_SYMBOL(name, type_id, as_type, val) { \
+  symbol_name = name; \
+  Symbol *sym = symbol_define(symbol_name, SYM_VARIABLE); \
+  if (sym == NULL) goto symbol_define_fail; \
+  sym->as.variable = (Value) { \
+    .type = type_id, \
+    .as.as_type = val, \
+  }; \
 }
 
 // Populate the `symbols` with “standard library” definitions
@@ -462,33 +472,33 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   const char *symbol_name;
 
   // Value accessing
-  ADD_SYMBOL("last-val", std_last_val);
+  ADD_FN_SYMBOL("last-val", std_last_val);
 
   // Type identifiers
-  ADD_SYMBOL("uint32", std_uint32);
-  ADD_SYMBOL("int32", std_int32);
-  ADD_SYMBOL("float", std_float);
+  ADD_VAR_SYMBOL("uint32", TYPE_U32, u32, TYPE_U32);
+  ADD_VAR_SYMBOL("int32", TYPE_U32, u32, TYPE_I32);
+  ADD_VAR_SYMBOL("float", TYPE_U32, u32, TYPE_F32);
 
   // Type conversion
-  ADD_SYMBOL("type", std_type);
+  ADD_FN_SYMBOL("type", std_type);
 
   // Printing
-  ADD_SYMBOL("print", std_print);
-  ADD_SYMBOL("println", std_println);
-  ADD_SYMBOL("eprint", std_eprint);
-  ADD_SYMBOL("eprintln", std_eprintln);
+  ADD_FN_SYMBOL("print", std_print);
+  ADD_FN_SYMBOL("println", std_println);
+  ADD_FN_SYMBOL("eprint", std_eprint);
+  ADD_FN_SYMBOL("eprintln", std_eprintln);
 
   // Arithmetics
-  ADD_SYMBOL("+", std_add);
-  ADD_SYMBOL("-", std_subtract);
-  ADD_SYMBOL("*", std_mul);
-  ADD_SYMBOL("/", std_divide);
-  ADD_SYMBOL("mod", std_mod);
-  ADD_SYMBOL("div", std_div);
-  ADD_SYMBOL("floor", std_floor);
-  ADD_SYMBOL("ceiling", std_ceiling);
-  ADD_SYMBOL("round", std_round);
-  ADD_SYMBOL("trunc", std_trunc);
+  ADD_FN_SYMBOL("+", std_add);
+  ADD_FN_SYMBOL("-", std_subtract);
+  ADD_FN_SYMBOL("*", std_mul);
+  ADD_FN_SYMBOL("/", std_divide);
+  ADD_FN_SYMBOL("mod", std_mod);
+  ADD_FN_SYMBOL("div", std_div);
+  ADD_FN_SYMBOL("floor", std_floor);
+  ADD_FN_SYMBOL("ceiling", std_ceiling);
+  ADD_FN_SYMBOL("round", std_round);
+  ADD_FN_SYMBOL("trunc", std_trunc);
 
   return true;
 
