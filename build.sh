@@ -6,7 +6,7 @@ set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 
 : "${CC:=cc}"
 : "${CFLAGS:=}"
-: "${LIBS:=}"
+: "${LIBS:=-lm}"
 
 # Include all C modules from src/, if any.
 shopt -s nullglob
