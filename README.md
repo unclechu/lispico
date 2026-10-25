@@ -207,7 +207,7 @@ In C integer division by zero is undefined behavior, but this interpreter checks
 it and fails on the attempt.
 
 - `(/ 10 0)` / `(/ 10.0 0.0)` → Failure
-- `(div 10 0)` / `(div 10.0 0.0)`  → Failure
+- `(div 10 0)` / `(div 10.0 0.0)` → Failure
 - `(mod 10 0)` / `(mod 10.0 0.0)` → Failure
 
 ## Local Vim configuration example
