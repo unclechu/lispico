@@ -183,6 +183,52 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
 
       const char *function_name = allocation->data;
 
+      // Special form: evaluate the condition, then only the selected branch.
+      if (strcmp(function_name, "if") == 0) {
+        uint32_t branch_indices[3];
+        uint32_t current_index = fn->next;
+
+        // Require exactly three expressions: condition, true branch, false branch.
+        for (size_t i = 0; i < 3; ++i) {
+          if (current_index == EXPR_NONE || current_index >= expression_count) {
+            report_evaluation_failure("(if) expects exactly 3 arguments");
+            return false;
+          }
+
+          branch_indices[i] = current_index;
+          current_index = expressions[current_index].next;
+        }
+
+        if (current_index != EXPR_NONE) {
+          report_evaluation_failure("(if) expects exactly 3 arguments");
+          return false;
+        }
+
+        // Evaluate only the condition first.
+        Datum condition = { .kind = SYM_EMPTY };
+
+        if (!evaluate_expression(branch_indices[0], &condition)) return false;
+
+        if (condition.kind != SYM_VARIABLE) {
+          report_evaluation_failure("(if) condition must be a numeric value");
+          return false;
+        }
+
+        bool is_true;
+
+        switch (condition.as.value.type) {
+          case TYPE_U32: is_true = condition.as.value.as.u32 != 0; break;
+          case TYPE_I32: is_true = condition.as.value.as.i32 != 0; break;
+          case TYPE_F32: is_true = condition.as.value.as.f32 != 0.0f; break;
+          default:
+            report_evaluation_failure("(if) condition must be a numeric value");
+            return false;
+        }
+
+        // Evaluate only the selected branch.
+        return evaluate_expression(branch_indices[is_true ? 1 : 2], result);
+      }
+
       // Special form: evaluate child expressions sequentially.
       if (strcmp(function_name, "do") == 0) {
         return evaluate_sequence(fn->next, result);

@@ -117,8 +117,8 @@ features:
     + `(if (> 5 2) (println "bigger") (println "less"))`
       The condition expression is C-like
       (`0` is false and any other number is considered true)
-    + `(true)` is an alias for `1`
-    + `(false)` is an alias for `0`
+    + `true` is an alias for `1`
+    + `false` is an alias for `0`
 
     + Comparison functions/operators
 
@@ -132,6 +132,12 @@ features:
       + `(>= a b)` — More or equal
       + `(== a b)` — Equal
       + `(!= a b)` — Not equal
+
+    + String comparisons
+
+      All the comparison operators work for strings too. But note that these
+      comparisons are case-sensitive, and lexicographic ordering compares bytes,
+      not human-language alphabetical order.
 
   * Strings
 
