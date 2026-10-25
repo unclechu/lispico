@@ -47,10 +47,23 @@ typedef struct {
   void *data; // An array pointer with raw C types (except `String` is used for strings)
 } Array;
 
+// A higher-level value (combining `Value` and `Array`).
+//
+// Note that `Array` can’t be part of `Value` because an `Array` contains
+// `Value`s but there is no support for arrays for more than one dimension. So
+// `Value` can’t contain `Array`s.
+typedef struct {
+  SymbolKind kind; // Only one of these: SYM_EMPTY, SYM_VARIABLE, SYM_ARRAY
+  union {
+    Value value; // `kind == SYM_VARIABLE`
+    Array array; // `kind == SYM_ARRAY`
+  } as;
+} Datum;
+
 // A native C-function pointer to be stored in a `Symbol`.
 // Allowing you to make wrapper functions compatible with the interpreted
 // language that would execute arbitrary C-code (e.g. FFI bindings for IO).
-typedef Value (*NativeFunction)(const Value *args, size_t argc);
+typedef Datum (*NativeFunction)(const Datum *args, size_t argc);
 
 typedef struct {
   char name[SYMBOL_NAME_SIZE];

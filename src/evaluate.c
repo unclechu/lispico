@@ -60,11 +60,11 @@ static void report_failure_interface(
   snprintf(ctx->fail_msg, sizeof(ctx->fail_msg), "%s%s", err_msg_prefix, err_msg);
 }
 
-static bool evaluate_expression(uint32_t current_expression_index, Value *result);
+static bool evaluate_expression(uint32_t current_expression_index, Datum *result);
 
 // Evaluate top-level or `(do)` expressions sequence
-static bool evaluate_sequence(uint32_t current_expression_index, Value *result) {
-  *result = (Value) { .type = TYPE_VOID };
+static bool evaluate_sequence(uint32_t current_expression_index, Datum *result) {
+  *result = (Datum) { .kind = SYM_EMPTY };
 
   while (current_expression_index != EXPR_NONE) {
     if (current_expression_index >= expression_count) {
@@ -77,10 +77,7 @@ static bool evaluate_sequence(uint32_t current_expression_index, Value *result) 
     }
 
     // Save the result of the most recently completed expression.
-    eval_outcome.result = (EvalResult) {
-      .kind = SYM_VARIABLE,
-      .as.value = *result,
-    };
+    eval_outcome.result = *result;
 
     // Move to the next expression in the sequence.
     current_expression_index = expressions[current_expression_index].next;
@@ -89,7 +86,7 @@ static bool evaluate_sequence(uint32_t current_expression_index, Value *result) 
   return true;
 }
 
-static bool evaluate_expression(uint32_t current_expression_index, Value *result) {
+static bool evaluate_expression(uint32_t current_expression_index, Datum *result) {
   if (current_expression_index == EXPR_NONE || current_expression_index >= expression_count) {
     report_evaluation_failure("Invalid expression index");
     return false;
@@ -99,26 +96,67 @@ static bool evaluate_expression(uint32_t current_expression_index, Value *result
 
   switch (expr->kind) {
     case EXPR_U32:
-      *result = (Value) { .type = TYPE_U32, .as.u32 = expr->as.u32 };
+      *result = (Datum) {
+        .kind = SYM_VARIABLE,
+        .as.value = { .type = TYPE_U32, .as.u32 = expr->data },
+      };
       return true;
 
-    case EXPR_I32:
-      *result = (Value) { .type = TYPE_I32, .as.i32 = expr->as.i32 };
+    case EXPR_I32: {
+      int32_t number;
+      memcpy(&number, &expr->data, sizeof(number));
+      *result = (Datum) {
+        .kind = SYM_VARIABLE,
+        .as.value = { .type = TYPE_I32, .as.i32 = number },
+      };
       return true;
+    }
 
-    case EXPR_F32:
-      *result = (Value) { .type = TYPE_F32, .as.f32 = expr->as.f32 };
+    case EXPR_F32: {
+      float number;
+      memcpy(&number, &expr->data, sizeof(number));
+      *result = (Datum) {
+        .kind = SYM_VARIABLE,
+        .as.value = { .type = TYPE_F32, .as.f32 = number },
+      };
       return true;
+    }
 
-    case EXPR_STRING:
-      *result = (Value) {
-        .type = TYPE_STRING,
-        .as.string = {
-          .data = expr->as.text,
-          .length = strlen(expr->as.text),
+    case EXPR_STRING: {
+      const ExpressionAllocation *allocation = get_expression_allocation(expr->data);
+      if (allocation == NULL || allocation->data == NULL) {
+        report_evaluation_failure("Invalid string allocation");
+        return false;
+      }
+      *result = (Datum) {
+        .kind = SYM_VARIABLE,
+        .as.value = {
+          .type = TYPE_STRING,
+          .as.string = {
+            .data = allocation->data,
+            .length = allocation->length,
+          },
         },
       };
       return true;
+    }
+
+    case EXPR_ARRAY: {
+      const ExpressionAllocation *allocation = get_expression_allocation(expr->data);
+      if (allocation == NULL) {
+        report_evaluation_failure("Invalid array allocation");
+        return false;
+      }
+      *result = (Datum) {
+        .kind = SYM_ARRAY,
+        .as.array = {
+          .element_type = allocation->element_type,
+          .length = allocation->length,
+          .data = allocation->data,
+        },
+      };
+      return true;
+    }
 
     case EXPR_LIST: {
       uint32_t fn_name_index = expr->first_child;
@@ -135,13 +173,23 @@ static bool evaluate_expression(uint32_t current_expression_index, Value *result
         return false;
       }
 
+      // Resolve function name from expression allocations.
+      const ExpressionAllocation *allocation = get_expression_allocation(fn->data);
+
+      if (allocation == NULL || allocation->data == NULL) {
+        report_evaluation_failure("Invalid function name allocation");
+        return false;
+      }
+
+      const char *function_name = allocation->data;
+
       // Special form: evaluate child expressions sequentially.
-      if (strcmp(fn->as.text, "do") == 0) {
+      if (strcmp(function_name, "do") == 0) {
         return evaluate_sequence(fn->next, result);
       }
 
       // Resolve the function from the existing global symbol table.
-      const Symbol *symbol = symbol_lookup(fn->as.text);
+      const Symbol *symbol = symbol_lookup(function_name);
 
       if (symbol == NULL) {
         report_evaluation_failure("Undefined function");
@@ -152,7 +200,7 @@ static bool evaluate_expression(uint32_t current_expression_index, Value *result
       }
 
       // Evaluate all arguments before calling the function.
-      Value args[EVAL_ARG_CAPACITY] = {0};
+      Datum args[EVAL_ARG_CAPACITY] = {0};
       size_t argc = 0;
       uint32_t arg_index = fn->next;
 
@@ -247,7 +295,7 @@ EvalOutcome evaluate(
   }
 
   if (expression_count != 0) {
-    Value result_value = { .type = TYPE_VOID };
+    Datum result_value = { .kind = SYM_EMPTY };
 
     // Evaluate all top-level expressions sequentially.
     // Discard returned boolean, the result is already reported to `eval_outcome`.
@@ -285,8 +333,8 @@ void report_evaluation_failure(char *fail_msg) {
   snprintf(eval_outcome.as.fail_msg, sizeof(eval_outcome.as.fail_msg), "%s", fail_msg);
 }
 
-bool get_last_evaluation_value(Value *value) {
-  if (eval_outcome.result.kind != SYM_VARIABLE) return false;
-  *value = eval_outcome.result.as.value;
+bool get_last_evaluation_value(Datum *result) {
+  if (eval_outcome.result.kind == SYM_EMPTY) return false;
+  *result = eval_outcome.result;
   return true;
 }

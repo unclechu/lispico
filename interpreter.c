@@ -46,7 +46,21 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   )
   (+ (last-val) 10)
 */
-void make_test_addition_expression() {
+bool populate_test_expressions(void) {
+  uint32_t do_index, add_index, last_val_index;
+
+  if (!allocate_expression_data(
+    "do", sizeof("do"), TYPE_STRING, sizeof("do") - 1, &do_index
+  )) return false;
+
+  if (!allocate_expression_data(
+    "+", sizeof("+"), TYPE_STRING, sizeof("+") - 1, &add_index
+  )) return false;
+
+  if (!allocate_expression_data(
+    "last-val", sizeof("last-val"), TYPE_STRING, sizeof("last-val") - 1, &last_val_index
+  )) return false;
+
   // (do
   //   (+ 2 3)
   //   (do
@@ -57,10 +71,8 @@ void make_test_addition_expression() {
   expressions[0] = (Expression) {
     .kind = EXPR_LIST, .first_child = 1, .next = 18,
   };
-
-  // do
   expressions[1] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 2, .as.text = "do",
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 2, .data = do_index,
   };
 
   // (+ 2 3)
@@ -68,13 +80,13 @@ void make_test_addition_expression() {
     .kind = EXPR_LIST, .first_child = 3, .next = 6,
   };
   expressions[3] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 4, .as.text = "+",
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 4, .data = add_index,
   };
   expressions[4] = (Expression) {
-    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = 5, .as.u32 = 2,
+    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = 5, .data = 2,
   };
   expressions[5] = (Expression) {
-    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.u32 = 3,
+    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = 3,
   };
 
   // (do
@@ -85,7 +97,7 @@ void make_test_addition_expression() {
     .kind = EXPR_LIST, .first_child = 7, .next = EXPR_NONE,
   };
   expressions[7] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 8, .as.text = "do",
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 8, .data = do_index,
   };
 
   // (+ (last-val) 4)
@@ -93,18 +105,16 @@ void make_test_addition_expression() {
     .kind = EXPR_LIST, .first_child = 9, .next = 13,
   };
   expressions[9] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 10, .as.text = "+",
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 10, .data = add_index,
   };
-
-  // (last-val)
   expressions[10] = (Expression) {
     .kind = EXPR_LIST, .first_child = 11, .next = 12,
   };
   expressions[11] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.text = "last-val",
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = last_val_index,
   };
   expressions[12] = (Expression) {
-    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.u32 = 4,
+    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = 4,
   };
 
   // (+ (last-val) 5)
@@ -112,18 +122,16 @@ void make_test_addition_expression() {
     .kind = EXPR_LIST, .first_child = 14, .next = EXPR_NONE,
   };
   expressions[14] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 15, .as.text = "+",
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 15, .data = add_index,
   };
-
-  // (last-val)
   expressions[15] = (Expression) {
     .kind = EXPR_LIST, .first_child = 16, .next = 17,
   };
   expressions[16] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.text = "last-val",
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = last_val_index,
   };
   expressions[17] = (Expression) {
-    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.u32 = 5,
+    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = 5,
   };
 
   // (+ (last-val) 10)
@@ -131,24 +139,24 @@ void make_test_addition_expression() {
     .kind = EXPR_LIST, .first_child = 19, .next = EXPR_NONE,
   };
   expressions[19] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 20, .as.text = "+",
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = 20, .data = add_index,
   };
-
-  // (last-val)
   expressions[20] = (Expression) {
     .kind = EXPR_LIST, .first_child = 21, .next = 22,
   };
   expressions[21] = (Expression) {
-    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.text = "last-val",
+    .kind = EXPR_NAME, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = last_val_index,
   };
   expressions[22] = (Expression) {
-    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .as.u32 = 10,
+    .kind = EXPR_U32, .first_child = EXPR_NONE, .next = EXPR_NONE, .data = 10,
   };
 
   expression_count = 23;
+  return true;
 }
 
 int main(int argc, char **argv) {
+  int exit_code = 0;
   char foo[] = "some test string value\0";
 
   Array argv_as_Array = {
@@ -165,7 +173,10 @@ int main(int argc, char **argv) {
   SettingsState state = { .foo = foo, .argc = argc, .argv = argv_as_Array };
 
   // TODO: remove, just for testing
-  make_test_addition_expression();
+  if (!populate_test_expressions()) {
+    fprintf(stderr, "[FAIL] Failed to make a test expression\n");
+    goto done;
+  }
 
   EvalOutcome eval_outcome = evaluate(
     expressions,
@@ -174,8 +185,6 @@ int main(int argc, char **argv) {
     (void*) &state
   );
   // EvalOutcome eval_outcome = evaluate(expressions, expression_count, NULL, NULL);
-
-  int exit_code = 0;
 
   switch (eval_outcome.kind) {
     case EVAL_OK:

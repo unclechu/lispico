@@ -10,16 +10,8 @@ typedef enum {
 } EvalOutcomeKind;
 
 typedef struct {
-  SymbolKind kind; // Only one of these: SYM_EMPTY, SYM_VARIABLE, SYM_ARRAY
-  union {
-    Value value; // `kind == SYM_VARIABLE`
-    Array array; // `kind == SYM_ARRAY`
-  } as;
-} EvalResult;
-
-typedef struct {
   EvalOutcomeKind kind;
-  EvalResult result; // Result of expression evaluation
+  Datum result; // Result of expression evaluation
   union {
     // `kind == EVAL_EXIT`
     int exit_code;
@@ -40,11 +32,16 @@ typedef struct EvalSettingsInterface {
     SymbolKind kind
   );
 
+  // Try to find a symbol by its name.
+  // Returns `NULL` is symbol with specified name is not found in the symbols table.
   Symbol* (*symbol_lookup)(
     const struct EvalSettingsInterface *self,
     const char *name
   );
 
+  // Report evaluation failure.
+  // After such report evaluation will stop and resulting `EvalOutcome`
+  // will contain the failure state.
   void (*report_failure)(
     const struct EvalSettingsInterface *self,
     const char *err_msg
@@ -52,8 +49,13 @@ typedef struct EvalSettingsInterface {
 } EvalSettingsInterface;
 
 EvalOutcome evaluate(
+  // Optionally custom expressions array.
+  // If you want to use global fixed-memory expressions array just set:
+  // `eval_expressions = expressions` and
+  // `eval_expression_count = expression_count`.
   const Expression *eval_expressions,
   uint32_t eval_expression_count,
+
   void (*settings_cb)(EvalSettingsInterface*),
   void *state
 );
@@ -61,4 +63,4 @@ EvalOutcome evaluate(
 void report_evaluation_failure(char *fail_msg);
 void clean_evaluation();
 
-bool get_last_evaluation_value(Value *value);
+bool get_last_evaluation_value(Datum *result);

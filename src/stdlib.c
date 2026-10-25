@@ -6,8 +6,8 @@
 #include "stdlib-print.h"
 
 // Generic standard library printing implementation
-Value std_generic_print(StdPrintVariant variant, const Value *args, size_t argc) {
-  Value return_value = { .type = TYPE_VOID };
+Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
 
   if (argc != 1) {
@@ -21,13 +21,24 @@ Value std_generic_print(StdPrintVariant variant, const Value *args, size_t argc)
     report_evaluation_failure(fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
-  } else if (args[0].type != TYPE_STRING) {
+  } else if (args[0].kind != SYM_VARIABLE) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "%s argument must be a varaible, got instead: %s",
+      show_StdPrintVariant(variant),
+      show_SymbolKind(args[0].kind)
+    );
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+  } else if (args[0].as.value.type != TYPE_STRING) {
     snprintf(
       fail_msg,
       sizeof(fail_msg),
       "%s argument must be a string, got instead: %s",
       show_StdPrintVariant(variant),
-      show_ValueType(args[0].type)
+      show_ValueType(args[0].as.value.type)
     );
     report_evaluation_failure(fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
@@ -40,9 +51,9 @@ Value std_generic_print(StdPrintVariant variant, const Value *args, size_t argc)
       : stdout;
 
   fwrite(
-    args[0].as.string.data,
+    args[0].as.value.as.string.data,
     sizeof(char),
-    args[0].as.string.length,
+    args[0].as.value.as.string.length,
     stream
   );
 
@@ -52,28 +63,28 @@ Value std_generic_print(StdPrintVariant variant, const Value *args, size_t argc)
 }
 
 // (print)
-Value std_print(const Value *args, size_t argc) {
+Datum std_print(const Datum *args, size_t argc) {
   return std_generic_print(STD_PRINT, args, argc);
 }
 
 // (println)
-Value std_println(const Value *args, size_t argc) {
+Datum std_println(const Datum *args, size_t argc) {
   return std_generic_print(STD_PRINTLN, args, argc);
 }
 
 // (eprint)
-Value std_eprint(const Value *args, size_t argc) {
+Datum std_eprint(const Datum *args, size_t argc) {
   return std_generic_print(STD_EPRINT, args, argc);
 }
 
 // (eprintln)
-Value std_eprintln(const Value *args, size_t argc) {
+Datum std_eprintln(const Datum *args, size_t argc) {
   return std_generic_print(STD_EPRINTLN, args, argc);
 }
 
 // (+)
-Value std_add(const Value *args, size_t argc) {
-  Value return_value = { .type = TYPE_VOID };
+Datum std_add(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
 
   if (argc != 2) {
@@ -86,42 +97,52 @@ Value std_add(const Value *args, size_t argc) {
     report_evaluation_failure(fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
-  } else if (args[0].type != args[1].type) {
+  } else if (args[0].kind != SYM_VARIABLE || args[1].kind != SYM_VARIABLE) {
+    report_evaluation_failure("(+) expects two values, not arrays");
+    return return_value;
+  } else if (args[0].as.value.type != args[1].as.value.type) {
     snprintf(
       fail_msg,
       sizeof(fail_msg),
       "(+) expects both arguments be of the same type, got instead: (%s, %s)",
-      show_ValueType(args[0].type),
-      show_ValueType(args[1].type)
+      show_ValueType(args[0].as.value.type),
+      show_ValueType(args[1].as.value.type)
     );
     report_evaluation_failure(fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
   }
 
-  switch (args[0].type) {
-    case TYPE_U32: return_value.as.u32 = args[0].as.u32 + args[1].as.u32; break;
-    case TYPE_I32: return_value.as.i32 = args[0].as.i32 + args[1].as.i32; break;
-    case TYPE_F32: return_value.as.f32 = args[0].as.f32 + args[1].as.f32; break;
+  switch (args[0].as.value.type) {
+    case TYPE_U32:
+      return_value.as.value.as.u32 = args[0].as.value.as.u32 + args[1].as.value.as.u32;
+      break;
+    case TYPE_I32:
+      return_value.as.value.as.i32 = args[0].as.value.as.i32 + args[1].as.value.as.i32;
+      break;
+    case TYPE_F32:
+      return_value.as.value.as.f32 = args[0].as.value.as.f32 + args[1].as.value.as.f32;
+      break;
     default:
       snprintf(
         fail_msg,
         sizeof(fail_msg),
         "(+) received a value of an unexpected type: %s",
-        show_ValueType(args[0].type)
+        show_ValueType(args[0].as.value.type)
       );
       report_evaluation_failure(fail_msg);
       wipe_memory(fail_msg, sizeof(fail_msg));
       return return_value;
   }
 
-  return_value.type = args[0].type;
+  return_value.kind = SYM_VARIABLE;
+  return_value.as.value.type = args[0].as.value.type;
   return return_value;
 }
 
 // (last-val) — Read last evaluation result in a sequence of expressions
-Value std_last_val(const Value*, size_t argc) {
-  Value return_value = { .type = TYPE_VOID };
+Datum std_last_val(const Datum*, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
 
   if (argc != 0) {
