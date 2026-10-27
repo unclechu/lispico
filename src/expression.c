@@ -17,7 +17,6 @@ void clean_expressions() {
   for (uint32_t i = 0; i < expression_allocation_count; ++i) {
     ExpressionAllocation *allocation = &expression_allocations[i];
 
-    // TODO: Also free each element of `Array`s (including `String` pointers)
     if (allocation->data != NULL) {
       wipe_memory(allocation->data, allocation->size);
       free(allocation->data);

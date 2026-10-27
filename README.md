@@ -12,6 +12,54 @@ in C.
 
 ## Features
 
+- **TODO** before removing WIP warning
+  * Automated tests
+    + Parser tests (valid/invalid syntax, comments, escaping, numeric bounds)
+    + Evaluator tests for every supported operation
+    + Control-flow tests (`if`, `do`, `goto`, `label`, `exit`)
+    + Memory cleanup and repeated evaluation tests
+    + Tests for expression, symbol, and allocation capacity limits
+
+  * Evaluator: Define and enforce ownership/lifetime rules for returned
+    strings and arrays (borrowed references vs. ownership transfer)
+
+  * Evaluator: Handle maximum evaluation recursion depth / stack exhaustion
+
+  * Documentation: Document execution semantics, resource limits,
+    memory ownership, and supported language syntax
+
+  * Build: Add a simple test runner to verify example programs
+    and expected exit statuses
+
+  * Labels:
+    + Add `(goto)` and `(label)`
+    + Support labels and jumps inside nested `(do)` expressions
+      (labels remain global)
+
+  * Evaluator: Runtime allocation for strings and arrays (`(arr)`, `(arr-*)`, `(str)`)
+  * Evaluator: More informative error messages
+  * Evaluator: Memory wipe and cleanup for allocated runtime entities
+  * Evaluator: Implement custom expressions list cloning (and expression allocations)
+
+  * Add more string manipulation operations (e.g. per-char reads and writes)
+
+  * Compilation parsed expressions to binary
+    + Support compiling to binary and evaluating binaries (skipping parsing step)
+    + Binary format: Validate loaded binaries
+      (version, sizes, expression indexes, allocation references)
+
+  * Try to build for Raspberry Pico (using `nixpkgs.gcc-arm-embedded`)
+    and make necessary changes to make it work on that platform
+
+  * Provide examples how to use it on Raspberry Pico (making parser optional)
+
+  * Interpreter executable:
+    + Variables as inputs: `--var foo u32:123`/`--var bar string:test`
+    + `--print-result` Print last evaluation result (disabled by default)
+    + `--source-file` For input source file (reading from `/dev/stdin` by default)
+    + `--` Raw arguments separator for arguments passing for the script only
+      (`args` variable, C `argv`/`argc` are already passed to the script)
+
 To keep the implementation simple, the language supports only a limited set of
 features:
 
