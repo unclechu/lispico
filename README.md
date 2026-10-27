@@ -32,7 +32,6 @@ in C.
     and expected exit statuses
 
   * Labels:
-    + Add `(goto)` and `(label)`
     + Support labels and jumps inside nested `(do)` expressions
       (labels remain global)
 
@@ -104,8 +103,18 @@ features:
 
 - There are no user-defined functions (at least for now)
 
-- There are no conventional loops, only `(label foo)` definitions and
+- There are no conventional loops, only `(label "foo")` definitions and
   `(goto foo)` jumps
+
+  Note that labels are registered dynamically, during evaluation, not during
+  parsing. So you can only jump backwards, not forward. This won’t work:
+
+  ```lisp
+  (goto foo)
+  (label "foo")
+  ```
+
+  `foo` label is not defined/registered yet when `(goto)` is called.
 
 - Supported instructions
 

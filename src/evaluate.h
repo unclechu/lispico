@@ -66,3 +66,6 @@ void clean_evaluation();
 bool get_last_evaluation_value(Datum *result);
 
 void report_evaluation_exit(int exit_code, Datum result);
+
+uint32_t get_current_native_call_expression_index(void);
+void request_evaluation_jump(uint32_t instruction_index);

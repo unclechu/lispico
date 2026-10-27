@@ -52,3 +52,7 @@ ADD_STDLIB_FN_TYPE_DEF(std_greater);
 ADD_STDLIB_FN_TYPE_DEF(std_greater_equal);
 ADD_STDLIB_FN_TYPE_DEF(std_equal);
 ADD_STDLIB_FN_TYPE_DEF(std_not_equal);
+
+// Labels (registering a label and jumping to it)
+ADD_STDLIB_FN_TYPE_DEF(std_label);
+ADD_STDLIB_FN_TYPE_DEF(std_goto);

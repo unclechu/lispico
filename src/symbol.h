@@ -53,10 +53,11 @@ typedef struct {
 // `Value`s but there is no support for arrays for more than one dimension. So
 // `Value` can’t contain `Array`s.
 typedef struct {
-  SymbolKind kind; // Only one of these: SYM_EMPTY, SYM_VARIABLE, SYM_ARRAY
+  SymbolKind kind; // Only one of these: SYM_EMPTY, SYM_VARIABLE, SYM_ARRAY, SYM_LABEL
   union {
     Value value; // `kind == SYM_VARIABLE`
     Array array; // `kind == SYM_ARRAY`
+    uint32_t instruction_index; // `kind == SYM_LABEL`
   } as;
 } Datum;
 

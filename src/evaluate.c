@@ -22,6 +22,9 @@ static EvalOutcome eval_outcome = {
   .result = { .kind = SYM_EMPTY },
 };
 
+static uint32_t current_native_call_expression_index = EXPR_NONE;
+static uint32_t pending_jump_index = EXPR_NONE;
+
 typedef struct {
   bool is_failed;
   char fail_msg[ERR_MSG_SIZE];
@@ -60,10 +63,27 @@ static void report_failure_interface(
   snprintf(ctx->fail_msg, sizeof(ctx->fail_msg), "%s%s", err_msg_prefix, err_msg);
 }
 
+static bool sequence_contains(uint32_t first_expression_index, uint32_t target_index) {
+  uint32_t index = first_expression_index;
+
+  while (index != EXPR_NONE) {
+    if (index >= expression_count) return false;
+    if (index == target_index) return true;
+    index = expressions[index].next;
+  }
+
+  return false;
+}
+
 static bool evaluate_expression(uint32_t current_expression_index, Datum *result);
 
-// Evaluate top-level or `(do)` expressions sequence
-static bool evaluate_sequence(uint32_t current_expression_index, Datum *result) {
+// Evaluate top-level or (do) expressions sequence
+static bool evaluate_sequence(
+  uint32_t current_expression_index,
+  Datum *result,
+  bool is_top_level
+) {
+  uint32_t first_expression_index = current_expression_index;
   *result = (Datum) { .kind = SYM_EMPTY };
 
   while (current_expression_index != EXPR_NONE) {
@@ -73,6 +93,23 @@ static bool evaluate_sequence(uint32_t current_expression_index, Datum *result) 
     }
 
     if (!evaluate_expression(current_expression_index, result)) {
+      if (eval_outcome.kind == EVAL_OK && pending_jump_index != EXPR_NONE) {
+        // Handle the jump if its destination belongs to this sequence.
+        if (sequence_contains(first_expression_index, pending_jump_index)) {
+          current_expression_index = pending_jump_index;
+          pending_jump_index = EXPR_NONE;
+          continue;
+        }
+
+        // No active sequence contains the destination.
+        if (is_top_level) {
+          pending_jump_index = EXPR_NONE;
+          // TODO: Add support for nested labels
+          report_evaluation_failure("(goto) destination is not in an active sequence");
+        }
+      }
+
+      // Propagate the jump, failure, or exit to the enclosing sequence.
       return false;
     }
 
@@ -231,7 +268,7 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
 
       // Special form: evaluate child expressions sequentially.
       if (strcmp(function_name, "do") == 0) {
-        return evaluate_sequence(fn->next, result);
+        return evaluate_sequence(fn->next, result, false);
       }
 
       // Resolve the function from the existing global symbol table.
@@ -270,11 +307,33 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
         arg_index = next_index;
       }
 
-      // Call the function pointer already registered in the symbol table.
+      // Temporarily expose the calling expression's index to the native function.
+      // Save and restore the previous index to support nested native calls.
+      uint32_t previous_call_index = current_native_call_expression_index;
+
+      // Make the current expression location available to the native function.
+      current_native_call_expression_index = current_expression_index;
+
+      // Execute the native function (e.g. `std_label` reads this location).
       *result = symbol->as.native_function(args, argc);
 
+      // Restore the previous call location after the native function returns.
+      current_native_call_expression_index = previous_call_index;
+
+      // Why restore the previous value?
+      //
+      // Consider a hypothetical nested native call:
+      // 1. Function A is executing at expression index 10.
+      // 2. Function A invokes function B at expression index 25.
+      // 3. B needs to see 25 as its current call location.
+      // 4. When B returns, A should see 10 again.
+      //
+      // Without restoring the previous index, A would incorrectly see 25.
+
+      // Stop current evaluation when a jump, exit, or failure is requested.
+      // In case of a jump this helps to avoid growing recursion.
       // Native functions report failures through the evaluation state.
-      return eval_outcome.kind == EVAL_OK;
+      return eval_outcome.kind == EVAL_OK && pending_jump_index == EXPR_NONE;
     }
 
     // Resolving variable reference by name
@@ -305,6 +364,12 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
           return true;
         case SYM_ARRAY:
           *result = (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
+          return true;
+        case SYM_LABEL:
+          *result = (Datum) {
+            .kind = SYM_LABEL,
+            .as.instruction_index = symbol->as.instruction_index,
+          };
           return true;
         default:
           report_evaluation_failure("Symbol is not a variable or array");
@@ -380,7 +445,7 @@ EvalOutcome evaluate(
 
     // Evaluate all top-level expressions sequentially.
     // Discard returned boolean, the result is already reported to `eval_outcome`.
-    (void)evaluate_sequence(0, &result_value);
+    (void)evaluate_sequence(0, &result_value, true);
 
     wipe_memory(&result_value, sizeof(result_value));
   }
@@ -405,6 +470,9 @@ EvalOutcome evaluate(
 }
 
 void clean_evaluation() {
+  pending_jump_index = EXPR_NONE;
+  current_native_call_expression_index = EXPR_NONE;
+
   // TODO: cleanup references (such as allocated arrays and strings)
   wipe_memory(&eval_outcome, sizeof(eval_outcome));
 }
@@ -424,4 +492,12 @@ void report_evaluation_exit(int exit_code, Datum result) {
   eval_outcome.kind = EVAL_EXIT;
   eval_outcome.as.exit_code = exit_code;
   eval_outcome.result = result;
+}
+
+uint32_t get_current_native_call_expression_index(void) {
+  return current_native_call_expression_index;
+}
+
+void request_evaluation_jump(uint32_t instruction_index) {
+  pending_jump_index = instruction_index;
 }
