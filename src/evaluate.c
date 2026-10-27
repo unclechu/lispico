@@ -222,29 +222,37 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
 
       // Special form: evaluate the condition, then only the selected branch.
       if (strcmp(function_name, "if") == 0) {
-        uint32_t branch_indices[3];
-        uint32_t current_index = fn->next;
+        // Require a condition and a true branch; false branch is optional.
+        uint32_t condition_index = fn->next;
 
-        // Require exactly three expressions: condition, true branch, false branch.
-        for (size_t i = 0; i < 3; ++i) {
-          if (current_index == EXPR_NONE || current_index >= expression_count) {
-            report_evaluation_failure("(if) expects exactly 3 arguments");
-            return false;
-          }
-
-          branch_indices[i] = current_index;
-          current_index = expressions[current_index].next;
+        if (condition_index == EXPR_NONE || condition_index >= expression_count) {
+          report_evaluation_failure("(if) expects 2 or 3 arguments");
+          return false;
         }
 
-        if (current_index != EXPR_NONE) {
-          report_evaluation_failure("(if) expects exactly 3 arguments");
+        uint32_t true_index = expressions[condition_index].next;
+
+        if (true_index == EXPR_NONE || true_index >= expression_count) {
+          report_evaluation_failure("(if) expects 2 or 3 arguments");
           return false;
+        }
+
+        uint32_t false_index = expressions[true_index].next;
+
+        if (false_index != EXPR_NONE) {
+          if (
+            false_index >= expression_count ||
+            expressions[false_index].next != EXPR_NONE
+          ) {
+            report_evaluation_failure("(if) expects 2 or 3 arguments");
+            return false;
+          }
         }
 
         // Evaluate only the condition first.
         Datum condition = { .kind = SYM_EMPTY };
 
-        if (!evaluate_expression(branch_indices[0], &condition)) return false;
+        if (!evaluate_expression(condition_index, &condition)) return false;
 
         if (condition.kind != SYM_VARIABLE) {
           report_evaluation_failure("(if) condition must be a numeric value");
@@ -262,8 +270,16 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
             return false;
         }
 
-        // Evaluate only the selected branch.
-        return evaluate_expression(branch_indices[is_true ? 1 : 2], result);
+        // Evaluate only the selected branch, if present.
+        uint32_t selected_index = is_true ? true_index : false_index;
+
+        // In case there is no false-branch just return `SYM_EMPTY`
+        if (selected_index == EXPR_NONE) {
+          *result = (Datum) { .kind = SYM_EMPTY };
+          return true;
+        }
+
+        return evaluate_expression(selected_index, result);
       }
 
       // Special form: evaluate child expressions sequentially.

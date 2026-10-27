@@ -107,7 +107,7 @@ features:
   `(goto foo)` jumps
 
   Note that labels are registered dynamically, during evaluation, not during
-  parsing. So you can only jump backwards, not forward. This won’t work:
+  parsing. So you can only jump backwards, not forward. This **won’t work:**
 
   ```lisp
   (goto foo)
@@ -176,6 +176,8 @@ features:
     + `(if (> 5 2) (println "bigger") (println "less"))`
       The condition expression is C-like
       (`0` is false and any other number is considered true)
+    + `(if (> 5 2) (println "bigger"))`
+      Omitting false-branch is allowed (nothing is returned in this case)
     + `true` is an alias for `1`
     + `false` is an alias for `0`
 
