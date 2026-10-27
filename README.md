@@ -313,7 +313,7 @@ SYM_VARIABLE(TYPE_F32(126.000000))
 Or try all examples:
 
 ```sh
-(set -eu; find examples/ -type f -name '*.lisp' -maxdepth 1 | while read -r f; do (set -x; ./simple-lisp-interpreter "$f") done)
+(set -eu; find examples/ -maxdepth 1 -type f -name '*.lisp' | while read -r f; do (set -x; ./simple-lisp-interpreter "$f") done)
 ```
 
 ## Local Vim configuration example
