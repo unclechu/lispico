@@ -22,8 +22,16 @@ static EvalOutcome eval_outcome = {
   .result = { .kind = SYM_EMPTY },
 };
 
+// Current expression index (for `(label)` to read)
 static uint32_t current_native_call_expression_index = EXPR_NONE;
+
+// Target `(label)` evaluator is jumping to.
+// When set: A native `(goto)` has requested a jump that hasn't been handled yet.
 static uint32_t pending_jump_index = EXPR_NONE;
+
+// Label we're re-entering through nested (do) expressions.
+// Cleared once the destination expression is reached.
+static uint32_t resume_target_index = EXPR_NONE;
 
 typedef struct {
   bool is_failed;
@@ -63,28 +71,77 @@ static void report_failure_interface(
   snprintf(ctx->fail_msg, sizeof(ctx->fail_msg), "%s%s", err_msg_prefix, err_msg);
 }
 
-static bool sequence_contains(uint32_t first_expression_index, uint32_t target_index) {
+// Find the expression to start executing in a sequence to reach a jump target.
+//
+// If the target belongs directly to the sequence, return its index.
+// If the target is inside a nested `(do)`, return the containing `(do)` expression.
+// Returns `EXPR_NONE` when the target cannot be reached through this sequence.
+static uint32_t find_sequence_jump_entry(
+  uint32_t first_expression_index,
+  uint32_t target_index
+) {
   uint32_t index = first_expression_index;
 
   while (index != EXPR_NONE) {
-    if (index >= expression_count) return false;
-    if (index == target_index) return true;
-    index = expressions[index].next;
+    // Incorrect index
+    if (index >= expression_count) return EXPR_NONE;
+
+    // The target `(label)` is found
+    if (index == target_index) return index;
+
+    const Expression *expr = &expressions[index];
+
+    if (expr->kind == EXPR_LIST) {
+      uint32_t fn_index = expr->first_child;
+
+      if (fn_index != EXPR_NONE && fn_index < expression_count) {
+        const Expression *fn = &expressions[fn_index];
+
+        if (fn->kind == EXPR_NAME) {
+          const ExpressionAllocation *allocation = get_expression_allocation(fn->data);
+
+          if (
+            allocation != NULL &&
+            allocation->data != NULL &&
+            strcmp(allocation->data, "do") == 0
+          ) {
+            // Search nested `(do)` expressions, without evaluating anything.
+            uint32_t nested_entry = find_sequence_jump_entry(fn->next, target_index);
+            // Target jump label is found, return the index of the `(do)` sequence containing it
+            if (nested_entry != EXPR_NONE) return index;
+          }
+        }
+      }
+    }
+
+    index = expr->next;
   }
 
-  return false;
+  return EXPR_NONE;
 }
 
 static bool evaluate_expression(uint32_t current_expression_index, Datum *result);
 
-// Evaluate top-level or (do) expressions sequence
+// Evaluate top-level or `(do)` expressions sequence.
+// Also supports jumping into inactive nested `(do)` sequences.
 static bool evaluate_sequence(
-  uint32_t current_expression_index,
+  uint32_t first_expression_index,
   Datum *result,
   bool is_top_level
 ) {
-  uint32_t first_expression_index = current_expression_index;
+  uint32_t current_expression_index = first_expression_index;
   *result = (Datum) { .kind = SYM_EMPTY };
+
+  // If re-entering a nested sequence, skip expressions preceding the target.
+  if (resume_target_index != EXPR_NONE) {
+    current_expression_index =
+      find_sequence_jump_entry(first_expression_index, resume_target_index);
+
+    if (current_expression_index == EXPR_NONE) {
+      report_evaluation_failure("(goto) cannot find nested jump destination");
+      return false;
+    }
+  }
 
   while (current_expression_index != EXPR_NONE) {
     if (current_expression_index >= expression_count) {
@@ -92,24 +149,37 @@ static bool evaluate_sequence(
       return false;
     }
 
+    // The requested label has been reached. Resume ordinary evaluation.
+    if (current_expression_index == resume_target_index) {
+      resume_target_index = EXPR_NONE;
+    }
+
     if (!evaluate_expression(current_expression_index, result)) {
       if (eval_outcome.kind == EVAL_OK && pending_jump_index != EXPR_NONE) {
-        // Handle the jump if its destination belongs to this sequence.
-        if (sequence_contains(first_expression_index, pending_jump_index)) {
-          current_expression_index = pending_jump_index;
+        // Check whether this sequence can handle the requested jump,
+        // either directly or through one of its nested (do) expressions.
+        uint32_t jump_entry =
+          find_sequence_jump_entry(first_expression_index, pending_jump_index);
+
+        if (jump_entry != EXPR_NONE) {
+          // A direct jump needs no nested re-entry.
+          // Otherwise remember the final target while entering nested (do)s.
+          resume_target_index = jump_entry == pending_jump_index ? EXPR_NONE : pending_jump_index;
+
           pending_jump_index = EXPR_NONE;
+          current_expression_index = jump_entry;
           continue;
         }
 
-        // No active sequence contains the destination.
+        // Otherwise let the enclosing sequence try to handle the jump.
+        // Only the top-level sequence reports an unresolved destination.
         if (is_top_level) {
           pending_jump_index = EXPR_NONE;
-          // TODO: Add support for nested labels
-          report_evaluation_failure("(goto) destination is not in an active sequence");
+          report_evaluation_failure("(goto) destination is not reachable through (do)");
         }
       }
 
-      // Propagate the jump, failure, or exit to the enclosing sequence.
+      // Propagate a jump, failure, or exit to the enclosing sequence.
       return false;
     }
 
@@ -487,6 +557,7 @@ EvalOutcome evaluate(
 
 void clean_evaluation() {
   pending_jump_index = EXPR_NONE;
+  resume_target_index = EXPR_NONE;
   current_native_call_expression_index = EXPR_NONE;
 
   // TODO: cleanup references (such as allocated arrays and strings)

@@ -31,10 +31,6 @@ in C.
   * Build: Add a simple test runner to verify example programs
     and expected exit statuses
 
-  * Labels:
-    + Support labels and jumps inside nested `(do)` expressions
-      (labels remain global)
-
   * Evaluator: Runtime allocation for strings and arrays (`(arr)`, `(arr-*)`, `(str)`)
   * Evaluator: More informative error messages
   * Evaluator: Memory wipe and cleanup for allocated runtime entities
@@ -312,6 +308,12 @@ $ ./simple-lisp-interpreter <<'LISP'
 (type f32 foo)
 LISP
 SYM_VARIABLE(TYPE_F32(126.000000))
+```
+
+Or try all examples:
+
+```sh
+(set -eu; find examples/ -type f -name '*.lisp' -maxdepth 1 | while read -r f; do (set -x; ./simple-lisp-interpreter "$f") done)
 ```
 
 ## Local Vim configuration example
