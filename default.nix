@@ -7,14 +7,16 @@
 
 let
   shell = pkgs.mkShell {
+    name = "lispico-shell";
+
     packages = [
       pkgs.gcc
       pkgs.pkg-config
     ];
   };
 
-  simple-lisp-interpreter = stdenv.mkDerivation (lib.fix (self: {
-    pname = "simple-lisp-interpreter";
+  lispico = stdenv.mkDerivation (lib.fix (self: {
+    pname = "lispico";
     meta.mainProgram = self.pname;
     version = "0.0.0";
 
@@ -55,5 +57,5 @@ let
 in
 
 (if inNixShell then shell else {}) // {
-  inherit shell simple-lisp-interpreter;
+  inherit shell lispico;
 }

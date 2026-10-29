@@ -1,14 +1,17 @@
-# Simple LISP-ish Interpreter Written in C
+# Lispico
+
+A small, explicitly typed LISP-like interpreter for embedded systems and
+desktops.
 
 **WORK IN PROGRESS: Not all features are implemented yet.**
 
-This is not really a conventional LISP interpreter, only relevant in terms of
-syntax (for the sake of parser implementation simplicity). It’s more like a
-simple low-level calculation DSL language.
+This is not a conventional LISP interpreter. It borrows LISP's S-expression
+syntax primarily for its parsing simplicity and compatibility with existing
+LISP syntax highlighting in code editors.
 
-This allows DSL-like computations to be parsed and evaluated dynamically in
-embedded platforms such as Raspberry Pico as part of a firmware for it written
-in C.
+Lispico is intended for dynamically parsing and evaluating DSL-like programs
+on embedded platforms such as the Raspberry Pi Pico, as part of firmware
+written in C. That's also where the name comes from: LISP-like + Pico.
 
 ## Features
 
@@ -290,19 +293,19 @@ Build the interpreter:
 Try something:
 
 ```console
-$ ./simple-lisp-interpreter <<< '(println "hello")'
+$ ./lispico <<< '(println "hello")'
 hello
 SYM_EMPTY
 
-$ ./simple-lisp-interpreter <<< '(println "hello")(+ 10 5)(+ (last-val) 3)'
+$ ./lispico <<< '(println "hello")(+ 10 5)(+ (last-val) 3)'
 hello
 SYM_VARIABLE(TYPE_U32(18))
 
-$ ./simple-lisp-interpreter examples/hello-world.lisp
+$ ./lispico examples/hello-world.lisp
 Hello, World!
 SYM_EMPTY
 
-$ ./simple-lisp-interpreter <<'LISP'
+$ ./lispico <<'LISP'
 (var "foo" 123)
 (set "foo" (+ foo 3))
 (type f32 foo)
@@ -313,7 +316,7 @@ SYM_VARIABLE(TYPE_F32(126.000000))
 Or try all examples:
 
 ```sh
-(set -eu; find examples/ -maxdepth 1 -type f -name '*.lisp' | while read -r f; do (set -x; ./simple-lisp-interpreter "$f") done)
+(set -eu; find examples/ -maxdepth 1 -type f -name '*.lisp' | while read -r f; do (set -x; ./lispico "$f") done)
 ```
 
 ## Local Vim configuration example
