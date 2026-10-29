@@ -33,6 +33,9 @@ ADD_STDLIB_FN_TYPE_DEF(std_exit);
 ADD_STDLIB_FN_TYPE_DEF(std_var);
 ADD_STDLIB_FN_TYPE_DEF(std_set);
 
+// Strings
+ADD_STDLIB_FN_TYPE_DEF(std_str);
+
 // Arithmetics
 ADD_STDLIB_FN_TYPE_DEF(std_add);
 ADD_STDLIB_FN_TYPE_DEF(std_subtract);

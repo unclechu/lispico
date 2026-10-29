@@ -348,11 +348,12 @@ Datum std_var(const Datum *args, size_t argc) {
     goto fail;
   }
 
-  // TODO: Add support for arrays and dynamically allocated strings.
+  // TODO: Add support for arrays
   switch (args[1].as.value.type) {
     case TYPE_U32:
     case TYPE_I32:
     case TYPE_F32:
+    case TYPE_STRING:
       break;
     default:
       report_unexpected_value_type(fn_name, &fail_msg, args[1].as.value.type);
@@ -430,11 +431,12 @@ Datum std_set(const Datum *args, size_t argc) {
     goto fail;
   }
 
-  // TODO: add support for arrays and strings
+  // TODO: add support for arrays
   switch (args[1].as.value.type) {
     case TYPE_U32:
     case TYPE_I32:
     case TYPE_F32:
+    case TYPE_STRING:
       break;
     default:
       report_unexpected_value_type(fn_name, &fail_msg, args[1].as.value.type);
@@ -443,6 +445,75 @@ Datum std_set(const Datum *args, size_t argc) {
 
   symbol->as.variable = args[1].as.value;
   return_value = args[1];
+  return return_value;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
+// (str) — Concatenate zero or more strings
+Datum std_str(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "str";
+  size_t length = 0;
+
+  // Validate all arguments and calculate the resulting byte length.
+  for (size_t i = 0; i < argc; ++i) {
+    if (args[i].kind != SYM_VARIABLE || args[i].as.value.type != TYPE_STRING) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) all arguments must be strings", fn_name);
+      goto fail;
+    }
+
+    String string = args[i].as.value.as.string;
+    if (string.length != 0 && string.data == NULL) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string argument", fn_name);
+      goto fail;
+    }
+
+    // -1 to account for the '\0' terminator
+    if (string.length > SIZE_MAX - length - 1) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) resulting string is too large", fn_name);
+      goto fail;
+    }
+
+    length += string.length;
+  }
+
+  // +1 for the '\0' terminator
+  char *data = allocate_runtime_data(length + 1);
+  if (data == NULL) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
+  }
+
+  size_t offset = 0;
+  for (size_t i = 0; i < argc; ++i) {
+    String string = args[i].as.value.as.string;
+    if (string.length != 0) {
+      memcpy(data + offset, string.data, string.length);
+      offset += string.length;
+    }
+  }
+
+  // Convenience terminator; String.length remains authoritative.
+  data[length] = '\0';
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = {
+      .type = TYPE_STRING,
+      .as.string = { .data = data, .length = length },
+    },
+  };
+
   return return_value;
 
   fail:
@@ -807,6 +878,9 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   // Variables
   ADD_FN_SYMBOL("var", std_var);
   ADD_FN_SYMBOL("set", std_set);
+
+  // Strings
+  ADD_FN_SYMBOL("str", std_str);
 
   // Arithmetics
   ADD_FN_SYMBOL("+", std_add);

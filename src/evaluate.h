@@ -69,3 +69,7 @@ void report_evaluation_exit(int exit_code, Datum result);
 
 uint32_t get_current_native_call_expression_index(void);
 void request_evaluation_jump(uint32_t instruction_index);
+
+// Memory is tracked by the evaluator and freed by `clean_evaluation`.
+// The caller must not free the returned pointer.
+void *allocate_runtime_data(size_t size);

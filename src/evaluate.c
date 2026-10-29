@@ -22,6 +22,16 @@ static EvalOutcome eval_outcome = {
   .result = { .kind = SYM_EMPTY },
 };
 
+typedef struct {
+  bool is_failed;
+  char fail_msg[ERR_MSG_SIZE];
+} EvalSettingsInterfaceContext;
+
+typedef struct {
+  void *data;
+  size_t size;
+} EvalRuntimeAllocation;
+
 // Current expression index (for `(label)` to read)
 static uint32_t current_native_call_expression_index = EXPR_NONE;
 
@@ -33,10 +43,8 @@ static uint32_t pending_jump_index = EXPR_NONE;
 // Cleared once the destination expression is reached.
 static uint32_t resume_target_index = EXPR_NONE;
 
-typedef struct {
-  bool is_failed;
-  char fail_msg[ERR_MSG_SIZE];
-} EvalSettingsInterfaceContext;
+static EvalRuntimeAllocation runtime_allocations[EVAL_RUNTIME_ALLOCATION_CAPACITY];
+static uint32_t runtime_allocation_count = 0;
 
 static Symbol* define_symbol_interface(
   const struct EvalSettingsInterface *self,
@@ -560,7 +568,14 @@ void clean_evaluation() {
   resume_target_index = EXPR_NONE;
   current_native_call_expression_index = EXPR_NONE;
 
-  // TODO: cleanup references (such as allocated arrays and strings)
+  for (uint32_t i = 0; i < runtime_allocation_count; ++i) {
+    EvalRuntimeAllocation *allocation = &runtime_allocations[i];
+    wipe_memory(allocation->data, allocation->size);
+    free(allocation->data);
+  }
+
+  runtime_allocation_count = 0;
+  wipe_memory(runtime_allocations, sizeof(runtime_allocations));
   wipe_memory(&eval_outcome, sizeof(eval_outcome));
 }
 
@@ -587,4 +602,21 @@ uint32_t get_current_native_call_expression_index(void) {
 
 void request_evaluation_jump(uint32_t instruction_index) {
   pending_jump_index = instruction_index;
+}
+
+void* allocate_runtime_data(size_t size) {
+  if (runtime_allocation_count >= EVAL_RUNTIME_ALLOCATION_CAPACITY) return NULL;
+
+  // Allow zero-length objects without relying on malloc(0).
+  size_t allocated_size = size == 0 ? 1 : size;
+  void *data = malloc(allocated_size);
+  if (data == NULL) return NULL;
+
+  runtime_allocations[runtime_allocation_count] = (EvalRuntimeAllocation) {
+    .data = data,
+    .size = allocated_size,
+  };
+
+  runtime_allocation_count++;
+  return data;
 }

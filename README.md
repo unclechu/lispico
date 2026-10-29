@@ -23,13 +23,10 @@ written in C. That's also where the name comes from: LISP-like + Pico.
     + Memory cleanup and repeated evaluation tests
     + Tests for expression, symbol, and allocation capacity limits
 
-  * Evaluator: Define and enforce ownership/lifetime rules for returned
-    strings and arrays (borrowed references vs. ownership transfer)
-
   * Evaluator: Handle maximum evaluation recursion depth / stack exhaustion
 
   * Documentation: Document execution semantics, resource limits,
-    memory ownership, and supported language syntax
+    and supported language syntax
 
   * Build: Add a simple test runner to verify example programs
     and expected exit statuses
@@ -318,6 +315,47 @@ Or try all examples:
 ```sh
 (set -eu; find examples/ -maxdepth 1 -type f -name '*.lisp' | while read -r f; do (set -x; ./lispico "$f") done)
 ```
+
+## Memory management and cleanup
+
+Lispico uses **evaluation-lifetime memory allocation**. Dynamically allocated
+strings and arrays remain allocated for the duration of an evaluation, even
+when they are no longer referenced by variables or expression results.
+
+There is no garbage collection or automatic deallocation of individual runtime
+values. This is intentional, to keep memory management simple and predictable,
+particularly on embedded platforms.
+
+Memory is managed in three categories:
+
+- **Evaluation memory:** Runtime allocations, such as dynamically created strings
+  and arrays. These are wiped and freed by `clean_evaluation()`.
+- **Symbols:** Global variables, labels, and native function registrations.
+  The symbol table is wiped by `clean_symbols()`.
+- **Expressions:** Parsed expressions and their associated allocations,
+  including string literals. These are wiped and freed by `clean_expressions()`.
+
+After evaluating a program, call:
+
+```c
+clean_evaluation();
+clean_symbols();
+clean_expressions();
+```
+
+**Important:** The `EvalOutcome` returned by `evaluate()` may contain pointers
+to memory managed by the evaluator or the parsed expressions. These pointers
+become invalid after the corresponding cleanup functions are called.
+
+If the resulting value needs to survive cleanup, make an independent copy of
+its data **before** cleanup. Copying the `EvalOutcome`, `Datum`, `String`, or
+`Array` structures alone is not sufficient for strings and arrays, because
+their underlying data is referenced through pointers. Strings must be copied
+using their explicit lengths, and arrays containing strings require copying
+both the array elements and their referenced string data.
+
+Numeric results are stored directly in the value structure and do not require
+additional allocations or deep copying.
 
 ## Local Vim configuration example
 

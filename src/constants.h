@@ -32,6 +32,8 @@ static_assert(
 // Maximum arguments limit for an expression to have
 #define EVAL_ARG_CAPACITY 16u
 
+#define EVAL_RUNTIME_ALLOCATION_CAPACITY 256u
+
 // *** Parsing ***
 
 // Maximum depth of nested S-expression lists

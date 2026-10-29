@@ -124,6 +124,9 @@ int main(int argc, char **argv) {
     return 1;
 
   done:
+    clean_evaluation();
+    clean_symbols();
+    clean_expressions();
     free(argv_as_Array.data);
     return exit_code;
 }
