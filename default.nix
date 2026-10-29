@@ -6,17 +6,20 @@
 }:
 
 let
+  projectName = "lispico";
+
   shell = pkgs.mkShell {
-    name = "lispico-shell";
+    pname = "${projectName}-shell";
 
     packages = [
       pkgs.gcc
       pkgs.pkg-config
+      pkgs.shellcheck
     ];
   };
 
   lispico = stdenv.mkDerivation (lib.fix (self: {
-    pname = "lispico";
+    pname = projectName;
     meta.mainProgram = self.pname;
     version = "0.0.0";
 

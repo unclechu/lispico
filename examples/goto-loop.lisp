@@ -9,4 +9,4 @@
   (goto loop)
   counter)
 
-counter
+counter ; Result: SYM_VARIABLE(TYPE_U32(5))
