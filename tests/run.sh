@@ -23,6 +23,28 @@ fi
 >/dev/null type rm
 >/dev/null type cat
 
+# Terminal colors
+# Disable stdout terminal coloring for redirects
+if [[ ! -t 1 && ${FORCE_COLOR:-0} != 1 && ${GITHUB_ACTIONS:-} != true ]]; then
+  PASS_COLOR=
+  PASS_RESET_COLOR=
+  PASS_DIM_COLOR=
+else
+  PASS_COLOR=$'\033[32m'
+  PASS_DIM_COLOR=$'\033[1m'
+  PASS_RESET_COLOR=$'\033[0m'
+fi
+# Disable stderr terminal coloring for redirects
+if [[ ! -t 2 && ${FORCE_COLOR:-0} != 1 && ${GITHUB_ACTIONS:-} != true ]]; then
+  FAIL_COLOR=
+  FAIL_DIM_COLOR=
+  FAIL_RESET_COLOR=
+else
+  FAIL_COLOR=$'\033[1;37;41m'
+  FAIL_DIM_COLOR=$'\033[1m'
+  FAIL_RESET_COLOR=$'\033[0m'
+fi
+
 cleanup() {
   rm -rfv -- "$TMP_DIR"
 }
@@ -56,7 +78,7 @@ run_test() {
   local ok=true
 
   if [[ ! -f "$EXPECTED_OUT_FILE" ]]; then
-    >&2 printf '[FAIL] %s: missing expected stdout\n' "$NAME"
+    >&2 printf '%s[FAIL]%s %s: missing expected stdout\n' "$FAIL_COLOR" "$FAIL_RESET_COLOR" "$NAME"
     (( failed += 1 ))
     return
   fi
@@ -65,9 +87,7 @@ run_test() {
     expected_exit_code=$(< "$EXPECTED_EXITCODE_FILE")
   fi
 
-  "$LISPICO_EXECUTABLE" "$SOURCE" \
-    > "$TMP_DIR/stdout" \
-    2> "$TMP_DIR/stderr" || actual_exit_code=$?
+  "$LISPICO_EXECUTABLE" "$SOURCE" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" || actual_exit_code=$?
 
   if (( actual_exit_code != expected_exit_code )); then
     >&2 printf '  Exit status: expected “%s”, got “%s”\n' "$expected_exit_code" "$actual_exit_code"
@@ -76,27 +96,27 @@ run_test() {
 
   if ! cmp -s -- "$EXPECTED_OUT_FILE" "$TMP_DIR/stdout"; then
     >&2 printf '  Stdout differs:\n'
-    diff -u -- "$EXPECTED_OUT_FILE" "$TMP_DIR/stdout" || true
+    >&2 diff -u -- "$EXPECTED_OUT_FILE" "$TMP_DIR/stdout" || true
     ok=false
   fi
 
   if [[ -f "$EXPECTED_ERR_FILE" ]]; then
     if ! cmp -s -- "$EXPECTED_ERR_FILE" "$TMP_DIR/stderr"; then
       >&2 printf '  Stderr differs:\n'
-      diff -u -- "$EXPECTED_ERR_FILE" "$TMP_DIR/stderr" || true
+      >&2 diff -u -- "$EXPECTED_ERR_FILE" "$TMP_DIR/stderr" || true
       ok=false
     fi
   elif [[ -s "$TMP_DIR/stderr" ]]; then
     >&2 printf '  Unexpected stderr:\n'
-    cat -- "$TMP_DIR/stderr"
+    >&2 cat -- "$TMP_DIR/stderr"
     ok=false
   fi
 
   if [[ "$ok" == true ]]; then
-    printf '[PASS] %s\n' "$NAME"
+    printf '%s[PASS]%s %s\n' "$PASS_COLOR" "$PASS_RESET_COLOR" "$NAME"
     (( passed += 1 ))
   else
-    >&2 printf '[FAIL] %s\n' "$NAME"
+    >&2 printf '%s[FAIL]%s %s\n' "$FAIL_COLOR" "$FAIL_RESET_COLOR" "$NAME"
     (( failed += 1 ))
   fi
 }
@@ -122,5 +142,19 @@ for source in examples/fail/*.lisp; do
   run_test "$source" "tests/expected/fail/$name"
 done
 
-printf '\nPassed: %d, Failed: %d\n' "$passed" "$failed"
+
+if (( failed != 0 )); then
+  PASS_HL=$PASS_DIM_COLOR
+  FAIL_HL=$FAIL_COLOR
+else
+  PASS_HL=$PASS_COLOR
+  FAIL_HL=$FAIL_DIM_COLOR
+fi
+
+# Re-use `PASS_RESET_COLOR` because writing to stdout
+printf '\n%sPassed: %d%s, %sFailed: %d%s\n' \
+  "$PASS_HL" "$passed" "$PASS_RESET_COLOR" \
+  "$FAIL_HL" "$failed" "$PASS_RESET_COLOR"
+
+# Final exit code
 [[ "$passed" -gt 0 && "$failed" -eq 0 ]]
