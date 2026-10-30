@@ -367,6 +367,34 @@ both the array elements and their referenced string data.
 Numeric results are stored directly in the value structure and do not require
 additional allocations or deep copying.
 
+## Testing
+
+You can run all the tests:
+
+```console
+# Enter nix-shell first (to supply dependencies)
+$ nix-shell
+
+# Build the interpreter first
+$ ./build.sh
+
+# Run all test suites sequentially
+$ tests/run.sh
+```
+
+Or you can run them individually:
+
+```console
+# Enter nix-shell first (to supply dependencies)
+$ nix-shell
+
+# Build the interpreter first
+$ ./build.sh
+
+$ tests/run-examples.sh
+$ tests/run-c.sh
+```
+
 ## Local Vim configuration example
 
 ```vim
