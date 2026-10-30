@@ -316,6 +316,16 @@ Or try all examples:
 (set -eu; find examples/ -maxdepth 1 -type f -name '*.lisp' | while read -r f; do (set -x; ./lispico "$f") done)
 ```
 
+You can also just build `lispico` derivation (or add it to your NixOS config):
+
+```console
+$ nix-build -A lispico
+
+$ result/bin/lispico <<< '(println "hello")'
+hello
+SYM_EMPTY
+```
+
 ## Memory management and cleanup
 
 Lispico uses **evaluation-lifetime memory allocation**. Dynamically allocated

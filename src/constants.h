@@ -39,6 +39,10 @@ static_assert(
 // Maximum depth of nested S-expression lists
 #define PARSER_MAX_DEPTH 64u
 
+// Maximum buffer size (including `\0` terminator)
+// for a string containing a number to be parsed
+#define NUMBER_TEXT_CAPACITY 128u
+
 // *** Reading contents ***
 
 // 64KiB
