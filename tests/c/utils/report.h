@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+void print_test_header(const char *test_name);
+
 void report_test(
   const char *test_name,
   bool ok,

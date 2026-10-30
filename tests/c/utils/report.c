@@ -1,6 +1,14 @@
 #include "report.h"
 #include "term-colors.h"
 
+#define PRINT_SEPARATOR \
+  printf("••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••\n");
+
+void print_test_header(const char *test_name) {
+  PRINT_SEPARATOR;
+  printf("Testing “%s”…\n", test_name);
+}
+
 void report_test(
   const char *test_name,
   bool ok,
@@ -30,7 +38,7 @@ int summary_report(const char *suit_name, size_t passed, size_t failed) {
   const char *pass_hl = failed == 0 ? o_pass_color : o_secondary_color;
   const char *fail_hl = failed != 0 ? o_fail_color : o_secondary_color;
 
-  printf("••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••\n");
+  PRINT_SEPARATOR;
 
   printf(
     "%s tests: %sPassed: %zu%s, %sFailed: %zu%s\n",

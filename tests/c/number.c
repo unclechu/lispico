@@ -7,6 +7,14 @@
 #include "utils/report.h"
 #include "../../src/number.h"
 
+// Tests for `is_number_start`
+typedef struct {
+  const char *name;
+  String text;
+  bool expected;
+} NumberStartTest;
+
+// Tests for `parse_number_text`
 typedef struct {
   const char *name;
   String text;
@@ -21,6 +29,38 @@ typedef struct {
 int main(void) {
   set_term_colors();
 
+  // Tests for `is_number_start`
+  const NumberStartTest start_tests[] = {
+    { "empty", TEXT(""), false },
+    { "plus only", TEXT("+"), false },
+    { "minus only", TEXT("-"), false },
+    { "dot only", TEXT("."), false },
+    { "plus dot", TEXT("+."), false },
+    { "minus dot", TEXT("-."), false },
+
+    { "zero", TEXT("0"), true },
+    { "integer", TEXT("123"), true },
+    { "positive integer", TEXT("+123"), true },
+    { "negative integer", TEXT("-123"), true },
+
+    { "fraction", TEXT("1.5"), true },
+    { "leading dot", TEXT(".123"), true },
+    { "positive leading dot", TEXT("+.123"), true },
+    { "negative leading dot", TEXT("-.123"), true },
+    { "trailing dot", TEXT("1."), true },
+
+    { "exponent", TEXT("1e3"), true },
+    { "incomplete exponent", TEXT("1e"), true },
+    { "trailing characters", TEXT("123abc"), true },
+    { "embedded NUL", TEXT("1\0x"), true },
+
+    { "name", TEXT("abc"), false },
+    { "name with digit", TEXT("abc123"), false },
+    { "leading space", TEXT(" 123"), false },
+    { "leading NUL", TEXT("\0x"), false },
+  };
+
+  // Tests for `parse_number_text`
   const NumberTest tests[] = {
     { "1.", TEXT("1."), TYPE_VOID, NUMBER_PARSE_OK,
       { .type = TYPE_F32, .as.f32 = 1.0f } },
@@ -61,6 +101,24 @@ int main(void) {
   size_t passed = 0;
   size_t failed = 0;
 
+  print_test_header("is_number_start()");
+  for (size_t i = 0; i < sizeof(start_tests) / sizeof(start_tests[0]); ++i) {
+    const NumberStartTest *test = &start_tests[i];
+
+    bool actual_result = is_number_start(test->text);
+    bool ok = actual_result == test->expected;
+
+    report_test(
+      test->name,
+      ok,
+      test->expected ? "true" : "false",
+      actual_result ? "true" : "false",
+      &passed,
+      &failed
+    );
+  }
+
+  print_test_header("parse_number_text()");
   for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); ++i) {
     const NumberTest *test = &tests[i];
     Value result = {0};
@@ -74,21 +132,12 @@ int main(void) {
 
       if (ok) {
         switch (result.type) {
-          case TYPE_U32:
-            ok = result.as.u32 == test->expected_value.as.u32;
-            break;
-
-          case TYPE_I32:
-            ok = result.as.i32 == test->expected_value.as.i32;
-            break;
-
+          case TYPE_U32: ok = result.as.u32 == test->expected_value.as.u32; break;
+          case TYPE_I32: ok = result.as.i32 == test->expected_value.as.i32; break;
           case TYPE_F32:
             ok = isfinite(result.as.f32) && result.as.f32 == test->expected_value.as.f32;
             break;
-
-          default:
-            ok = false;
-            break;
+          default: ok = false; break;
         }
       }
     }
