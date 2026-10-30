@@ -29,6 +29,9 @@ ADD_STDLIB_FN_TYPE_DEF(std_eprintln);
 
 ADD_STDLIB_FN_TYPE_DEF(std_exit);
 
+// Assertions
+ADD_STDLIB_FN_TYPE_DEF(std_assert);
+
 // Variables
 ADD_STDLIB_FN_TYPE_DEF(std_var);
 ADD_STDLIB_FN_TYPE_DEF(std_set);

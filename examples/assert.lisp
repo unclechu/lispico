@@ -1,0 +1,6 @@
+(assert true)
+(assert 123)
+(assert -1)
+(assert 0.5)
+(assert (== 10 (+ 5 5)) "Arithmetic failed")
+(assert (== "hello" (str "he" "llo")) "String concatenation failed")

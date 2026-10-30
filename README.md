@@ -23,8 +23,6 @@ written in C. That's also where the name comes from: LISP-like + Pico.
     + Memory cleanup and repeated evaluation tests
     + Tests for expression, symbol, and allocation capacity limits
 
-  * Add `(assert)` function
-
   * Evaluator: Handle maximum evaluation recursion depth / stack exhaustion
 
   * Documentation: Document execution semantics, resource limits,
