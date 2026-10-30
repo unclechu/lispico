@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "parse.h"
+#include "number.h"
 
 typedef struct {
   // Input text
@@ -263,76 +264,45 @@ static bool is_atom_delimiter(const Parser *parser) {
   );
 }
 
-// Is this a start of a number
-static bool is_number_start(const char *text) {
-  size_t offset = (text[0] == '+' || text[0] == '-') ? 1 : 0;
-  return (
-    isdigit((unsigned char)text[offset]) ||
-    (text[offset] == '.' && isdigit((unsigned char)text[offset + 1]))
-  );
-}
+static bool parse_number(Parser *parser, String text, uint32_t *index) {
+  Value number = {0};
 
-static bool parse_number(Parser *parser, const char *text, uint32_t *index) {
-  size_t i = (text[0] == '+' || text[0] == '-') ? 1 : 0;
-
-  // Decimal digits
-  bool digits = false;
-  while (isdigit((unsigned char)text[i])) { digits = true; i++; }
-
-  // Detect floating point remainder
-  bool floating = false;
-  if (text[i] == '.') {
-    floating = true;
-    i++;
-    while (isdigit((unsigned char)text[i])) { digits = true; i++; }
+  switch (parse_number_text(text, TYPE_VOID, &number)) {
+    case NUMBER_PARSE_OK: break;
+    case NUMBER_PARSE_INVALID: return parser_fail(parser, "Invalid numeric literal");
+    case NUMBER_PARSE_INVALID_EXPONENT: return parser_fail(parser, "Invalid numeric exponent");
+    case NUMBER_PARSE_OUT_OF_RANGE:
+      return parser_fail(parser,
+        strpbrk(text.data, ".eE") ? "Float literal out of range" :
+        text.data[0] == '-' ? "i32 literal out of range" :
+        "u32 literal out of range"
+      );
+    case NUMBER_PARSE_TOO_LONG: return parser_fail(parser, "Numeric literal too long");
+    default: return parser_fail(parser, "Unknown numeric parsing error");
   }
 
-  // If no digits detected
-  if (!digits) return parser_fail(parser, "Invalid numeric literal");
+  uint32_t kind;
+  uint32_t data;
 
-  // Support number exponent notation
-  if (text[i] == 'e' || text[i] == 'E') {
-    floating = true;
-    i++;
-    if (text[i] == '+' || text[i] == '-') i++;
-    if (!isdigit((unsigned char)text[i])) return parser_fail(parser, "Invalid numeric exponent");
-    while (isdigit((unsigned char)text[i])) i++;
+  switch (number.type) {
+    case TYPE_U32:
+      kind = EXPR_U32;
+      data = number.as.u32;
+      break;
+    case TYPE_I32:
+      kind = EXPR_I32;
+      memcpy(&data, &number.as.i32, sizeof(data));
+      break;
+    case TYPE_F32:
+      kind = EXPR_F32;
+      memcpy(&data, &number.as.f32, sizeof(data));
+      break;
+    default:
+      return parser_fail(parser, "Unexpected parsed numeric type");
   }
 
-  if (text[i] != '\0') return parser_fail(parser, "Invalid numeric literal");
-
-  // Parse floating point fractional number
-  if (floating) {
-    errno = 0; // Reset global error
-    char *end;
-    float number = strtof(text, &end);
-    if (errno == ERANGE || *end != '\0') return parser_fail(parser, "Float literal out of range");
-    if (!new_expression(parser, EXPR_F32, index)) return false;
-    memcpy(&expressions[*index].data, &number, sizeof(number));
-  }
-  // Parse integer (negative numbers are automatically detected as `i32` type)
-  else if (text[0] == '-') {
-    errno = 0; // Reset global error
-    char *end;
-    // Reserving large enough number type to detect out-of-bound
-    long long number = strtoll(text, &end, 10);
-    if (errno == ERANGE || *end != '\0' || number < INT32_MIN || number > INT32_MAX)
-      return parser_fail(parser, "i32 literal out of range");
-    if (!new_expression(parser, EXPR_I32, index)) return false;
-    int32_t n = (int32_t)number;
-    memcpy(&expressions[*index].data, &n, sizeof(n));
-  }
-  // Parse unsigned integer (positive numbers are automatically detected as `u32` type)
-  else {
-    errno = 0; // Reset global error
-    char *end;
-    // Reserving large enough number type to detect out-of-bound
-    unsigned long long number = strtoull(text, &end, 10);
-    if (errno == ERANGE || *end != '\0' || number > UINT32_MAX)
-      return parser_fail(parser, "u32 literal out of range");
-    if (!new_expression(parser, EXPR_U32, index)) return false;
-    expressions[*index].data = (uint32_t)number;
-  }
+  if (!new_expression(parser, kind, index)) return false;
+  expressions[*index].data = data;
 
   return true;
 }
@@ -353,7 +323,8 @@ static bool parse_atom(Parser *parser, uint32_t *index) {
   if (length == 0) return parser_fail(parser, "Expected an expression");
   text[length] = '\0';
 
-  if (is_number_start(text)) return parse_number(parser, text, index);
+  String atom = { .data = text, .length = length };
+  if (is_number_start(atom)) return parse_number(parser, atom, index);
 
   if (length >= SYMBOL_NAME_SIZE) return parser_fail(parser, "Name exceeds SYMBOL_NAME_SIZE");
 
