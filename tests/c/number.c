@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "../src/number.h"
+#include "../../src/number.h"
 
 typedef struct {
   const char *name;

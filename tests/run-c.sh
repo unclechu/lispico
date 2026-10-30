@@ -85,7 +85,7 @@ if (( $# == 0 )); then
   shopt -s nullglob
 
   # Run all C tests
-  for c_test_src in tests/*.c; do
+  for c_test_src in tests/c/*.c; do
     run-c-test "$c_test_src"
   done
 elif (( $# == 1 )) && [[ -s $1 ]]; then
