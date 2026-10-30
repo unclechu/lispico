@@ -130,7 +130,7 @@ for source in examples/*.lisp; do
   name="${source##*/}"
   name="${name%.lisp}"
 
-  run_test "$source" "tests/expected/$name"
+  run_test "$source" "tests/expected-examples/$name"
 done
 
 # Test all expected failures
@@ -139,7 +139,7 @@ for source in examples/fail/*.lisp; do
   name="${source##*/}"
   name="${name%.lisp}"
 
-  run_test "$source" "tests/expected/fail/$name"
+  run_test "$source" "tests/expected-examples/fail/$name"
 done
 
 

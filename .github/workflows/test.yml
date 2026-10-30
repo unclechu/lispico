@@ -20,7 +20,7 @@ jobs:
       - name: Build Lispico
         run: nix-build -A lispico
 
-      - name: Run tests
-        run: bash tests/run.sh
+      - name: Run examples tests
+        run: bash tests/run-examples.sh
         env:
           LISPICO_EXECUTABLE: ./result/bin/lispico

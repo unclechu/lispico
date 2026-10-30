@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Re-generate `tests/expected/*.{stdout,stderr,exitcode}` files.
+# Re-generate `tests/expected-examples/*.{stdout,stderr,exitcode}` files.
 #
 # WARNING! This does not mean those results are correct.
 # Inspect the resulting files manually first.
@@ -35,10 +35,10 @@ for source in examples/*.lisp; do
   exit_code=0
 
   "$LISPICO_EXECUTABLE" "$source" \
-    > "tests/expected/${name}.stdout" \
-    2> "tests/expected/${name}.stderr" || exit_code=$?
+    > "tests/expected-examples/${name}.stdout" \
+    2> "tests/expected-examples/${name}.stderr" || exit_code=$?
 
-  printf %d "$exit_code" > "tests/expected/${name}.exitcode"
+  printf %d "$exit_code" > "tests/expected-examples/${name}.exitcode"
 done
 
 # All expected failures
@@ -49,10 +49,10 @@ for source in examples/fail/*.lisp; do
   exit_code=0
 
   "$LISPICO_EXECUTABLE" "$source" \
-    > "tests/expected/fail/${name}.stdout" \
-    2> "tests/expected/fail/${name}.stderr" || exit_code=$?
+    > "tests/expected-examples/fail/${name}.stdout" \
+    2> "tests/expected-examples/fail/${name}.stderr" || exit_code=$?
 
-  printf '%d\n' "$exit_code" > "tests/expected/fail/${name}.exitcode"
+  printf '%d\n' "$exit_code" > "tests/expected-examples/fail/${name}.exitcode"
 done
 
 echo 'DONE'
