@@ -61,7 +61,13 @@ run-c-test() {
 
   (
     set -o xtrace
-    MAIN_SOURCE_FILE="$MAIN_SOURCE_FILE" OUTPUT_EXECUTABLE_NAME="$OUTPUT_EXECUTABLE_NAME" ./build.sh
+    shopt -s nullglob
+    # Intentional wildcard expanding:
+    # shellcheck disable=SC2125
+    CFLAGS=tests/c/utils/*.c \
+      MAIN_SOURCE_FILE="$MAIN_SOURCE_FILE" \
+      OUTPUT_EXECUTABLE_NAME="$OUTPUT_EXECUTABLE_NAME" \
+      ./build.sh
   ) || exit_code=$?
   if (( exit_code != 0 )); then
     >&2 printf '%s[FAIL]%s C test “%s” failed to build\n' \
@@ -88,6 +94,7 @@ if (( $# == 0 )); then
 
   # Run all C tests
   for c_test_src in tests/c/*.c; do
+    # Forwarding `CFLAGS` to `./build.sh`
     run-c-test "$c_test_src"
   done
 elif (( $# == 1 )) && [[ -s $1 ]]; then

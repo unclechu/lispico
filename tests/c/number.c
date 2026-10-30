@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "utils/term-colors.h"
+#include "utils/report.h"
 #include "../../src/number.h"
 
 typedef struct {
@@ -17,6 +19,8 @@ typedef struct {
 #define TEXT(s) { .data = (s), .length = sizeof(s) - 1 }
 
 int main(void) {
+  set_term_colors();
+
   const NumberTest tests[] = {
     { "1.", TEXT("1."), TYPE_VOID, NUMBER_PARSE_OK,
       { .type = TYPE_F32, .as.f32 = 1.0f } },
@@ -89,21 +93,12 @@ int main(void) {
       }
     }
 
-    if (ok) {
-      printf("[PASS] %s\n", test->name);
-      passed++;
-    } else {
-      fprintf(
-        stderr,
-        "[FAIL] %s: expected status %d, got %d\n",
-        test->name,
-        (int)test->expected_status,
-        (int)status
-      );
-      failed++;
-    }
+    char expected[128] = {'\0'};
+    snprintf(expected, sizeof(expected), "%d", (int)test->expected_status);
+    char actual[128] = {'\0'};
+    snprintf(actual, sizeof(actual), "%d", (int)status);
+    report_test(test->name, ok, expected, actual, &passed, &failed);
   }
 
-  printf("\nNumber tests: %zu passed, %zu failed\n", passed, failed);
-  return failed == 0 && passed > 0 ? 0 : 1;
+  return summary_report("Number", passed, failed);
 }
