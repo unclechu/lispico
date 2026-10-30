@@ -14,7 +14,7 @@
 set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 
 SCRIPT_DIR=$(dirname -- "${BASH_SOURCE[0]}")
-cd -- "$SCRIPT_DIR/.." # Switch to project root
+cd -- "$SCRIPT_DIR/../.." # Switch to project root
 
 : "${LISPICO_EXECUTABLE:=./lispico}"
 
