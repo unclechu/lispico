@@ -4,6 +4,8 @@
 #
 # Allow unicode quotes:
 # shellcheck disable=SC1111
+# Do not assume environment variables presence:
+# shellcheck enable=check-unassigned-uppercase
 
 set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 

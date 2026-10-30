@@ -4,6 +4,8 @@
 #
 # Allow unicode quotes:
 # shellcheck disable=SC1111
+# Do not assume environment variables presence:
+# shellcheck enable=check-unassigned-uppercase
 
 set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 
@@ -26,23 +28,27 @@ fi
 # Terminal colors
 # Disable stdout terminal coloring for redirects
 if [[ ! -t 1 && ${FORCE_COLOR:-0} != 1 && ${GITHUB_ACTIONS:-} != true ]]; then
-  PASS_COLOR=
-  PASS_RESET_COLOR=
-  PASS_DIM_COLOR=
+  O_RESET_COLOR=
+  O_SECONDARY_COLOR=
+  O_FAIL_COLOR=
+  O_PASS_COLOR=
 else
-  PASS_COLOR=$'\033[32m'
-  PASS_DIM_COLOR=$'\033[1m'
-  PASS_RESET_COLOR=$'\033[0m'
+  O_RESET_COLOR=$'\033[0m'
+  O_SECONDARY_COLOR=$'\033[1m'
+  O_FAIL_COLOR=$'\033[1;37;41m'
+  O_PASS_COLOR=$'\033[32m'
 fi
 # Disable stderr terminal coloring for redirects
 if [[ ! -t 2 && ${FORCE_COLOR:-0} != 1 && ${GITHUB_ACTIONS:-} != true ]]; then
-  FAIL_COLOR=
-  FAIL_DIM_COLOR=
-  FAIL_RESET_COLOR=
+  E_RESET_COLOR=
+  # E_SECONDARY_COLOR=
+  E_FAIL_COLOR=
+  # E_PASS_COLOR=
 else
-  FAIL_COLOR=$'\033[1;37;41m'
-  FAIL_DIM_COLOR=$'\033[1m'
-  FAIL_RESET_COLOR=$'\033[0m'
+  E_RESET_COLOR=$'\033[0m'
+  # E_SECONDARY_COLOR=$'\033[1m'
+  E_FAIL_COLOR=$'\033[1;37;41m'
+  # E_PASS_COLOR=$'\033[32m'
 fi
 
 cleanup() {
@@ -78,7 +84,7 @@ run_test() {
   local ok=true
 
   if [[ ! -f "$EXPECTED_OUT_FILE" ]]; then
-    >&2 printf '%s[FAIL]%s %s: missing expected stdout\n' "$FAIL_COLOR" "$FAIL_RESET_COLOR" "$NAME"
+    >&2 printf '%s[FAIL]%s %s: missing expected stdout\n' "$E_FAIL_COLOR" "$E_RESET_COLOR" "$NAME"
     (( failed += 1 ))
     return
   fi
@@ -113,10 +119,10 @@ run_test() {
   fi
 
   if [[ "$ok" == true ]]; then
-    printf '%s[PASS]%s %s\n' "$PASS_COLOR" "$PASS_RESET_COLOR" "$NAME"
+    printf '%s[PASS]%s %s\n' "$O_PASS_COLOR" "$O_RESET_COLOR" "$NAME"
     (( passed += 1 ))
   else
-    >&2 printf '%s[FAIL]%s %s\n' "$FAIL_COLOR" "$FAIL_RESET_COLOR" "$NAME"
+    >&2 printf '%s[FAIL]%s %s\n' "$E_FAIL_COLOR" "$E_RESET_COLOR" "$NAME"
     (( failed += 1 ))
   fi
 }
@@ -142,19 +148,19 @@ for source in examples/fail/*.lisp; do
   run_test "$source" "tests/expected-examples/fail/$name"
 done
 
-
 if (( failed != 0 )); then
-  PASS_HL=$PASS_DIM_COLOR
-  FAIL_HL=$FAIL_COLOR
+  PASS_HL=$O_SECONDARY_COLOR
+  FAIL_HL=$O_FAIL_COLOR
 else
-  PASS_HL=$PASS_COLOR
-  FAIL_HL=$FAIL_DIM_COLOR
+  PASS_HL=$O_PASS_COLOR
+  FAIL_HL=$O_SECONDARY_COLOR
 fi
 
-# Re-use `PASS_RESET_COLOR` because writing to stdout
+echo '————————————————————————————————————————————————————————————————————————'
+
 printf '\n%sPassed: %d%s, %sFailed: %d%s\n' \
-  "$PASS_HL" "$passed" "$PASS_RESET_COLOR" \
-  "$FAIL_HL" "$failed" "$PASS_RESET_COLOR"
+  "$PASS_HL" "$passed" "$O_RESET_COLOR" \
+  "$FAIL_HL" "$failed" "$O_RESET_COLOR"
 
 # Final exit code
 [[ "$passed" -gt 0 && "$failed" -eq 0 ]]
