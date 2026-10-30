@@ -28,7 +28,7 @@ written in C. That's also where the name comes from: LISP-like + Pico.
   * Documentation: Document execution semantics, resource limits,
     and supported language syntax
 
-  * Evaluator: Runtime allocation for arrays (`(arr)`, `(arr-*)`)
+  * Evaluator: Runtime allocation for arrays (`(arr-*)`)
   * Evaluator: More informative error messages
   * Evaluator: Memory wipe and cleanup for allocated runtime entities
   * Evaluator: Implement custom expressions list cloning (and expression allocations)
@@ -87,29 +87,102 @@ features:
   * `-2147483648` → OK
   * `-2147483649` (`i32` that is smaller than `INT32_MIN`) → Failure
 
-- String conversions (to/from strings)
+- Strings
 
-  * Number to string
-    + `(type s 123)` → `"123"`
-    + `(type s -123)` → `"-123"`
-    + `(type s 3.5)` → `"3.5"`
-    + `(type s "hello")` → `"hello"`
+  * Semantics and behavior
 
-  * String to number (the target type determines how a string is parsed)
-    + `(type u32 "123")` → `TYPE_U32(123)`
-    + `(type i32 "-123")` → `TYPE_I32(-123)`
-    + `(type f32 "3.5")` → `TYPE_F32(3.5)`
-    + `(type f32 "123")` → `TYPE_F32(123.0)`
-    + `(type u32 "-123")` → Evaluation failure (`u32` cannot represent negative values)
-    + `(type i32 "4294967295")` → Evaluation failure (out of range)
-    + `(type u32 "12xyz")` → Evaluation failure (invalid numeric string)
+    + Behavior notes
+
+      + String indexes and lengths are measured in bytes, not Unicode
+        characters.
+      + String modifications are performed in place without changing
+        `String::length`.
+      + Writing beyond the existing string boundaries causes an evaluation
+        failure.
+      + String data may contain `\0` bytes;
+        `String::length` determines its actual length.
+
+    + `(str-size STRING)` —
+      Returns length in bytes (`u32`; no allocation)
+
+    + `(str-char STRING INDEX)` —
+      Reads a byte (`u32`) from any evaluated string (no allocation)
+
+    + `(str-get "NAME" INDEX)` —
+      Reads a byte (`u32`) from a string variable (no allocation)
+
+    + `(str-set "NAME" INDEX BYTE)` —
+      Changes one byte, numeric BYTE from 0 to 255 (no allocation)
+
+    + `(str-set "NAME" INDEX STRING)` —
+      Overwrites bytes starting at INDEX
+      (does not change the string length; no allocation).
+      Entire STRING must fit starting from INDEX
+      (otherwise an out-of-bounds evaluation failure occurs)
+
+    + `(str-set "NAME" STRING)` —
+      Overwrites from the beginning and zero-fills the remainder with `\0`
+      (does not change the string length; no allocation).
+      Entire STRING must fit the original string variable length
+      (otherwise an out-of-bounds evaluation failure occurs)
+
+    + `(str-new "NAME" LENGTH)` —
+      Defines a new zero-initialized string variable (allocates)
+
+    + `(str-copy STRING)` —
+      Returns an independent copy of a string (allocates).
+
+      Useful when a string is shared by reference and may be mutated elsewhere
+      (e.g. strings stored in arrays).
+
+    + `(str STRING-1 [STRING-N…])` —
+      Creates a new string with all string arguments concatenated together
+      (allocates)
+
+    + `(var "NAME" STRING)` —
+      Creates an independent copy of the string and saves it as a variable
+      (allocates)
+
+    + `(set "NAME" STRING)` —
+      Replaces the string contents with a new string while preserving original
+      string length (zero-fills the remainder with `\0`; no allocation). The
+      behavior is equivalent to `(str-set "NAME" STRING)`.
+
+      If the provided string length exceeds the original string variable length
+      an out-of-bounds evaluation failure occurs.
+
+      While `(var "NAME" STRING)` creates an independent copy of a string
+      (to avoid, for example, modifying parsed expression string literals),
+      `(set "NAME" STRING)` modifies the string variable in-place without
+      new allocations. This behavior is intentionally asymmetric.
+
+  * String conversions (to/from strings)
+
+    + Number to string
+
+      `(type s STRING)` returns existing string value (no allocation),
+      for all other cases a new string is allocated.
+
+      + `(type s 123)` → `"123"`
+      + `(type s -123)` → `"-123"`
+      + `(type s 3.5)` → `"3.5"`
+      + `(type s "hello")` → `"hello"`
+
+    + String to number (the target type determines how a string is parsed)
+      + `(type u32 "123")` → `TYPE_U32(123)`
+      + `(type i32 "-123")` → `TYPE_I32(-123)`
+      + `(type f32 "3.5")` → `TYPE_F32(3.5)`
+      + `(type f32 "123")` → `TYPE_F32(123.0)`
+      + `(type u32 "-123")` → Evaluation failure (`u32` cannot represent negative values)
+      + `(type i32 "4294967295")` → Evaluation failure (out of range)
+      + `(type u32 "12xyz")` → Evaluation failure (invalid numeric string)
 
 - Arrays
 
-  * `(arr u32 16 foo)` where 16 is an array size and `foo` is the name
-  * `(arr-get foo 0)` to get an array element by index 0
-  * `(arr-set foo 0 123)` to set an array element by index 0 to `123` value
-  * `(arr-size foo)` to get `foo` array size (e.g. `16` of `u32` type)
+  * `(arr-new "foo" u32 16)` where 16 is an array size and `foo` is the variable name
+  * `(arr-get "foo" 0)` to get an array element by index 0
+  * `(arr-set "foo" 0 123)` to set an array element by index 0 to `123` value
+  * `(arr-size "foo")` to get `foo` array size (e.g. `16` of `u32` type)
 
 - There are no user-defined functions (at least for now)
 
@@ -236,6 +309,10 @@ features:
         + `(eprintln "hello there")`
         + `(eprint "hi")`
         + `(eprintln (str "hello" "there"))`
+
+      Note that these printing functions will print `\0` NUL bytes as-is,
+      without actually terminating a string. Original string length is the
+      actual string limit.
 
   * Early exit (by default last expression is returned from the program)
 
