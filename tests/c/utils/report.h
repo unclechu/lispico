@@ -12,4 +12,4 @@ void report_test(
   size_t *failed
 );
 
-int summary_report(char *suit_name, size_t passed, size_t failed);
+int summary_report(const char *suit_name, size_t passed, size_t failed);

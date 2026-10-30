@@ -26,7 +26,7 @@ void report_test(
   }
 }
 
-int summary_report(char *suit_name, size_t passed, size_t failed) {
+int summary_report(const char *suit_name, size_t passed, size_t failed) {
   const char *pass_hl = failed == 0 ? o_pass_color : o_secondary_color;
   const char *fail_hl = failed != 0 ? o_fail_color : o_secondary_color;
 
