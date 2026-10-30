@@ -28,9 +28,6 @@ written in C. That's also where the name comes from: LISP-like + Pico.
   * Documentation: Document execution semantics, resource limits,
     and supported language syntax
 
-  * Build: Add a simple test runner to verify example programs
-    and expected exit statuses
-
   * Evaluator: Runtime allocation for arrays (`(arr)`, `(arr-*)`)
   * Evaluator: More informative error messages
   * Evaluator: Memory wipe and cleanup for allocated runtime entities
