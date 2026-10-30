@@ -107,7 +107,7 @@ fi
 
 echo '————————————————————————————————————————————————————————————————————————'
 
-printf '\nC tests summary: %sPassed: %d%s, %sFailed: %d%s\n' \
+printf 'C tests summary: %sPassed: %d%s, %sFailed: %d%s\n' \
   "$PASS_HL" "$passed" "$O_RESET_COLOR" \
   "$FAIL_HL" "$failed" "$O_RESET_COLOR"
 
