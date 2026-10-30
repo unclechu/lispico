@@ -23,6 +23,8 @@ written in C. That's also where the name comes from: LISP-like + Pico.
     + Memory cleanup and repeated evaluation tests
     + Tests for expression, symbol, and allocation capacity limits
 
+  * Add `(assert)` function
+
   * Evaluator: Handle maximum evaluation recursion depth / stack exhaustion
 
   * Documentation: Document execution semantics, resource limits,
@@ -31,7 +33,7 @@ written in C. That's also where the name comes from: LISP-like + Pico.
   * Build: Add a simple test runner to verify example programs
     and expected exit statuses
 
-  * Evaluator: Runtime allocation for strings and arrays (`(arr)`, `(arr-*)`, `(str)`)
+  * Evaluator: Runtime allocation for arrays (`(arr)`, `(arr-*)`)
   * Evaluator: More informative error messages
   * Evaluator: Memory wipe and cleanup for allocated runtime entities
   * Evaluator: Implement custom expressions list cloning (and expression allocations)
@@ -89,6 +91,23 @@ features:
   * `4294967296` (`u32` that is bigger than `UINT32_MAX`) → Failure
   * `-2147483648` → OK
   * `-2147483649` (`i32` that is smaller than `INT32_MIN`) → Failure
+
+- String conversions (to/from strings)
+
+  * Number to string
+    + `(type s 123)` → `"123"`
+    + `(type s -123)` → `"-123"`
+    + `(type s 3.5)` → `"3.5"`
+    + `(type s "hello")` → `"hello"`
+
+  * String to number (the target type determines how a string is parsed)
+    + `(type u32 "123")` → `TYPE_U32(123)`
+    + `(type i32 "-123")` → `TYPE_I32(-123)`
+    + `(type f32 "3.5")` → `TYPE_F32(3.5)`
+    + `(type f32 "123")` → `TYPE_F32(123.0)`
+    + `(type u32 "-123")` → Evaluation failure (`u32` cannot represent negative values)
+    + `(type i32 "4294967295")` → Evaluation failure (out of range)
+    + `(type u32 "12xyz")` → Evaluation failure (invalid numeric string)
 
 - Arrays
 

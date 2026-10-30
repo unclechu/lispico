@@ -272,7 +272,8 @@ static bool parse_number(Parser *parser, String text, uint32_t *index) {
     case NUMBER_PARSE_INVALID: return parser_fail(parser, "Invalid numeric literal");
     case NUMBER_PARSE_INVALID_EXPONENT: return parser_fail(parser, "Invalid numeric exponent");
     case NUMBER_PARSE_OUT_OF_RANGE:
-      return parser_fail(parser,
+      return parser_fail(
+        parser,
         strpbrk(text.data, ".eE") ? "Float literal out of range" :
         text.data[0] == '-' ? "i32 literal out of range" :
         "u32 literal out of range"
