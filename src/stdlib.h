@@ -67,3 +67,8 @@ ADD_STDLIB_FN_TYPE_DEF(std_not_equal);
 // Labels (registering a label and jumping to it)
 ADD_STDLIB_FN_TYPE_DEF(std_label);
 ADD_STDLIB_FN_TYPE_DEF(std_goto);
+
+// Sleep functions
+ADD_STDLIB_FN_TYPE_DEF(std_sleep_s);
+ADD_STDLIB_FN_TYPE_DEF(std_sleep_ms);
+ADD_STDLIB_FN_TYPE_DEF(std_sleep_us);
