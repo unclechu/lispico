@@ -55,6 +55,14 @@ static uint32_t current_sequence_depth = 0;
 // Zero means there is no pending leave request.
 static uint32_t pending_leave_count = 0;
 
+// Deferred expressions registered by active `(do)` sequences.
+static uint32_t deferred_expression_indices[EVAL_DEFER_CAPACITY];
+static uint32_t deferred_expression_count = 0;
+
+// Depth of the `(do)` sequence whose deferred expressions are executing.
+// Zero means no deferred expressions are currently executing.
+static uint32_t executing_deferred_depth = 0;
+
 static Symbol* define_symbol_interface(
   const struct EvalSettingsInterface *self,
   const char *name,
@@ -139,6 +147,105 @@ static uint32_t find_sequence_jump_entry(
 
 static bool evaluate_expression(uint32_t current_expression_index, Datum *result);
 
+// Execute deferred expressions in reverse registration order.
+// Preserve the original evaluation result and pending control flow.
+static bool run_deferred_expressions(uint32_t defer_start) {
+  // No (defer)s to handle, done
+  if (deferred_expression_count == defer_start) return true;
+
+  // Preserve current sequence state first
+  EvalOutcome saved_outcome = eval_outcome;
+  Datum saved_result = eval_outcome.result;
+  uint32_t saved_jump_index = pending_jump_index;
+  uint32_t saved_resume_index = resume_target_index;
+  uint32_t saved_leave_count = pending_leave_count;
+  uint32_t saved_deferred_depth = executing_deferred_depth;
+
+  bool deferred_failure = false;
+
+  executing_deferred_depth = current_sequence_depth;
+
+  // Evaluate all (defer)s sequentially in reverse order (LIFO)
+  while (deferred_expression_count > defer_start) {
+    --deferred_expression_count; // Shift to last (defer) index
+    uint32_t expression_index = deferred_expression_indices[deferred_expression_count];
+
+    // Execute each deferred expression independently of the control flow
+    // that caused this sequence to terminate. Each (defer) sees its original
+    // sequence state (sort of, basically just evaluation result, (goto) and
+    // (leave) jumps are reset). Other (defer)s do not affect state of the others.
+    // N.B. Not considering variables (they can be mutated, and different
+    // (defer)s will observe these mutations).
+    eval_outcome = saved_outcome;
+    eval_outcome.kind = EVAL_OK;
+    eval_outcome.result = saved_result;
+    pending_jump_index = EXPR_NONE;
+    resume_target_index = EXPR_NONE;
+    pending_leave_count = 0;
+
+    // Evaluate the (defer) expression
+    Datum ignored_result = { .kind = SYM_EMPTY };
+    bool ok = evaluate_expression(expression_index, &ignored_result);
+
+    // Preserve only the first (defer) failure, but continue executing all defers
+    if (
+      (
+       !ok ||
+        eval_outcome.kind != EVAL_OK ||
+        // (defer)s cannot make jumps outside of their parent sequence scope
+        (pending_jump_index != EXPR_NONE || resume_target_index != EXPR_NONE) ||
+        // (defer)s cannot invoke (leave)s outside of their parent sequence
+        pending_leave_count != 0
+      ) && !deferred_failure
+    ) {
+      deferred_failure = true;
+
+      // Preserve an existing failure. Otherwise the first failure from
+      // deferred execution replaces the original control-flow outcome.
+      // A (defer)’s failure does not override their parent sequence failure.
+      // But first (defer)’s failure propagates to the evaluator (causing
+      // evaluation failure) when the sequence finishes successfully.
+      // When (defer) fails, other (defer)s (including upper in the scope) are
+      // still evaluated, though first failure becomes the evaluation failure,
+      // while next (defer) failures are just ignored.
+      if (saved_outcome.kind != EVAL_FAIL) {
+        if (eval_outcome.kind == EVAL_FAIL) {
+          saved_outcome = eval_outcome;
+        } else {
+          saved_outcome.kind = EVAL_FAIL;
+          snprintf(
+            saved_outcome.as.fail_msg,
+            sizeof(saved_outcome.as.fail_msg),
+            "(defer) deferred expression cannot interrupt its enclosing sequence"
+          );
+        }
+
+        // Override the result with failure
+        saved_outcome.result = saved_result;
+      }
+    }
+  }
+
+  // Restore the original state (except propagate first (defer) failure if there
+  // were any, while preserving original sequence failure if there was one which
+  // takes priority over (defer)’s failure)
+  executing_deferred_depth = saved_deferred_depth;
+  eval_outcome = saved_outcome;
+  pending_jump_index = saved_jump_index;
+  resume_target_index = saved_resume_index;
+  pending_leave_count = saved_leave_count;
+
+  if (deferred_failure) {
+    // A deferred failure cancels pending jumps, leaves, or exits.
+    // The evaluation failure is already stored in `eval_outcome`.
+    pending_jump_index = EXPR_NONE;
+    resume_target_index = EXPR_NONE;
+    pending_leave_count = 0;
+  }
+
+  return !deferred_failure;
+}
+
 // Evaluate top-level or `(do)` expressions sequence.
 // Also supports jumping into inactive nested `(do)` sequences.
 static bool evaluate_sequence(
@@ -147,6 +254,9 @@ static bool evaluate_sequence(
   bool is_top_level
 ) {
   uint32_t current_expression_index = first_expression_index;
+  uint32_t defer_start = deferred_expression_count;
+  bool ok = true;
+
   *result = (Datum) { .kind = SYM_EMPTY };
 
   // If re-entering a nested sequence, skip expressions preceding the target.
@@ -156,14 +266,16 @@ static bool evaluate_sequence(
 
     if (current_expression_index == EXPR_NONE) {
       report_evaluation_failure("(goto) cannot find nested jump destination");
-      return false;
+      ok = false;
+      goto finish;
     }
   }
 
   while (current_expression_index != EXPR_NONE) {
     if (current_expression_index >= expression_count) {
       report_evaluation_failure("Invalid expression index");
-      return false;
+      ok = false;
+      goto finish;
     }
 
     // The requested label has been reached. Resume ordinary evaluation.
@@ -179,11 +291,12 @@ static bool evaluate_sequence(
 
           if (pending_leave_count == 0) {
             *result = eval_outcome.result;
-            return true;
+            goto finish;
           }
         }
 
-        return false;
+        ok = false;
+        goto finish;
       }
 
       if (eval_outcome.kind == EVAL_OK && pending_jump_index != EXPR_NONE) {
@@ -211,7 +324,8 @@ static bool evaluate_sequence(
       }
 
       // Propagate a jump, failure, or exit to the enclosing sequence.
-      return false;
+      ok = false;
+      goto finish;
     }
 
     // Save the result of the most recently completed expression.
@@ -221,7 +335,11 @@ static bool evaluate_sequence(
     current_expression_index = expressions[current_expression_index].next;
   }
 
-  return true;
+  finish:
+    // Deferred expressions run before the enclosing `(do)` decreases
+    // `current_sequence_depth`.
+    if (!run_deferred_expressions(defer_start)) return false;
+    return ok;
 }
 
 static bool evaluate_expression(uint32_t current_expression_index, Datum *result) {
@@ -321,7 +439,7 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
 
       const char *function_name = allocation->data;
 
-      // Special forms: boolean conjunction and disjunction with short-circuiting.
+      // Special form: boolean conjunction and disjunction with short-circuiting.
       if (strcmp(function_name, "and") == 0 || strcmp(function_name, "or") == 0) {
         bool is_and = strcmp(function_name, "and") == 0;
         bool boolean_result = is_and; // `(and)` → true, `(or)` → false
@@ -439,6 +557,44 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
         }
 
         return evaluate_expression(selected_index, result);
+      }
+
+      // Special form: defer evaluation until the enclosing `(do)` terminates.
+      if (strcmp(function_name, "defer") == 0) {
+        uint32_t deferred_index = fn->next;
+
+        if (
+          deferred_index == EXPR_NONE ||
+          deferred_index >= expression_count ||
+          expressions[deferred_index].next != EXPR_NONE
+        ) {
+          report_evaluation_failure("(defer) expects exactly 1 expression");
+          return false;
+        }
+
+        if (current_sequence_depth == 0) {
+          report_evaluation_failure("(defer) requires an active (do) sequence");
+          return false;
+        }
+
+        // A deferred expression may create and use nested `(do)` sequences,
+        // but it cannot register another defer in the block already exiting.
+        if (executing_deferred_depth == current_sequence_depth) {
+          report_evaluation_failure("(defer) cannot register in an exiting (do) sequence");
+          return false;
+        }
+
+        if (deferred_expression_count >= EVAL_DEFER_CAPACITY) {
+          report_evaluation_failure("(defer) registration capacity reached");
+          return false;
+        }
+
+        deferred_expression_indices[deferred_expression_count] = deferred_index;
+        deferred_expression_count++;
+
+        // Registration does not evaluate the argument or replace the last value.
+        *result = eval_outcome.result;
+        return true;
       }
 
       // Special form: leave one or more enclosing `(do)` sequences.
@@ -693,20 +849,32 @@ EvalOutcome evaluate(
 }
 
 void clean_evaluation() {
+  // (label) & (goto)
   pending_jump_index = EXPR_NONE;
   resume_target_index = EXPR_NONE;
   current_native_call_expression_index = EXPR_NONE;
+
+  // (depth)
   current_sequence_depth = 0;
+
+  // (leave)
   pending_leave_count = 0;
 
+  // (defer)
+  deferred_expression_count = 0;
+  executing_deferred_depth = 0;
+  wipe_memory(deferred_expression_indices, sizeof(deferred_expression_indices));
+
+  // Runtime allocations
   for (uint32_t i = 0; i < runtime_allocation_count; ++i) {
     EvalRuntimeAllocation *allocation = &runtime_allocations[i];
     wipe_memory(allocation->data, allocation->size);
     free(allocation->data);
   }
-
   runtime_allocation_count = 0;
   wipe_memory(runtime_allocations, sizeof(runtime_allocations));
+
+  // Eval outcome
   wipe_memory(&eval_outcome, sizeof(eval_outcome));
 }
 

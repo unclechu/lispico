@@ -32,7 +32,11 @@ static_assert(
 // Maximum arguments limit for an expression to have
 #define EVAL_ARG_CAPACITY 16u
 
+// Maximum amount of dynamically allocated runtime entities
 #define EVAL_RUNTIME_ALLOCATION_CAPACITY 256u
+
+// Maximum number of simultaneously registered deferred expressions
+#define EVAL_DEFER_CAPACITY 256u
 
 // *** Parsing ***
 
