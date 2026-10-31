@@ -66,8 +66,8 @@ run_test() {
 
   if (( $# != 2 )); then
     >&2 printf \
-      '[CRITICAL FAIL] run_test: Unexpected amount of arguments, expects exactly 2 but got: %d\n' \
-      "$#"
+      '%s[CRITICAL FAIL]%s run_test: Unexpected amount of arguments, expects exactly 2 but got: %d\n' \
+      "$E_FAIL_COLOR" "$E_RESET_COLOR" "$#"
     return 1
   fi
 

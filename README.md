@@ -544,6 +544,12 @@ $ tests/run-examples.sh
 $ tests/run-c.sh
 ```
 
+Measure time and memory usage for all examples individually:
+
+```sh
+nix-shell --run './build.sh && tests/measure-examples.sh'
+```
+
 ## Local Vim configuration example
 
 ```vim

@@ -15,6 +15,10 @@ let
       pkgs.gcc
       pkgs.pkg-config
       pkgs.shellcheck
+
+      # For testing scripts
+      pkgs.time # For memory footprint measurements and evaluation time
+      pkgs.gawk
     ];
   };
 
