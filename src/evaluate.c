@@ -298,6 +298,64 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
 
       const char *function_name = allocation->data;
 
+      // Special forms: boolean conjunction and disjunction with short-circuiting.
+      if (strcmp(function_name, "and") == 0 || strcmp(function_name, "or") == 0) {
+        bool is_and = strcmp(function_name, "and") == 0;
+        bool boolean_result = is_and; // `(and)` → true, `(or)` → false
+
+        uint32_t arg_index = fn->next;
+
+        while (arg_index != EXPR_NONE) {
+          if (arg_index >= expression_count) {
+            report_evaluation_failure("Invalid argument expression index");
+            return false;
+          }
+
+          Datum condition = { .kind = SYM_EMPTY };
+          if (!evaluate_expression(arg_index, &condition)) return false;
+
+          if (condition.kind != SYM_VARIABLE) {
+            report_evaluation_failure(
+              is_and
+                ? "(and) condition must be a numeric value"
+                : "(or) condition must be a numeric value"
+            );
+            return false;
+          }
+
+          bool is_true;
+          switch (condition.as.value.type) {
+            case TYPE_U32: is_true = condition.as.value.as.u32 != 0; break;
+            case TYPE_I32: is_true = condition.as.value.as.i32 != 0; break;
+            case TYPE_F32: is_true = condition.as.value.as.f32 != 0.0f; break;
+            default:
+              report_evaluation_failure(
+                is_and
+                  ? "(and) condition must be a numeric value"
+                  : "(or) condition must be a numeric value"
+              );
+              return false;
+          }
+
+          boolean_result = is_true;
+
+          // Stop at the first false for `(and)`, or first true for `(or)`.
+          if (is_and ? !is_true : is_true) break;
+
+          arg_index = expressions[arg_index].next;
+        }
+
+        *result = (Datum) {
+          .kind = SYM_VARIABLE,
+          .as.value = {
+            .type = TYPE_U32,
+            .as.u32 = boolean_result ? 1u : 0u,
+          },
+        };
+
+        return true;
+      }
+
       // Special form: evaluate the condition, then only the selected branch.
       if (strcmp(function_name, "if") == 0) {
         // Require a condition and a true branch; false branch is optional.
