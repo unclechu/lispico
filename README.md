@@ -429,6 +429,27 @@ features:
       (* (+ (+ 1 2) 4) 2) ; 14
       ```
 
+    + Sequence nesting depth
+
+      + `(depth)` — Returns the current nesting level of `(do)` sequences as
+        `u32`.
+
+      + Top-level evaluation starts at depth `0`. Each nested `(do)` increments
+        the depth by `1`.
+
+      + Examples:
+        + `(depth)` → `0`
+        + `(do (depth))` → `1`
+        + `(do (do (depth)))` → `2`
+        + `(if true (depth))` → `0`
+
+      + `(if)`, `(and)`, `(or)`, and ordinary native function calls do not
+        increment the nesting depth themselves.
+
+      + The depth is restored when leaving a sequence, including when evaluation
+        stops due to `(goto)`, `(exit)`, or an evaluation failure. Jumping back
+        into nested sequences restores the corresponding nesting depth.
+
   * Assertions
 
     + `(assert (== 10 (+ 5 5)) "Arithmetic failed")` → Success
@@ -488,6 +509,58 @@ features:
 - When you need to pass input values for the program you just pre-populate the
   symbols/definitions hash-table with values that can be read then inside the
   program
+
+- Shebang support
+
+  The parser recognizes a shebang (`#!`) only at the very beginning of the
+  source file. The entire first line is ignored.
+
+  Example: `#!/usr/bin/env lispico`
+
+  This allows Lispico programs to be executed directly as scripts when the
+  source file is executable and `lispico` is available through `PATH`.
+
+  Shebang lines count toward source line numbering for parser errors.
+
+- Sleep functions
+
+  * `(sleep-s SECONDS)` — Sleep for the specified number of seconds.
+  * `(sleep-ms MILLISECONDS)` — Sleep for the specified number of milliseconds.
+  * `(sleep-us MICROSECONDS)` — Sleep for the specified number of microseconds.
+
+  * Semantics and behavior
+
+    + All three functions accept `u32`, `i32`, and `f32` numeric values.
+
+    + Fractional values are supported and converted into the corresponding
+      duration.
+
+      Examples:
+      + `(sleep-s 0.5)` → Sleep for approximately 500 milliseconds
+      + `(sleep-ms 1.5)` → Sleep for approximately 1500 microseconds
+      + `(sleep-us 1.5)` → Sleep for approximately 1500 nanoseconds
+
+    + Zero durations are allowed and do not cause an intentional delay.
+
+    + Negative values, non-finite values, and durations exceeding the supported
+      range cause an evaluation failure.
+
+    + The maximum supported duration is `UINT32_MAX` seconds.
+
+    + Sleep functions forward the last successfully evaluated value without
+      replacing it with the sleep duration or an empty result. If no previous
+      nonempty evaluation result is available, they return `SYM_EMPTY`.
+
+      For example, `123 (sleep-ms 0.5)` returns `123` as its final value.
+
+    + Sleep functions suspend the executing thread. Actual elapsed time may be
+      longer than requested due to operating system scheduling and timer
+      resolution.
+
+    + The initial implementation uses POSIX `nanosleep()` on desktop systems
+      and resumes sleeping when interrupted by signals.
+
+      **TODO** Raspberry Pi Pico support will be implemented separately.
 
 ### Undefined behavior
 
