@@ -1,0 +1,86 @@
+; Leave the nearest (do)
+(assert (== (do
+  123
+  (leave)
+  456
+) 123))
+
+; Leave exactly one level
+(var "counter" 0)
+
+(do
+  (do
+    (set "counter" 1)
+    (leave 1)
+    (set "counter" 2))
+
+  (set "counter" (+ counter 10)))
+
+(assert (== counter 11))
+
+; Leave exactly two levels
+(set "counter" 0)
+
+(do
+  (do
+    (set "counter" 1)
+    (leave 2)
+    (set "counter" 2))
+
+  (set "counter" 3))
+
+(assert (== counter 1))
+
+; Leave all active (do) sequences using (depth)
+(set "counter" 0)
+
+(do
+  (do
+    (do
+      (set "counter" 1)
+      (leave (depth))
+      (set "counter" 2))
+
+    (set "counter" 3))
+
+  (set "counter" 4))
+
+(assert (== counter 1))
+(assert (== (depth) 0))
+
+; Leave from an (if) branch
+(set "counter" 0)
+
+(do
+  (do
+    (if true (leave 2))
+    (set "counter" 1))
+
+  (set "counter" 2))
+
+(assert (== counter 0))
+
+; Leave from an (and) condition
+(set "counter" 0)
+
+(do
+  (and true (leave))
+  (set "counter" 1))
+
+(assert (== counter 0))
+
+; Leave from an (or) condition
+(do
+  (or false (leave))
+  (exit 1 "Should not execute"))
+
+; Leave while evaluating native function arguments
+(do
+  (+ 1 (leave))
+  (exit 1 "Should not execute"))
+
+; Evaluator continues normally after leaving sequences
+(do
+  (assert (== (depth) 1)))
+
+(assert (== (depth) 0))

@@ -23,7 +23,6 @@ written in C. That's also where the name comes from: LISP-like + Pico.
     + Memory cleanup and repeated evaluation tests
     + Tests for expression, symbol, and allocation capacity limits
 
-  * `(leave)` for breaking/leaving a sequence early
   * `(defer)` for evaluating an expression when leaving a sequence
 
   * Extra string manipulations:

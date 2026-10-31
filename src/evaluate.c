@@ -51,6 +51,10 @@ static uint32_t runtime_allocation_count = 0;
 // Top-level evaluation starts at 0.
 static uint32_t current_sequence_depth = 0;
 
+// Number of `(do)` sequences that `(leave)` still needs to terminate.
+// Zero means there is no pending leave request.
+static uint32_t pending_leave_count = 0;
+
 static Symbol* define_symbol_interface(
   const struct EvalSettingsInterface *self,
   const char *name,
@@ -168,6 +172,20 @@ static bool evaluate_sequence(
     }
 
     if (!evaluate_expression(current_expression_index, result)) {
+      // Propagate `(leave)` through the requested number of `(do)` sequences.
+      if (pending_leave_count != 0) {
+        if (!is_top_level) {
+          pending_leave_count--;
+
+          if (pending_leave_count == 0) {
+            *result = eval_outcome.result;
+            return true;
+          }
+        }
+
+        return false;
+      }
+
       if (eval_outcome.kind == EVAL_OK && pending_jump_index != EXPR_NONE) {
         // Check whether this sequence can handle the requested jump,
         // either directly or through one of its nested (do) expressions.
@@ -423,6 +441,51 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
         return evaluate_expression(selected_index, result);
       }
 
+      // Special form: leave one or more enclosing `(do)` sequences.
+      if (strcmp(function_name, "leave") == 0) {
+        uint32_t arg_index = fn->next;
+
+        if (
+          arg_index != EXPR_NONE &&
+          (arg_index >= expression_count || expressions[arg_index].next != EXPR_NONE)
+        ) {
+          report_evaluation_failure("(leave) expects 0 or 1 arguments");
+          return false;
+        }
+
+        if (current_sequence_depth == 0) {
+          report_evaluation_failure("(leave) requires an active (do) sequence");
+          return false;
+        }
+
+        uint32_t leave_count = 1;
+
+        if (arg_index != EXPR_NONE) {
+          Datum arg = { .kind = SYM_EMPTY };
+          if (!evaluate_expression(arg_index, &arg)) return false;
+
+          if (arg.kind != SYM_VARIABLE || arg.as.value.type != TYPE_U32) {
+            report_evaluation_failure("(leave) argument must be u32");
+            return false;
+          }
+
+          leave_count = arg.as.value.as.u32;
+        }
+
+        if (leave_count == 0) {
+          report_evaluation_failure("(leave) count must be greater than 0");
+          return false;
+        }
+
+        if (leave_count > current_sequence_depth) {
+          report_evaluation_failure("(leave) count exceeds current (depth)");
+          return false;
+        }
+
+        pending_leave_count = leave_count;
+        return false;
+      }
+
       // Special form: evaluate child expressions sequentially.
       if (strcmp(function_name, "do") == 0) {
         current_sequence_depth++;
@@ -634,6 +697,7 @@ void clean_evaluation() {
   resume_target_index = EXPR_NONE;
   current_native_call_expression_index = EXPR_NONE;
   current_sequence_depth = 0;
+  pending_leave_count = 0;
 
   for (uint32_t i = 0; i < runtime_allocation_count; ++i) {
     EvalRuntimeAllocation *allocation = &runtime_allocations[i];
