@@ -73,3 +73,5 @@ void request_evaluation_jump(uint32_t instruction_index);
 // Memory is tracked by the evaluator and freed by `clean_evaluation`.
 // The caller must not free the returned pointer.
 void *allocate_runtime_data(size_t size);
+
+uint32_t get_current_sequence_depth(void);

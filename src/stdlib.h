@@ -22,6 +22,9 @@ ADD_STDLIB_FN_TYPE_DEF(std_type);
 ADD_STDLIB_FN_TYPE_DEF(std_type_of);
 ADD_STDLIB_FN_TYPE_DEF(std_kind_of);
 
+// Sequences
+ADD_STDLIB_FN_TYPE_DEF(std_depth);
+
 // Printing functions
 Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc);
 ADD_STDLIB_FN_TYPE_DEF(std_print);

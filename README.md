@@ -23,8 +23,6 @@ written in C. That's also where the name comes from: LISP-like + Pico.
     + Memory cleanup and repeated evaluation tests
     + Tests for expression, symbol, and allocation capacity limits
 
-  * Get current nesting level `(depth)` (`u32`, 0+)
-
   * Sleep functions
     + `(sleep-s SECONDS)`
     + `(sleep-ms MILLISECONDS)`

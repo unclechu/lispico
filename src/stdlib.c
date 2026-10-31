@@ -353,6 +353,22 @@ Datum std_kind_of(const Datum *args, size_t argc) {
     return return_value;
 }
 
+// (depth) — Get the current `(do)` sequence nesting level
+Datum std_depth(const Datum*, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "depth";
+
+  if (!validate_argc(fn_name, &fail_msg, 0, argc)) return return_value;
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = { .type = TYPE_U32, .as.u32 = get_current_sequence_depth() },
+  };
+
+  return return_value;
+}
+
 // Generic standard library printing implementation
 Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
@@ -1096,6 +1112,9 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   // Type inspection
   ADD_FN_SYMBOL("type-of", std_type_of);
   ADD_FN_SYMBOL("kind-of", std_kind_of);
+
+  // Sequences
+  ADD_FN_SYMBOL("depth", std_depth);
 
   // Printing
   ADD_FN_SYMBOL("print", std_print);

@@ -43,8 +43,13 @@ static uint32_t pending_jump_index = EXPR_NONE;
 // Cleared once the destination expression is reached.
 static uint32_t resume_target_index = EXPR_NONE;
 
+// Runtime dynamic memory allocations storage
 static EvalRuntimeAllocation runtime_allocations[EVAL_RUNTIME_ALLOCATION_CAPACITY];
 static uint32_t runtime_allocation_count = 0;
+
+// Current nesting level of `(do)` sequences.
+// Top-level evaluation starts at 0.
+static uint32_t current_sequence_depth = 0;
 
 static Symbol* define_symbol_interface(
   const struct EvalSettingsInterface *self,
@@ -420,7 +425,10 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
 
       // Special form: evaluate child expressions sequentially.
       if (strcmp(function_name, "do") == 0) {
-        return evaluate_sequence(fn->next, result, false);
+        current_sequence_depth++;
+        bool ok = evaluate_sequence(fn->next, result, false);
+        current_sequence_depth--;
+        return ok;
       }
 
       // Resolve the function from the existing global symbol table.
@@ -625,6 +633,7 @@ void clean_evaluation() {
   pending_jump_index = EXPR_NONE;
   resume_target_index = EXPR_NONE;
   current_native_call_expression_index = EXPR_NONE;
+  current_sequence_depth = 0;
 
   for (uint32_t i = 0; i < runtime_allocation_count; ++i) {
     EvalRuntimeAllocation *allocation = &runtime_allocations[i];
@@ -677,4 +686,8 @@ void* allocate_runtime_data(size_t size) {
 
   runtime_allocation_count++;
   return data;
+}
+
+uint32_t get_current_sequence_depth(void) {
+  return current_sequence_depth;
 }
