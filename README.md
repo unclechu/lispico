@@ -3,7 +3,7 @@
 A small, explicitly typed LISP-like interpreter for embedded systems and
 desktops.
 
-**WORK IN PROGRESS: Not all features are implemented yet.**
+**WORK IN PROGRESS: Not all first-release features are implemented yet.**
 
 This is not a conventional LISP interpreter. It borrows LISP's S-expression
 syntax primarily for its parsing simplicity and compatibility with existing
@@ -23,6 +23,10 @@ written in C. That's also where the name comes from: LISP-like + Pico.
     + Memory cleanup and repeated evaluation tests
     + Tests for expression, symbol, and allocation capacity limits
 
+  * Get current nesting level `(depth)` (`u32`, 0+)
+  * Get type of a value `(type-of VALUE)` (`u32`, numeric representation of `ValueType`)
+  * Shebang support for the parser (`#!/usr/bin/env lispico`)
+
   * Extra string manipulations:
     + `(str-size)`
     + `(str-char)`
@@ -30,6 +34,8 @@ written in C. That's also where the name comes from: LISP-like + Pico.
     + `(str-set)`
     + `(str-new)`
     + `(str-copy)`
+
+  * Split printing functions as optional ones from basic stdlib
 
   * Evaluator: Handle maximum evaluation recursion depth / stack exhaustion
 
@@ -59,6 +65,16 @@ written in C. That's also where the name comes from: LISP-like + Pico.
     + `--source-file` For input source file (reading from `/dev/stdin` by default)
     + `--` Raw arguments separator for arguments passing for the script only
       (`args` variable, C `argv`/`argc` are already passed to the script)
+
+- **TODO** For next releases
+  * Runtime manually invoked GC for runtime-allocated entities
+  * Pseudo-scoped variables vs. global ones
+  * Macroses/functions
+  * Sub-process invocation stdlib functions (spawning, capturing)
+  * File reading & writing stdlib functions
+  * Streamed parsing + evaluation
+  * REPL
+  * Linked lists (maybe cons-lists?)
 
 To keep the implementation simple, the language supports only a limited set of
 features:
