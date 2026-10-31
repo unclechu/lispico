@@ -19,6 +19,8 @@ typedef enum {
 ADD_STDLIB_FN_TYPE_DEF(std_last_val);
 
 ADD_STDLIB_FN_TYPE_DEF(std_type);
+ADD_STDLIB_FN_TYPE_DEF(std_type_of);
+ADD_STDLIB_FN_TYPE_DEF(std_kind_of);
 
 // Printing functions
 Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc);

@@ -283,6 +283,76 @@ Datum std_type(const Datum *args, size_t argc) {
     return return_value;
 }
 
+// (type-of) — Get the `ValueType` of a primitive value or string
+Datum std_type_of(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "type-of";
+
+  if (!validate_argc(fn_name, &fail_msg, 1, argc)) return return_value;
+
+  ValueType type;
+  switch (args[0].kind) {
+    case SYM_EMPTY: type = TYPE_VOID; break;
+    case SYM_VARIABLE: type = args[0].as.value.type; break;
+    default:
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) expects a primitive value or string, got instead: %s",
+        fn_name,
+        show_SymbolKind(args[0].kind)
+      );
+      goto fail;
+  }
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = { .type = TYPE_U32, .as.u32 = (uint32_t)type },
+  };
+
+  return return_value;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
+static bool get_variable_name(const Datum *datum, char (*name)[SYMBOL_NAME_SIZE]);
+
+// (kind-of) — Get the `SymbolKind` of a registered name
+Datum std_kind_of(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "kind-of";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (!validate_argc(fn_name, &fail_msg, 1, argc)) return return_value;
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
+    goto fail;
+  }
+
+  const Symbol *symbol = symbol_lookup(symbol_name);
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = {
+      .type = TYPE_U32,
+      .as.u32 = (uint32_t)(symbol == NULL ? SYM_EMPTY : symbol->kind),
+    },
+  };
+
+  return return_value;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // Generic standard library printing implementation
 Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
@@ -1007,13 +1077,25 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   ADD_FN_SYMBOL("last-val", std_last_val);
 
   // Type identifiers
+  ADD_VAR_SYMBOL("void", TYPE_U32, u32, TYPE_VOID);
   ADD_VAR_SYMBOL("u32", TYPE_U32, u32, TYPE_U32);
   ADD_VAR_SYMBOL("i32", TYPE_U32, u32, TYPE_I32);
   ADD_VAR_SYMBOL("f32", TYPE_U32, u32, TYPE_F32);
   ADD_VAR_SYMBOL("s", TYPE_U32, u32, TYPE_STRING);
 
+  // Kind identifiers
+  ADD_VAR_SYMBOL("empty-kind", TYPE_U32, u32, SYM_EMPTY);
+  ADD_VAR_SYMBOL("var-kind", TYPE_U32, u32, SYM_VARIABLE);
+  ADD_VAR_SYMBOL("arr-kind", TYPE_U32, u32, SYM_ARRAY);
+  ADD_VAR_SYMBOL("label-kind", TYPE_U32, u32, SYM_LABEL);
+  ADD_VAR_SYMBOL("native-fn-kind", TYPE_U32, u32, SYM_NATIVE_FUNCTION);
+
   // Type conversion
   ADD_FN_SYMBOL("type", std_type);
+
+  // Type inspection
+  ADD_FN_SYMBOL("type-of", std_type_of);
+  ADD_FN_SYMBOL("kind-of", std_kind_of);
 
   // Printing
   ADD_FN_SYMBOL("print", std_print);

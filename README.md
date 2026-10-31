@@ -24,7 +24,6 @@ written in C. That's also where the name comes from: LISP-like + Pico.
     + Tests for expression, symbol, and allocation capacity limits
 
   * Get current nesting level `(depth)` (`u32`, 0+)
-  * Get type of a value `(type-of VALUE)` (`u32`, numeric representation of `ValueType`)
   * Shebang support for the parser (`#!/usr/bin/env lispico`)
 
   * Sleep functions
