@@ -493,6 +493,7 @@ features:
   - `(if)`
   - `(and)`
   - `(or)`
+  - `(leave)`
 
 - Comments
 
@@ -556,6 +557,66 @@ features:
       and resumes sleeping when interrupted by signals.
 
       **TODO** Raspberry Pi Pico support will be implemented separately.
+
+* Leaving sequences early
+
+  + `(leave [COUNT])` — Immediately terminates one or more active `(do)`
+    sequences.
+
+  + `(leave)` is an evaluator special form, not an ordinary native function.
+
+  + `COUNT` is an optional evaluated expression that must produce a `u32` value.
+
+    + When omitted, `COUNT` defaults to `1`, terminating the nearest `(do)`.
+    + A positive `COUNT` terminates exactly that many enclosing `(do)`
+      sequences.
+    + `COUNT` greater than `(depth)` causes an evaluation failure.
+    + `COUNT` equal to `0` causes an evaluation failure.
+
+  + `(leave)` requires at least one active `(do)` sequence. Calling it at the
+    top level causes an evaluation failure.
+
+  + Expressions following `(leave)` in any terminated sequence are skipped.
+    Evaluation resumes after the outermost terminated `(do)` expression.
+
+  + `(leave)` preserves the last successfully evaluated value. If there is no
+    previous nonempty value, the resulting value is `SYM_EMPTY`.
+
+  + `(leave)` can be used inside `(if)`, `(and)`, `(or)`, and native function
+    arguments. It interrupts the current expression and propagates through
+    the requested number of enclosing `(do)` sequences.
+
+  + `(depth)` is restored as each sequence is terminated.
+
+  + Examples:
+
+    ```lisp
+    ; Leave only the nearest sequence
+    (do
+      (leave)
+      (println "Never printed"))
+
+    ; Leave two nested sequences
+    (do
+      (do
+        (leave 2)
+        (println "Never printed"))
+      (println "Also never printed"))
+
+    (println "Evaluation continues here")
+
+    ; Leave all active sequences
+    (do
+      (do
+        (do
+          (leave (depth))
+          (println "Never printed"))))
+    ```
+
+  + `(leave)` differs from `(goto)` and `(exit)`:
+    + `(leave)` terminates the requested number of enclosing `(do)` sequences.
+    + `(goto)` transfers evaluation to a registered label.
+    + `(exit)` terminates evaluation of the entire program.
 
 ### Undefined behavior
 
