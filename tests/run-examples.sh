@@ -14,6 +14,9 @@ cd -- "$SCRIPT_DIR/.." # Switch to project root
 
 : "${LISPICO_EXECUTABLE:=./lispico}"
 
+LISPICO_EXECUTABLE_NAME=${LISPICO_EXECUTABLE##*/}
+LISPICO_EXECUTABLE_DIR=$(dirname -- "$LISPICO_EXECUTABLE")
+
 # Guard dependencies
 if [[ ! -x "$LISPICO_EXECUTABLE" ]]; then
   >&2 printf "“%s” is not an executable (did you run “./build.sh” first?)\n" "$LISPICO_EXECUTABLE"
@@ -49,6 +52,13 @@ else
   # E_SECONDARY_COLOR=$'\033[1m'
   E_FAIL_COLOR=$'\033[1;37;41m'
   # E_PASS_COLOR=$'\033[32m'
+fi
+
+if [[ $LISPICO_EXECUTABLE_NAME != lispico ]]; then
+  >&2 printf \
+    "%sWARNING!%s Lispico executable name is not “lispico” but “%s” (shebang test will fail!)\n" \
+    "$E_FAIL_COLOR" "$E_RESET_COLOR" \
+    "${E_FAIL_COLOR}${LISPICO_EXECUTABLE_NAME}${E_RESET_COLOR}"
 fi
 
 cleanup() {
@@ -93,7 +103,12 @@ run_test() {
     expected_exit_code=$(< "$EXPECTED_EXITCODE_FILE")
   fi
 
-  "$LISPICO_EXECUTABLE" "$SOURCE" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" || actual_exit_code=$?
+  if [[ ${NAME##*/} == shebang.lisp ]]; then
+    PATH="$LISPICO_EXECUTABLE_DIR:$PATH" \
+      "$PWD/$SOURCE" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" || actual_exit_code=$?
+  else
+    "$LISPICO_EXECUTABLE" "$SOURCE" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" || actual_exit_code=$?
+  fi
 
   if (( actual_exit_code != expected_exit_code )); then
     >&2 printf '  Exit status: expected “%s”, got “%s”\n' "$expected_exit_code" "$actual_exit_code"

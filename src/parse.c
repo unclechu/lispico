@@ -375,6 +375,12 @@ bool parse_source(const char *source, size_t length, char (*error)[ERR_MSG_SIZE]
     .error = error,
   };
 
+  // Skip a shebang line, if present at the beginning of the source
+  if (starts_with(&parser, '#', '!')) {
+    while (parser.position < parser.length && current_char(&parser) != '\n')
+      advance(&parser);
+  }
+
   uint32_t previous_expression_index = EXPR_NONE;
 
   for (;;) {
