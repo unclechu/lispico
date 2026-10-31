@@ -111,6 +111,13 @@ features:
   * `-2147483648` → OK
   * `-2147483649` (`i32` that is smaller than `INT32_MIN`) → Failure
 
+- Booleans
+
+  There are no real booleans in the language, there is no boolean type.
+  Booleans work similar to C `bool`. `0` (`u32`) means false and anything but
+  `0` means true. There are `true` (`u32` `1`) and `false` (`u32` `0`) variables
+  defined in the stdlib. `(if)` accepts a numeric value as a condition.
+
 - Strings
 
   * Semantics and behavior
@@ -355,6 +362,33 @@ features:
       (+ 1 2)
       (+ 3 4) ; Program returns 7
       ```
+
+    + Each expression has a resulting value. And in a sequence there is a helper
+      `(last-val)` that lets you to read that last evaluation result. So without
+      nesting expressions you can manipulate the value sequentially:
+
+      ```lisp
+      (+ 1 2) ; 3
+      (+ (last-val) 4) ; 7
+      (* (last-val) 2) ; 14
+      ```
+
+      Compared to:
+
+      ```lisp
+      (* (+ (+ 1 2) 4) 2) ; 14
+      ```
+
+  * Assertions
+
+    + `(assert (== 10 (+ 5 5)) "Arithmetic failed")` → Success
+
+    + `(assert (== (+ 2 2) 5) "Two plus two should equal five")` →
+      Evaluation failure with error message:
+      `(assert) assertion failed: Two plus two should equal five`
+
+    + `(assert (== (+ 2 2) 5))` →
+      Evaluation failure with error message: `(assert) assertion failed`
 
 - Comments
 
