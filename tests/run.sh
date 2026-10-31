@@ -50,6 +50,15 @@ else
   (( failed += 1 ))
 fi
 
+echo '=== Running examples time and memory measurements ======================'
+if (set -o xtrace; tests/measure-examples.sh); then
+  printf '%s[PASS]%s Examples time and memory measurements passed\n' "$O_PASS_COLOR" "$O_RESET_COLOR"
+  (( passed += 1 ))
+else
+  >&2 printf '%s[FAIL]%s Examples time and memory measurements failed\n' "$E_FAIL_COLOR" "$E_RESET_COLOR"
+  (( failed += 1 ))
+fi
+
 echo '=== Running C tests ===================================================='
 if (set -o xtrace; tests/run-c.sh); then
   printf '%s[PASS]%s C tests passed\n' "$O_PASS_COLOR" "$O_RESET_COLOR"
