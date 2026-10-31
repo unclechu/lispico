@@ -23,6 +23,7 @@ written in C. That's also where the name comes from: LISP-like + Pico.
     + Memory cleanup and repeated evaluation tests
     + Tests for expression, symbol, and allocation capacity limits
 
+  * Boolean conjunction/disjunction functions (`(and)` and `(or)`)
   * Get current nesting level `(depth)` (`u32`, 0+)
   * Get type of a value `(type-of VALUE)` (`u32`, numeric representation of `ValueType`)
   * Shebang support for the parser (`#!/usr/bin/env lispico`)
@@ -222,6 +223,8 @@ features:
   * `(arr-get "foo" 0)` to get an array element by index 0
   * `(arr-set "foo" 0 123)` to set an array element by index 0 to `123` value
   * `(arr-size "foo")` to get `foo` array size (e.g. `16` of `u32` type)
+  * `(arr-type "foo")` to get the type of array element
+    (e.g. `(assert (== (arr-type "foo") u32) "“foo” array item type must be u32")`)
 
 - There are no user-defined functions (at least for now)
 
@@ -322,6 +325,50 @@ features:
       comparisons are case-sensitive, and lexicographic ordering compares bytes,
       not human-language alphabetical order.
 
+    + Conjunctions and disjunctions
+
+      + `(and (< 1 2) (> 4 3))` → equals to `true` (`u32`)
+      + `(or (< 1 2) (== 4 3))` → equals to `true` (`u32`)
+
+      + Invariants:
+        + `(and true true)` → equals to `true` (`u32`)
+        + `(and true true true)` → equals to `true` (`u32`)
+        + `(and true false)` → equals to `false` (`u32`)
+        + `(and true false true)` → equals to `false` (`u32`)
+        + `(or false true)` → equals to `true` (`u32`)
+        + `(or false true false)` → equals to `true` (`u32`)
+        + `(or false false)` → equals to `false` (`u32`)
+        + `(or false false false)` → equals to `false` (`u32`)
+        + `(and true)` → equals to `true` (`u32`)
+        + `(and false)` → equals to `false` (`u32`)
+        + `(or true)` → equals to `true` (`u32`)
+        + `(or false)` → equals to `false` (`u32`)
+        + `(and)` → equals to `true` (`u32`)
+        + `(or)` → equals to `false` (`u32`)
+
+      + Truthiness rules (conditions accept different numeric types):
+        + `(and 123 -1 0.5)` → equals to `true` (`u32`)
+        + `(or 0 0.0 42)` → equals to `true` (`u32`)
+        + `(and 123 0)` → equals to `false` (`u32`)
+
+      + Invalid cases:
+        + `(and true "hello")` → Evaluation failure (strings are not accepted)
+        + `(or false "hello")` → Evaluation failure (strings are not accepted)
+
+      + `(and)` and `(or)` are evaluator special forms with short-circuit
+        evaluation. `(and)` stops at the first false condition, while `(or)`
+        stops at the first true condition. Remaining expressions are not
+        evaluated.
+
+        + Short-circuit examples:
+
+          Even though strings are not accepted in these examples they do not
+          cause evaluation failure because they are not evaluated due to `(and)`
+          and `(or)` short-circuiting early.
+
+          + `(and false "hello")` equals to `false` (`u32`)
+          + `(or true "hello")` equals to `true` (`u32`)
+
   * Strings
 
     + Literals
@@ -397,6 +444,44 @@ features:
 
     + `(assert (== (+ 2 2) 5))` →
       Evaluation failure with error message: `(assert) assertion failed`
+
+  * Type inspection
+
+    + Primitives and strings (`(type-of VALUE)`)
+      + `(type-of 123)` → equals to `u32`
+      + `(type-of -123)` → equals to `i32`
+      + `(type-of 123.)` → equals to `f32`
+      + `(type-of true)` → equals to `u32`
+      + `(type-of false)` → equals to `u32`
+      + `(type-of "foo")` → equals to `s`
+      + `(var "foo" 123) (type-of foo)` → equals to `u32`
+      + `(arr-new "foo" u32 16) (type-of foo)` → Evaluation failure
+        (dereferenced `foo` array is not a primitive or a string)
+      + `(type-of (if false 123))` → equals to `void`
+
+    + Variables (`(kind-of "NAME")`)
+      + `(kind-of "unknown")` → equals to `empty-kind`
+        (useful for checking if variable is defined:
+        `(if (== (kind-of "unknown") empty-kind) (println "Variable “unknown” is not defined"))`)
+      + `(kind-of "u32")` → equals to `var-kind`
+      + `(kind-of "+")` → equals to `native-fn-kind`
+        (note that evaluator special form entities are not recognized as
+        variables, so `(kind-of "do")` or `(kind-of "if")` would be equal to
+        `empty-kind`)
+      + `(label "foo") (kind-of "foo")` → equals to `label-kind`
+      + `(arr-new "foo" u32 16) (kind-of "foo")` → equals to `arr-kind`
+        (you can check that a variable is an array of `u32`:
+        `(assert (and (== (kind-of "foo") arr-kind) (== (arr-type "foo") u32)) "Must be an array of u32")`)
+
+- Special forms
+
+  Most stdlib functions live in a shared variable namespace, but there are a few
+  special evaluator forms (exceptions to this rule):
+
+  - `(do)`
+  - `(if)`
+  - `(and)`
+  - `(or)`
 
 - Comments
 
