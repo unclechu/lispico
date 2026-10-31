@@ -23,8 +23,6 @@ written in C. That's also where the name comes from: LISP-like + Pico.
     + Memory cleanup and repeated evaluation tests
     + Tests for expression, symbol, and allocation capacity limits
 
-  * `(defer)` for evaluating an expression when leaving a sequence
-
   * Extra string manipulations:
     + `(str-size)`
     + `(str-char)`
@@ -493,6 +491,7 @@ features:
   - `(and)`
   - `(or)`
   - `(leave)`
+  - `(defer)`
 
 - Comments
 
@@ -616,6 +615,354 @@ features:
     + `(leave)` terminates the requested number of enclosing `(do)` sequences.
     + `(goto)` transfers evaluation to a registered label.
     + `(exit)` terminates evaluation of the entire program.
+
+* Deferred expressions
+
+  + `(defer EXPR)` — Registers an expression to be evaluated when the nearest
+    enclosing `(do)` sequence terminates.
+
+  + `(defer)` is an evaluator special form, not an ordinary native function.
+
+  + `(defer)` takes exactly one expression. The expression is not evaluated
+    during registration; it is evaluated when its enclosing `(do)` terminates.
+
+  + Calling `(defer)` outside an active `(do)` sequence causes an evaluation
+    failure.
+
+  + Semantics and behavior
+
+    + Deferred expressions belong to the particular active `(do)` sequence in
+      which they were registered.
+
+      Example: `(do (defer (println "Outer")) (do (defer (println "Inner"))))`
+      prints `Inner`, then `Outer`.
+
+    + Multiple deferred expressions execute in reverse registration order
+      (last-in, first-out; LIFO).
+
+      Example: `(do (defer (println "First")) (defer (println "Second")))`
+      prints `Second`, then `First`.
+
+    + Deferred expressions execute when their sequence terminates:
+      + After normal completion of the sequence.
+
+        Example: `(do (defer (println "Cleanup")) 123)` prints `Cleanup`
+        after evaluating `123`.
+
+      + When `(leave)` terminates the sequence.
+
+        Example: `(do (defer (println "Cleanup")) (leave))` prints `Cleanup`.
+
+      + When `(goto)` transfers evaluation outside the sequence.
+
+        Example:
+
+        ```lisp
+        (var "counter" 0)
+        (label "outside")
+        (if (== counter 0)
+          (do
+            (defer (println "Cleanup"))
+            (set "counter" 1)
+            (goto outside)))
+        ```
+
+        Prints `Cleanup` before jumping to `outside`.
+
+      + When `(exit)` terminates program evaluation.
+
+        Example: `(do (defer (println "Cleanup")) (exit 0))` prints `Cleanup`
+        before exiting.
+
+      + When an evaluation failure causes the sequence to terminate.
+
+        Example: `(do (defer (println "Cleanup")) (assert false))` prints
+        `Cleanup` before reporting the evaluation failure.
+
+    + A `(goto)` does not trigger deferred expressions unless it causes their
+      enclosing `(do)` sequence to terminate. Jumps within the same active
+      sequence preserve its registered deferred expressions until the sequence
+      eventually exits.
+
+      Example:
+
+      ```lisp
+      (var "counter" 0)
+      (do
+        (defer (println "Cleanup"))
+        (label "again")
+        (set "counter" (+ counter 1))
+        (if (< counter 3) (goto again)))
+      ```
+
+      Prints `Cleanup` only once, after the third iteration.
+
+    + When multiple nested sequences terminate, deferred expressions execute
+      from the innermost sequence outward. Within each sequence, they execute
+      in LIFO order.
+
+      Example:
+
+      ```lisp
+      (do
+        (defer (println "Outer 1"))
+        (defer (println "Outer 2"))
+        (do
+          (defer (println "Inner 1"))
+          (defer (println "Inner 2"))))
+      ```
+
+      Prints `Inner 2`, `Inner 1`, `Outer 2`, `Outer 1`.
+
+    + Deferred expressions use the values of variables at execution time,
+      not at registration time. Variables are not captured or copied.
+
+      Example:
+
+      ```lisp
+      (var "counter" 1)
+      (do
+        (defer (println counter))
+        (set "counter" 2))
+      ```
+
+      Prints `2`, not `1`.
+
+    + `(defer)` registration preserves the last successfully evaluated value.
+      If no previous nonempty value is available, it returns `SYM_EMPTY`.
+
+      Example: `(do 123 (defer (println "Cleanup")))` returns `123`, while
+      `(do (defer (println "Cleanup")))` returns `SYM_EMPTY` if there was no
+      previous nonempty value.
+
+    + The resulting values of deferred expressions are discarded. They do not
+      change the sequence's returned value, the forwarded value of `(leave)`,
+      or the result and exit code of `(exit)`.
+
+      Examples:
+      + `(do 123 (defer 456))` returns `123`.
+      + `(do 123 (defer 456) (leave))` returns `123`.
+      + `(do (defer 456) (exit 0 123))` exits with code `0` and result `123`.
+
+    + Deferred expressions execute while their enclosing `(do)` sequence is
+      still active, before its `(depth)` decreases.
+
+      Example:
+
+      ```lisp
+      (do
+        (defer (println (depth))))
+      (println (depth))
+      ```
+
+      Prints `1`, then `0`.
+
+    + All registered deferred expressions are attempted, even if one fails.
+      If evaluation had already failed, the original failure is preserved.
+      Otherwise, the first deferred failure causes evaluation to fail.
+
+      Example:
+
+      ```lisp
+      (do
+        (defer (println "Still executed"))
+        (defer (assert false "Deferred failure")))
+      ```
+
+      `Still executed` is printed even though the other deferred expression
+      fails.
+
+      If the body had already failed, for example:
+
+      ```lisp
+      (do
+        (defer (assert false "Deferred failure"))
+        (assert false "Original failure"))
+      ```
+
+      The original failure is preserved.
+
+    + Deferred expressions must not transfer control outside themselves using
+      `(leave)`, `(goto)`, or `(exit)`. Such attempts cause an evaluation
+      failure. Control flow contained within a nested `(do)` created by the
+      deferred expression is allowed.
+
+      Example of invalid control flow:
+
+      ```lisp
+      (do
+        (defer (leave)))
+      ```
+
+      Example of valid nested control flow:
+
+      ```lisp
+      (do
+        (defer
+          (do
+            (println "Before leave")
+            (leave)
+            (println "Never printed"))))
+      ```
+
+      Only `Before leave` is printed.
+
+    + A deferred expression may use nested `(do)` sequences and register
+      deferred expressions within those sequences, but it cannot register
+      another defer in the enclosing sequence that is already terminating.
+
+      Example of valid nested registration:
+
+      ```lisp
+      (do
+        (defer
+          (do
+            (defer (println "Nested cleanup"))
+            (println "Nested body"))))
+      ```
+
+      Prints `Nested body`, then `Nested cleanup`.
+
+      Example of invalid registration:
+
+      ```lisp
+      (do
+        (defer
+          (defer (println "Not allowed"))))
+      ```
+
+    + Re-entering a previously completed `(do)` through `(goto)` creates a new
+      set of registrations for that sequence.
+
+      Example:
+
+      ```lisp
+      (var "counter" 0)
+
+      (do
+        (label "again")
+        (defer (println "Cleanup"))
+        (set "counter" (+ counter 1)))
+
+      (if (< counter 2) (goto again))
+      ```
+
+      Prints `Cleanup` twice, once for each activation of the `(do)` sequence.
+
+    + Deferred registrations are created only when `(defer)` is actually
+      evaluated. Jumping past a `(defer)` expression does not register it.
+
+      Example:
+
+      ```lisp
+      (var "counter" 0)
+
+      (do
+        (defer (println "Cleanup"))
+        (label "again")
+        (set "counter" (+ counter 1)))
+
+      (if (< counter 2) (goto again))
+      ```
+
+      Prints `Cleanup` only once. The second activation begins at the label
+      after `(defer)`, so no new registration is created.
+
+    + A `(goto)` within an active `(do)` preserves its existing deferred
+      registrations, even if the jump skips the original `(defer)` expression.
+
+      Example:
+
+      ```lisp
+      (var "counter" 0)
+
+      (do
+        (defer (println "Cleanup"))
+        (label "again")
+        (set "counter" (+ counter 1))
+        (if (< counter 3) (goto again)))
+      ```
+
+      Prints `Cleanup` only once. The original registration survives both
+      jumps because the sequence never terminates between iterations.
+
+    + Re-entering a completed `(do)` through `(goto)` starts a new activation
+      without the previous activation's deferred registrations. Only `(defer)`
+      expressions reached during the new activation are registered.
+
+      Example:
+
+      ```lisp
+      (var "counter" 0)
+
+      (do
+        (defer (println "Before label"))
+        (label "again")
+        (defer (println "After label"))
+        (set "counter" (+ counter 1)))
+
+      (if (< counter 2) (goto again))
+      ```
+
+      Prints:
+      + First activation: `After label`, `Before label`.
+      + Second activation: `After label`.
+
+      The second activation starts with an empty set of registrations and
+      skips the first `(defer)` because it appears before the label.
+
+    + The evaluator maintains a fixed-capacity stack of deferred expression
+      indices (`EVAL_DEFER_CAPACITY`). Exceeding this capacity causes an
+      evaluation failure. Registrations themselves do not allocate memory.
+
+      Example:
+
+      ```lisp
+      (do
+        (label "again")
+        (defer 123)
+        (goto again))
+      ```
+
+      Each iteration registers another deferred expression without leaving
+      the active sequence. Eventually, the registration capacity is reached,
+      causing an evaluation failure.
+
+  + Examples:
+
+    ```lisp
+    ; Deferred expressions execute in reverse order
+    (do
+      (defer (println "First"))
+      (defer (println "Second"))
+      (println "Body"))
+
+    ; Output:
+    ; Body
+    ; Second
+    ; First
+
+    ; Deferred expressions also execute on (leave)
+    (do
+      (defer (println "Cleanup"))
+      (leave)
+      (println "Never printed"))
+
+    ; Output:
+    ; Cleanup
+
+    ; All exited sequences run their own defers
+    (do
+      (defer (println "Outer cleanup"))
+
+      (do
+        (defer (println "Inner cleanup"))
+        (leave (depth))))
+
+    ; Output:
+    ; Inner cleanup
+    ; Outer cleanup
+    ```
 
 ### Undefined behavior
 
