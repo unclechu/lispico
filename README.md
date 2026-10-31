@@ -27,6 +27,14 @@ written in C. That's also where the name comes from: LISP-like + Pico.
   * Get type of a value `(type-of VALUE)` (`u32`, numeric representation of `ValueType`)
   * Shebang support for the parser (`#!/usr/bin/env lispico`)
 
+  * Sleep functions
+    + `(sleep-s SECONDS)`
+    + `(sleep-ms MILLISECONDS)`
+    + `(sleep-us MICROSECONDS)`
+
+  * `(leave)` for breaking/leaving a sequence early
+  * `(defer)` for evaluating an expression when leaving a sequence
+
   * Extra string manipulations:
     + `(str-size)`
     + `(str-char)`
