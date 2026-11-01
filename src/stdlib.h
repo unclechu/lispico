@@ -6,14 +6,6 @@
 
 bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]);
 
-// Branching between different kinds of standard library printing functions
-typedef enum {
-  STD_PRINT = 0,
-  STD_PRINTLN,
-  STD_EPRINT,
-  STD_EPRINTLN,
-} StdPrintVariant;
-
 #define ADD_STDLIB_FN_TYPE_DEF(name) Datum name(const Datum*, size_t argc)
 
 ADD_STDLIB_FN_TYPE_DEF(std_last_val);
@@ -24,13 +16,6 @@ ADD_STDLIB_FN_TYPE_DEF(std_kind_of);
 
 // Sequences
 ADD_STDLIB_FN_TYPE_DEF(std_depth);
-
-// Printing functions
-Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc);
-ADD_STDLIB_FN_TYPE_DEF(std_print);
-ADD_STDLIB_FN_TYPE_DEF(std_println);
-ADD_STDLIB_FN_TYPE_DEF(std_eprint);
-ADD_STDLIB_FN_TYPE_DEF(std_eprintln);
 
 ADD_STDLIB_FN_TYPE_DEF(std_exit);
 
