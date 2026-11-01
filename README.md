@@ -13,6 +13,24 @@ Lispico is intended for dynamically parsing and evaluating DSL-like programs
 on embedded platforms such as the Raspberry Pi Pico, as part of firmware
 written in C. That’s also where the name comes from: LISP-like + Pico.
 
+## Table of contents
+
+- [Features](#features)
+  * [Primitive data types](#primitive-data-types)
+  * [Basic arithmetics](#basic-arithmetics)
+  * [Strings](#strings)
+  * [Control flow and sequences](#control-flow-and-sequences)
+  * [Leaving sequences (`leave`)](#leaving-sequences)
+  * [Deferred expressions (`defer`)](#deferred-expressions)
+  * [Shebang support](#shebang-support)
+  * [Sleep functions](#sleep-functions)
+- [Undefined behavior](#undefined-behavior)
+- **[Usage examples](#usage-examples)**
+- [Memory management and cleanup](#memory-management-and-cleanup)
+- [Testing](#testing)
+- [Local Vim configuration example](#local-vim-configuration-example)
+- [License](#license)
+
 ## Features
 
 - **TODO** before removing WIP warning
@@ -78,7 +96,7 @@ features:
   There are no lexical name scopes. If you need some level of name scoping you
   can use name prefixes for example.
 
-- Primitive data types
+- <a id="primitive-data-types"></a>Primitive data types
 
   * `u32`
   * `i32`
@@ -140,7 +158,7 @@ features:
   `0` means true. There are `true` (`u32` `1`) and `false` (`u32` `0`) variables
   defined in the stdlib. `(if)` accepts a numeric value as a condition.
 
-- Strings
+- <a id="strings"></a>Strings
 
   * Semantics and behavior
 
@@ -256,7 +274,7 @@ features:
 
 - Supported instructions
 
-  * Basic arithmetics
+  * <a id="basic-arithmetics"></a>Basic arithmetics
 
     + `(+ 2 3)` — Addition
     + `(- 3 2)` — Subtraction
@@ -611,7 +629,7 @@ features:
     + `(exit 0 123)` where `0` is exit status code and `123` is returned value
       (defaulting to `u32` type)
 
-  * Expression sequences
+  * <a id="control-flow-and-sequences"></a>Expression sequences
 
     + `(do (+ 1 2) (+ 3 4))` — Evaluates expressions sequentially and returns
       the last expression’s result (`7` in this case).
@@ -723,7 +741,7 @@ features:
   symbols/definitions hash-table with values that can be read then inside the
   program
 
-- Shebang support
+- <a id="shebang-support"></a>Shebang support
 
   The parser recognizes a shebang (`#!`) only at the very beginning of the
   source file. The entire first line is ignored.
@@ -735,7 +753,7 @@ features:
 
   Shebang lines count toward source line numbering for parser errors.
 
-- Sleep functions
+- <a id="sleep-functions"></a>Sleep functions
 
   * `(sleep-s SECONDS)` — Sleep for the specified number of seconds.
   * `(sleep-ms MILLISECONDS)` — Sleep for the specified number of milliseconds.
@@ -775,7 +793,7 @@ features:
 
       **TODO** Raspberry Pi Pico support will be implemented separately.
 
-* Leaving sequences early
+* <a id="leaving-sequences"></a>Leaving sequences early
 
   + `(leave [COUNT])` — Immediately terminates one or more active `(do)`
     sequences.
@@ -835,7 +853,7 @@ features:
     + `(goto)` transfers evaluation to a registered label.
     + `(exit)` terminates evaluation of the entire program.
 
-* Deferred expressions
+* <a id="deferred-expressions"></a>Deferred expressions
 
   + `(defer EXPR)` — Registers an expression to be evaluated when the nearest
     enclosing `(do)` sequence terminates.
