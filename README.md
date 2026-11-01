@@ -303,6 +303,46 @@ features:
       result of the expression `(- (type i32 2) (type i32 3))` to get
       `i32` resulting type)
 
+    + `(abs VALUE)` — Absolute value
+      + `(abs -42)` → `42` (`i32`)
+      + `(abs 123)` → `123` (`u32`)
+      + `(abs -3.5)` → `3.5` (`f32`)
+      + `(abs -2147483648)` → Evaluation failure (`i32` overflow)
+
+    + `(min)` and `(max)`
+
+      + `(min VALUE...)` — Return the smallest of one or more numeric values
+        + `(min 42)` → `42`
+        + `(min 5 3 7 1 2)` → `1`
+        + `(min -5 -10 -3 -20)` → `-20`
+        + `(min 3.5 1.5 2.5)` → `1.5`
+        + `(min)` → Evaluation failure (requires at least one argument)
+
+      + `(max VALUE...)` — Return the largest of one or more numeric values
+        + `(max 42)` → `42`
+        + `(max 5 3 7 1 2)` → `7`
+        + `(max -5 -10 -3 -20)` → `-3`
+        + `(max 3.5 1.5 2.5)` → `3.5`
+        + `(max)` → Evaluation failure (requires at least one argument)
+
+      Both functions accept one or more `u32`, `i32`, or `f32` values. All
+      arguments must have the same type, and the result preserves that type.
+      No implicit numeric conversions are performed. Non-finite `f32`
+      arguments cause an evaluation failure.
+
+    + `(clamp VALUE MIN MAX)` — Restrict a value to an inclusive range
+      + `(clamp 5 0 10)` → `5` (already within range)
+      + `(clamp 15 0 10)` → `10` (above maximum)
+      + `(clamp 0 5 10)` → `5` (below minimum)
+      + `(clamp 5 10 0)` → Evaluation failure (invalid range)
+
+    All four functions support `u32`, `i32`, and `f32` and preserve their
+    argument type. Functions accepting multiple arguments require all
+    arguments to have the same type, without implicit conversion.
+
+    Non-finite `f32` inputs (NaN or infinity) cause an evaluation failure.
+    `(clamp)` also fails if `MIN` exceeds `MAX`.
+
   * Variables
     + `(var "foo" 123)` — Define a variable (`u32` type; can be defined only once)
     + `(var "foo" (type i32 123))` — Define a variable with `i32` type

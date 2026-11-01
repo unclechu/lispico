@@ -7,6 +7,7 @@
 #include "stdlib.h"
 #include "stdlib-validation-utils.h"
 #include "stdlib-arithmetics.h"
+#include "stdlib-numeric-fns.h"
 #include "stdlib-comparisons.h"
 #include "symbol-error.h"
 #include "symbol-print.h"
@@ -774,6 +775,9 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
 
   // Arithmetics
   if (!populate_stdlib_arithmetics(error_message)) return false;
+
+  // Basic numeric functions
+  if (!populate_stdlib_numeric_fns(error_message)) return false;
 
   // Boolean constants
   ADD_VAR_SYMBOL("true", TYPE_U32, u32, 1u);

@@ -1,0 +1,1 @@
+(abs "hello") ; Not numeric
