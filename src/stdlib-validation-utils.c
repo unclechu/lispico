@@ -2,6 +2,7 @@
 #include "wipe-memory.h"
 #include "evaluate.h"
 
+// Validate exact amount of arguments
 bool validate_argc(
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
@@ -34,6 +35,7 @@ bool validate_argc(
   return false;
 }
 
+// Report receiving unexpected value type
 void report_unexpected_value_type(
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
@@ -48,4 +50,91 @@ void report_unexpected_value_type(
   );
   report_evaluation_failure(*fail_msg);
   wipe_memory(*fail_msg, sizeof(*fail_msg));
+}
+
+// Validate arithmetic inputs and report failure if validation fails
+bool validate_two_same_type_variables_inputs(
+  const char *fn_name,
+  char (*fail_msg)[ERR_MSG_SIZE],
+  const Datum *args,
+  size_t argc
+) {
+  if (!validate_argc(fn_name, fail_msg, 2, argc)) {
+    return false;
+  } else if (args[0].kind != SYM_VARIABLE || args[1].kind != SYM_VARIABLE) {
+    snprintf(*fail_msg, sizeof(*fail_msg), "(%s) expects two values, not arrays", fn_name);
+    report_evaluation_failure(*fail_msg);
+    wipe_memory(*fail_msg, sizeof(*fail_msg));
+    return false;
+  } else if (args[0].as.value.type != args[1].as.value.type) {
+    snprintf(
+      *fail_msg,
+      sizeof(*fail_msg),
+      "(%s) expects both arguments be of the same type, got instead: (%s, %s)",
+      fn_name,
+      show_ValueType(args[0].as.value.type),
+      show_ValueType(args[1].as.value.type)
+    );
+    report_evaluation_failure(*fail_msg);
+    wipe_memory(*fail_msg, sizeof(*fail_msg));
+    return false;
+  } else {
+    return true;
+  }
+}
+
+// Assuming both arguments are already validated with `validate_two_same_type_variables_inputs`
+bool validate_nonzero_divisor(
+  const char *fn_name,
+  char (*fail_msg)[ERR_MSG_SIZE],
+  const Datum *args
+) {
+  const Value *divisor = &args[1].as.value;
+  bool is_zero = false;
+
+  switch (divisor->type) {
+    case TYPE_U32: is_zero = divisor->as.u32 == 0; break;
+    case TYPE_I32: is_zero = divisor->as.i32 == 0; break;
+    case TYPE_F32: is_zero = divisor->as.f32 == 0.0f; break;
+    default: return true; // Existing arithmetic switch handles unsupported types
+  }
+
+  if (!is_zero) return true;
+
+  snprintf(*fail_msg, sizeof(*fail_msg), "(%s) division by zero", fn_name);
+  report_evaluation_failure(*fail_msg);
+  wipe_memory(*fail_msg, sizeof(*fail_msg));
+  return false;
+}
+
+// Validate unary numeric input and report failure if validation fails
+bool validate_unary_numeric_input(
+  const char *fn_name,
+  char (*fail_msg)[ERR_MSG_SIZE],
+  const Datum *args,
+  size_t argc
+) {
+  if (!validate_argc(fn_name, fail_msg, 1, argc)) {
+    return false;
+  } else if (args[0].kind != SYM_VARIABLE) {
+    snprintf(
+      *fail_msg,
+      sizeof(*fail_msg),
+      "(%s) expects a numeric value, not an array",
+      fn_name
+    );
+    report_evaluation_failure(*fail_msg);
+    wipe_memory(*fail_msg, sizeof(*fail_msg));
+    return false;
+  } else {
+    switch (args[0].as.value.type) {
+      case TYPE_U32:
+      case TYPE_I32:
+      case TYPE_F32:
+        return true;
+      default:
+        report_unexpected_value_type(fn_name, fail_msg, args[0].as.value.type);
+        return false;
+    }
+  }
 }

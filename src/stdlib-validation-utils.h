@@ -19,3 +19,23 @@ void report_unexpected_value_type(
   char (*fail_msg)[ERR_MSG_SIZE],
   ValueType type
 );
+
+bool validate_two_same_type_variables_inputs(
+  const char *fn_name,
+  char (*fail_msg)[ERR_MSG_SIZE],
+  const Datum *args,
+  size_t argc
+);
+
+bool validate_nonzero_divisor(
+  const char *fn_name,
+  char (*fail_msg)[ERR_MSG_SIZE],
+  const Datum *args
+);
+
+bool validate_unary_numeric_input(
+  const char *fn_name,
+  char (*fail_msg)[ERR_MSG_SIZE],
+  const Datum *args,
+  size_t argc
+);

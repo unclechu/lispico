@@ -2,7 +2,6 @@
 
 #include "stdlib.h"
 
-// Sleep functions
 ADD_STDLIB_FN_TYPE_DEF(std_sleep_s);
 ADD_STDLIB_FN_TYPE_DEF(std_sleep_ms);
 ADD_STDLIB_FN_TYPE_DEF(std_sleep_us);

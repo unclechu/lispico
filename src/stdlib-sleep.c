@@ -125,7 +125,6 @@ Datum std_sleep_us(const Datum *args, size_t argc) {
 bool populate_stdlib_sleep(char (*error_message)[ERR_MSG_SIZE]) {
   const char *symbol_name;
 
-  // Sleep functions
   ADD_FN_SYMBOL("sleep-s", std_sleep_s);
   ADD_FN_SYMBOL("sleep-ms", std_sleep_ms);
   ADD_FN_SYMBOL("sleep-us", std_sleep_us);
