@@ -5,6 +5,37 @@
 #include "number.h"
 #include "wipe-memory.h"
 
+// Consume decimal digits, optionally separated by single underscores.
+// Underscores are valid only between two digits.
+//
+// Examples:
+//
+// - `1_000_000` → `true`
+// - `_1000` → `false`
+// - `1000_` → `false`
+// - `1__000` → `false`
+static bool consume_number_digits(String text, size_t *offset) {
+  bool digits = false;
+
+  while (*offset < text.length) {
+    if (isdigit((unsigned char)text.data[*offset])) {
+      digits = true;
+      (*offset)++;
+    } else if (
+      text.data[*offset] == '_' &&
+      digits &&
+      *offset + 1 < text.length &&
+      isdigit((unsigned char)text.data[*offset + 1])
+    ) {
+      (*offset)++;
+    } else {
+      break;
+    }
+  }
+
+  return digits;
+}
+
 // Is this a start of a number.
 //
 // Assuming `text.data != NULL`.
@@ -59,7 +90,7 @@ NumberParseResult parse_number_text(String text, ValueType target_type, Value *r
   bool floating = false;
 
   // Decimal digits
-  while (text.length > i && isdigit((unsigned char)text.data[i])) { digits = true; i++; }
+  digits = consume_number_digits(text, &i);
   if (digits && text.length == i) goto resolve;
   if (!digits && text.length == i) return NUMBER_PARSE_INVALID;
 
@@ -79,7 +110,7 @@ NumberParseResult parse_number_text(String text, ValueType target_type, Value *r
   if (text.data[i] == '.') {
     floating = true;
     i++;
-    while (text.length > i && isdigit((unsigned char)text.data[i])) { digits = true; i++; }
+    if (consume_number_digits(text, &i)) digits = true;
   }
 
   // If no digits detected
@@ -94,7 +125,7 @@ NumberParseResult parse_number_text(String text, ValueType target_type, Value *r
     if (text.data[i] == '+' || text.data[i] == '-') i++;
     if (text.length == i || !isdigit((unsigned char)text.data[i]))
       return NUMBER_PARSE_INVALID_EXPONENT; // Invalid numeric exponent
-    while (text.length > i && isdigit((unsigned char)text.data[i])) i++;
+    consume_number_digits(text, &i);
   }
 
   resolve:
@@ -117,8 +148,14 @@ NumberParseResult parse_number_text(String text, ValueType target_type, Value *r
     // For `strtof`, `strtoll`, and `strtoull` the string must be terminated.
     // So we need a temporary buffer that would include the terminator.
     char buffer[NUMBER_TEXT_CAPACITY] = {'\0'};
-    memcpy(buffer, text.data, sizeof(char) * text.length);
-    buffer[text.length] = '\0'; // Terminate the string
+    size_t buffer_length = 0;
+
+    // Remove digit underscore separators after validating the numeric syntax.
+    for (size_t j = 0; j < text.length; j++)
+      if (text.data[j] != '_')
+        buffer[buffer_length++] = text.data[j];
+
+    buffer[buffer_length] = '\0'; // Terminate the string
 
     errno = 0; // Reset global error
     char *end; // Pointer to a character where the parser stopped while not being able to parse it
@@ -130,7 +167,7 @@ NumberParseResult parse_number_text(String text, ValueType target_type, Value *r
         float number = strtof(buffer, &end);
         NumberParseResult status =
           errno == ERANGE ? NUMBER_PARSE_OUT_OF_RANGE : // Float literal out of range
-          end != buffer + text.length ? NUMBER_PARSE_INVALID : // C parser could not parse
+          end != buffer + buffer_length ? NUMBER_PARSE_INVALID : // C parser could not parse
           NUMBER_PARSE_OK;
         wipe_memory(buffer, sizeof(buffer)); // Do not wipe before checking `end`
         end = NULL;
@@ -148,7 +185,7 @@ NumberParseResult parse_number_text(String text, ValueType target_type, Value *r
         long long number = strtoll(buffer, &end, 10);
         NumberParseResult status =
           errno == ERANGE ? NUMBER_PARSE_OUT_OF_RANGE : // i32 literal out of range
-          end != buffer + text.length ? NUMBER_PARSE_INVALID : // C parser could not parse
+          end != buffer + buffer_length ? NUMBER_PARSE_INVALID : // C parser could not parse
           // i32 literal out of range
           (number < INT32_MIN || number > INT32_MAX) ? NUMBER_PARSE_OUT_OF_RANGE :
           NUMBER_PARSE_OK;
@@ -168,7 +205,7 @@ NumberParseResult parse_number_text(String text, ValueType target_type, Value *r
         unsigned long long number = strtoull(buffer, &end, 10);
         NumberParseResult status =
           errno == ERANGE ? NUMBER_PARSE_OUT_OF_RANGE : // u32 literal out of range
-          end != buffer + text.length ? NUMBER_PARSE_INVALID : // C parser could not parse
+          end != buffer + buffer_length ? NUMBER_PARSE_INVALID : // C parser could not parse
           number > UINT32_MAX ? NUMBER_PARSE_OUT_OF_RANGE : // u32 literal out of range
           NUMBER_PARSE_OK;
         wipe_memory(buffer, sizeof(buffer)); // Do not wipe before checking `end`

@@ -96,6 +96,46 @@ int main(void) {
     { "exponent as i32", TEXT("1.e3"), TYPE_I32, NUMBER_PARSE_INVALID, {0} },
 
     { "embedded NUL", TEXT("1\0x"), TYPE_VOID, NUMBER_PARSE_INVALID, {0} },
+
+    { "underscores u32", TEXT("1_000_000"), TYPE_VOID, NUMBER_PARSE_OK,
+      { .type = TYPE_U32, .as.u32 = 1000000 } },
+
+    { "underscores i32", TEXT("-2_000_000"), TYPE_VOID, NUMBER_PARSE_OK,
+      { .type = TYPE_I32, .as.i32 = -2000000 } },
+
+    { "underscores f32", TEXT("1_234.5_0"), TYPE_VOID, NUMBER_PARSE_OK,
+      { .type = TYPE_F32, .as.f32 = 1234.5f } },
+
+    { "underscores exponent", TEXT("1_2e+2"), TYPE_VOID, NUMBER_PARSE_OK,
+      { .type = TYPE_F32, .as.f32 = 1200.0f } },
+
+    { "underscores exponent digits", TEXT("1.25e1_0"), TYPE_VOID, NUMBER_PARSE_OK,
+      { .type = TYPE_F32, .as.f32 = 1.25e10f } },
+
+    { "underscores explicit u32", TEXT("1_000"), TYPE_U32, NUMBER_PARSE_OK,
+      { .type = TYPE_U32, .as.u32 = 1000 } },
+
+    { "underscores explicit f32", TEXT("1_000"), TYPE_F32, NUMBER_PARSE_OK,
+      { .type = TYPE_F32, .as.f32 = 1000.0f } },
+
+    { "underscores u32 overflow", TEXT("4_294_967_296"), TYPE_VOID,
+      NUMBER_PARSE_OUT_OF_RANGE, {0} },
+
+    { "underscores i32 underflow", TEXT("-2_147_483_649"), TYPE_VOID,
+      NUMBER_PARSE_OUT_OF_RANGE, {0} },
+
+    { "leading underscore", TEXT("_100"), TYPE_VOID, NUMBER_PARSE_INVALID, {0} },
+    { "trailing underscore", TEXT("100_"), TYPE_VOID, NUMBER_PARSE_INVALID, {0} },
+    { "double underscore", TEXT("1__000"), TYPE_VOID, NUMBER_PARSE_INVALID, {0} },
+    { "underscore before dot", TEXT("1_.5"), TYPE_VOID, NUMBER_PARSE_INVALID, {0} },
+    { "underscore after dot", TEXT("1._5"), TYPE_VOID, NUMBER_PARSE_INVALID, {0} },
+    { "underscore before exponent", TEXT("1_e3"), TYPE_VOID, NUMBER_PARSE_INVALID, {0} },
+    { "underscore after exponent", TEXT("1e_3"), TYPE_VOID,
+      NUMBER_PARSE_INVALID_EXPONENT, {0} },
+    { "underscore after exponent sign", TEXT("1e+_3"), TYPE_VOID,
+      NUMBER_PARSE_INVALID_EXPONENT, {0} },
+    { "trailing exponent underscore", TEXT("1e3_"), TYPE_VOID,
+      NUMBER_PARSE_INVALID, {0} },
   };
 
   size_t passed = 0;

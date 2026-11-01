@@ -105,6 +105,34 @@ features:
   * `-2147483648` → OK
   * `-2147483649` (`i32` that is smaller than `INT32_MIN`) → Failure
 
+  Numeric literals support underscores (`_`) as visual digit separators to
+  improve readability of large numbers. Underscores are ignored when parsing
+  the numeric value and do not affect its type.
+
+  * `1_000_000` → `1000000` (`u32`)
+  * `-1_000_000` → `-1000000` (`i32`)
+  * `1_234.5_0` → `1234.5` (`f32`)
+  * `1_000e+3` → `1000000.0` (`f32`)
+  * `1.25e1_0` → `12500000000.0` (`f32`)
+
+  Underscores are only permitted between two decimal digits, including in
+  the integer, fractional, and exponent portions of a number.
+
+  * Valid: `1_000`, `12_34_56`, `1_2.3_4`, `1_000e+3`, `1e1_0`
+  * Invalid: `1_`, `1__000`, `1_.5`, `1._5`, `1e_3`, `1e+_3`
+
+  The same syntax is accepted when converting strings to numbers:
+
+  * `(type u32 "1_000_000")` → `TYPE_U32(1000000)`
+  * `(type i32 "-1_000_000")` → `TYPE_I32(-1000000)`
+  * `(type f32 "1_234.5")` → `TYPE_F32(1234.5)`
+
+  Underscores do not affect numeric range validation. For example,
+  `4_294_967_296` is still out of range for `u32`.
+
+  The maximum numeric text length (`NUMBER_TEXT_CAPACITY`) includes
+  underscores.
+
 - Booleans
 
   There are no real booleans in the language, there is no boolean type.
