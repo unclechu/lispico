@@ -85,13 +85,6 @@ Datum std_eprintln(const Datum *args, size_t argc) {
   return std_generic_print(STD_EPRINTLN, args, argc);
 }
 
-#define ADD_FN_SYMBOL(name, fn) { \
-  symbol_name = name; \
-  Symbol *sym = symbol_define(symbol_name, SYM_NATIVE_FUNCTION); \
-  if (sym == NULL) goto symbol_define_fail; \
-  sym->as.native_function = fn; \
-}
-
 // Populate the `symbols` with “standard library” printing functions
 bool populate_stdlib_print(char (*error_message)[ERR_MSG_SIZE]) {
   const char *symbol_name;
