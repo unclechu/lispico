@@ -9,6 +9,7 @@
 #include "stdlib-arithmetics.h"
 #include "stdlib-numeric-fns.h"
 #include "stdlib-pow-n-log.h"
+#include "stdlib-trigonometry.h"
 #include "stdlib-comparisons.h"
 #include "symbol-error.h"
 #include "symbol-print.h"
@@ -752,10 +753,10 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   ADD_VAR_SYMBOL("i32-max", TYPE_I32, i32, INT32_MAX);
   ADD_VAR_SYMBOL("f32-min", TYPE_F32, f32, -FLT_MAX);
   ADD_VAR_SYMBOL("f32-max", TYPE_F32, f32, FLT_MAX);
-  // TODO
-  // f32-min-positive  FLT_MIN       Smallest positive normalized f32
-  // f32-true-min      FLT_TRUE_MIN  Smallest positive subnormal f32
-  // f32-epsilon       FLT_EPSILON   Difference between 1.0f and the next larger representable float
+  // Additional floating-point constants
+  ADD_VAR_SYMBOL("f32-min-positive", TYPE_F32, f32, FLT_MIN);
+  ADD_VAR_SYMBOL("f32-true-min", TYPE_F32, f32, FLT_TRUE_MIN);
+  ADD_VAR_SYMBOL("f32-epsilon", TYPE_F32, f32, FLT_EPSILON);
 
   // Kind identifiers
   ADD_VAR_SYMBOL("empty-kind", TYPE_U32, u32, SYM_EMPTY);
@@ -792,6 +793,11 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   if (!populate_stdlib_numeric_fns(error_message)) return false;
   // Powers and logarithms
   if (!populate_stdlib_pow_n_log(error_message)) return false;
+  // Trigonometry
+  if (!populate_stdlib_trigonometry(error_message)) return false;
+  // Mathematical constants
+  ADD_VAR_SYMBOL("pi", TYPE_F32, f32, 3.14159265358979323846f);
+  ADD_VAR_SYMBOL("e", TYPE_F32, f32, 2.71828182845904523536f);
 
   // Boolean constants
   ADD_VAR_SYMBOL("true", TYPE_U32, u32, 1u);

@@ -5,13 +5,13 @@ desktops.
 
 **WORK IN PROGRESS: Not all first-release features are implemented yet.**
 
-This is not a conventional LISP interpreter. It borrows LISP's S-expression
+This is not a conventional LISP interpreter. It borrows LISP’s S-expression
 syntax primarily for its parsing simplicity and compatibility with existing
 LISP syntax highlighting in code editors.
 
 Lispico is intended for dynamically parsing and evaluating DSL-like programs
 on embedded platforms such as the Raspberry Pi Pico, as part of firmware
-written in C. That's also where the name comes from: LISP-like + Pico.
+written in C. That’s also where the name comes from: LISP-like + Pico.
 
 ## Features
 
@@ -386,6 +386,94 @@ features:
     Invalid mathematical domains, non-finite inputs, and non-finite results
     cause evaluation failures. Finite floating-point underflow to zero is
     permitted.
+
+  * Trigonometry
+
+    + `(sin ANGLE)` — Sine of an angle in radians
+      + `(sin 0.0)` → `0.0`
+      + `(sin (/ pi 2.0))` → Approximately `1.0`
+
+    + `(cos ANGLE)` — Cosine of an angle in radians
+      + `(cos 0.0)` → `1.0`
+      + `(cos pi)` → Approximately `-1.0`
+
+    + `(tan ANGLE)` — Tangent of an angle in radians
+      + `(tan 0.0)` → `0.0`
+      + `(tan (/ pi 4.0))` → Approximately `1.0`
+
+    + `(asin VALUE)` — Inverse sine, returning an angle in radians
+      + `(asin 0.0)` → `0.0`
+      + `(asin 1.0)` → Approximately `pi / 2`
+      + `(asin 1.1)` → Evaluation failure (outside `[-1.0, 1.0]`)
+
+    + `(acos VALUE)` — Inverse cosine, returning an angle in radians
+      + `(acos 1.0)` → `0.0`
+      + `(acos 0.0)` → Approximately `pi / 2`
+      + `(acos -1.1)` → Evaluation failure (outside `[-1.0, 1.0]`)
+
+    + `(atan VALUE)` — Inverse tangent, returning an angle in radians
+      + `(atan 0.0)` → `0.0`
+      + `(atan 1.0)` → Approximately `pi / 4`
+
+    + `(atan2 Y X)` — Angle of a vector `(X, Y)` in radians
+      + `(atan2 0.0 1.0)` → `0.0`
+      + `(atan2 1.0 0.0)` → Approximately `pi / 2`
+      + `(atan2 -1.0 0.0)` → Approximately `-pi / 2`
+
+      The arguments are ordered `Y`, then `X`, matching C’s `atan2f()`.
+      Unlike `(atan)`, `(atan2)` uses both coordinates to determine the
+      correct quadrant of the resulting angle.
+
+    + `(hypot X Y)` — Euclidean distance from the origin to `(X, Y)`
+      + `(hypot 3.0 4.0)` → `5.0`
+      + `(hypot 5.0 12.0)` → `13.0`
+      + `(hypot f32-max f32-max)` → Evaluation failure (overflow)
+
+    All trigonometric functions require `f32` arguments and return `f32`.
+    `(atan2)` and `(hypot)` require exactly two arguments; the other
+    functions require exactly one. Integer values must be explicitly
+    converted using `(type f32 VALUE)`.
+
+    All angles are expressed in radians, not degrees. Inverse trigonometric
+    functions also return radians.
+
+    Non-finite inputs and results cause evaluation failures. `(asin)` and
+    `(acos)` additionally reject inputs outside the inclusive range
+    `[-1.0, 1.0]`.
+
+    Floating-point results are approximate. In particular, using `pi` near
+    a trigonometric singularity does not guarantee an exact zero, infinity,
+    or evaluation failure. Actual results depend on `f32` precision and the
+    platform’s mathematical library.
+
+  * Additional mathematical and floating-point constants
+
+    + `pi` — The mathematical constant π, approximately `3.1415927` (`f32`).
+    + `e` — Euler’s number, approximately `2.7182817` (`f32`).
+    + `f32-min-positive` — Smallest positive normalized `f32` (`FLT_MIN`).
+    + `f32-true-min` — Smallest positive representable `f32`
+      (`FLT_TRUE_MIN`), normally subnormal on IEEE 754 platforms.
+    + `f32-epsilon` — Difference between `1.0f` and the next larger
+      representable `f32` (`FLT_EPSILON`).
+
+    All these constants are predefined variables of type `f32`.
+
+    Examples:
+    + `(sin (/ pi 2.0))` → Approximately `1.0`
+    + `(exp 1.0)` → Approximately `e`
+    + `(log e)` → Approximately `1.0`
+    + `(> f32-min-positive 0.0)` → `true`
+    + `(< f32-true-min f32-min-positive)` → `true` on IEEE 754 binary32
+    + `(> (+ 1.0 f32-epsilon) 1.0)` → `true`
+
+    The three floating-point boundary constants have different purposes:
+    `f32-min-positive` identifies the smallest positive normal value,
+    `f32-true-min` identifies the smallest positive representable value,
+    and `f32-epsilon` describes the spacing between representable values
+    around `1.0`.
+
+    Subnormal arithmetic may behave differently on embedded targets that
+    use flush-to-zero floating-point modes.
 
   * Numeric type boundaries
 
@@ -867,7 +955,7 @@ features:
       previous nonempty value.
 
     + The resulting values of deferred expressions are discarded. They do not
-      change the sequence's returned value, the forwarded value of `(leave)`,
+      change the sequence’s returned value, the forwarded value of `(leave)`,
       or the result and exit code of `(exit)`.
 
       Examples:
@@ -1018,7 +1106,7 @@ features:
       jumps because the sequence never terminates between iterations.
 
     + Re-entering a completed `(do)` through `(goto)` starts a new activation
-      without the previous activation's deferred registrations. Only `(defer)`
+      without the previous activation’s deferred registrations. Only `(defer)`
       expressions reached during the new activation are registered.
 
       Example:
