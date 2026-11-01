@@ -1,3 +1,5 @@
+#include <math.h>
+
 #include "stdlib-validation-utils.h"
 #include "wipe-memory.h"
 #include "evaluate.h"
@@ -137,4 +139,52 @@ bool validate_unary_numeric_input(
         return false;
     }
   }
+}
+
+// Apply a unary f32 mathematical function and reject non-finite values
+Datum std_unary_f32_math(
+  const Datum *args,
+  size_t argc,
+  const char *fn_name,
+  float (*operation)(float)
+) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+
+  if (!validate_unary_numeric_input(fn_name, &fail_msg, args, argc))
+    return return_value;
+
+  if (args[0].as.value.type != TYPE_F32) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects an f32 value", fn_name);
+    goto fail;
+  }
+
+  float input = args[0].as.value.as.f32;
+
+  if (!isfinite(input)) goto invalid_value;
+
+  float result = operation(input);
+
+  if (!isfinite(result)) goto invalid_value;
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = { .type = TYPE_F32, .as.f32 = result },
+  };
+
+  return return_value;
+
+  invalid_value:
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) input is outside the finite mathematical domain",
+      fn_name
+    );
+    goto fail;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
 }

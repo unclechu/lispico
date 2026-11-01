@@ -39,3 +39,10 @@ bool validate_unary_numeric_input(
   const Datum *args,
   size_t argc
 );
+
+Datum std_unary_f32_math(
+  const Datum *args,
+  size_t argc,
+  const char *fn_name,
+  float (*operation)(float)
+);

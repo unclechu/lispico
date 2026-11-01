@@ -343,6 +343,50 @@ features:
     Non-finite `f32` inputs (NaN or infinity) cause an evaluation failure.
     `(clamp)` also fails if `MIN` exceeds `MAX`.
 
+    + `(pow BASE EXPONENT)` — Raise a number to a power
+      + `(pow 2 10)` → `1024` (`u32`)
+      + `(pow -2 (type i32 3))` → `-8` (`i32`)
+      + `(pow 4.0 0.5)` → `2.0` (`f32`)
+      + `(pow 2.0 -1.0)` → `0.5` (`f32`)
+      + `(pow 0 0)` → `1` (`u32`)
+
+      Both arguments must have the same type (`u32`, `i32`, or `f32`).
+      The result preserves that type.
+
+      Integer exponentiation is calculated exactly, without floating-point
+      conversion. Integer exponents must be non-negative. Results exceeding
+      the representable range of `u32` or `i32` cause an evaluation failure
+      instead of overflowing or wrapping.
+
+      Floating-point exponentiation supports fractional and negative exponents.
+      Non-finite inputs or results cause an evaluation failure, including
+      invalid domains such as `(pow -2.0 0.5)`.
+
+    + `(sqrt VALUE)` — Square root
+      + `(sqrt 25.0)` → `5.0`
+      + `(sqrt 2.0)` → Approximately `1.4142135`
+      + `(sqrt -1.0)` → Evaluation failure
+
+    + `(log VALUE)` — Natural logarithm (base `e`)
+      + `(log 1.0)` → `0.0`
+      + `(log 10.0)` → Approximately `2.302585`
+
+    + `(log10 VALUE)` — Base-10 logarithm
+      + `(log10 100.0)` → Approximately `2.0`
+      + `(log10 1000.0)` → Approximately `3.0`
+
+    + `(exp VALUE)` — Exponential function (`e` raised to `VALUE`)
+      + `(exp 0.0)` → `1.0`
+      + `(exp 1.0)` → Approximately `2.7182817`
+
+    `(sqrt)`, `(log)`, `(log10)`, and `(exp)` require exactly one `f32`
+    argument and return `f32`. Integer arguments are not converted
+    implicitly; use `(type f32 VALUE)` when needed.
+
+    Invalid mathematical domains, non-finite inputs, and non-finite results
+    cause evaluation failures. Finite floating-point underflow to zero is
+    permitted.
+
   * Numeric type boundaries
 
     + `u32-min` — Minimum `u32` value (`0`).
