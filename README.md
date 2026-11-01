@@ -343,6 +343,27 @@ features:
     Non-finite `f32` inputs (NaN or infinity) cause an evaluation failure.
     `(clamp)` also fails if `MIN` exceeds `MAX`.
 
+  * Numeric type boundaries
+
+    + `u32-min` — Minimum `u32` value (`0`).
+    + `u32-max` — Maximum `u32` value (`4_294_967_295`).
+    + `i32-min` — Minimum `i32` value (`-2_147_483_648`).
+    + `i32-max` — Maximum `i32` value (`2_147_483_647`).
+    + `f32-min` — Most negative finite `f32` value (`-FLT_MAX`).
+    + `f32-max` — Largest positive finite `f32` value (`FLT_MAX`).
+
+    All boundary constants have their corresponding numeric types.
+
+    For floating-point values, `f32-min` represents the lowest finite value,
+    not the smallest positive value. In C, `FLT_MIN` represents the smallest
+    positive normalized floating-point value.
+
+    Examples:
+
+    + `(== u32-max 4_294_967_295)` → `true`
+    + `(== i32-min -2_147_483_648)` → `true`
+    + `(< f32-min 0.0)` → `true`
+
   * Variables
     + `(var "foo" 123)` — Define a variable (`u32` type; can be defined only once)
     + `(var "foo" (type i32 123))` — Define a variable with `i32` type

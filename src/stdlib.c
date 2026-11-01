@@ -744,6 +744,18 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   ADD_VAR_SYMBOL("f32", TYPE_U32, u32, TYPE_F32);
   ADD_VAR_SYMBOL("s", TYPE_U32, u32, TYPE_STRING);
 
+  // Numeric type boundaries
+  ADD_VAR_SYMBOL("u32-min", TYPE_U32, u32, 0u);
+  ADD_VAR_SYMBOL("u32-max", TYPE_U32, u32, UINT32_MAX);
+  ADD_VAR_SYMBOL("i32-min", TYPE_I32, i32, INT32_MIN);
+  ADD_VAR_SYMBOL("i32-max", TYPE_I32, i32, INT32_MAX);
+  ADD_VAR_SYMBOL("f32-min", TYPE_F32, f32, -FLT_MAX);
+  ADD_VAR_SYMBOL("f32-max", TYPE_F32, f32, FLT_MAX);
+  // TODO
+  // f32-min-positive  FLT_MIN       Smallest positive normalized f32
+  // f32-true-min      FLT_TRUE_MIN  Smallest positive subnormal f32
+  // f32-epsilon       FLT_EPSILON   Difference between 1.0f and the next larger representable float
+
   // Kind identifiers
   ADD_VAR_SYMBOL("empty-kind", TYPE_U32, u32, SYM_EMPTY);
   ADD_VAR_SYMBOL("var-kind", TYPE_U32, u32, SYM_VARIABLE);
