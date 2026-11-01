@@ -6,8 +6,9 @@
   (label "inner")
   (set "counter" (+ counter 1))
   (if (== counter 3)
-    (exit 0 counter)))
+    (do
+      (assert (== counter 3) "Final counter value must be 3")
+      (exit 0 counter))))
 
 (goto inner)
-
 ; Evaluation result is 3, the final counter value

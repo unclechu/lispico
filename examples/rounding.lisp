@@ -1,4 +1,17 @@
-(floor -3.7) ; -4.0
-(ceiling -3.7) ; -3.0
-(round 2.5) ; 3.0 (halfway rounds away from zero)
-(trunc -3.7) ; -3.0
+; f32 rounding
+(assert (== (floor -3.7) -4.)) ; -4.0
+(assert (== (ceiling -3.7) -3.)) ; -3.0
+(assert (== (round 2.5) 3.)) ; 3.0 (halfway rounds away from zero)
+(assert (== (trunc -3.7) -3.)) ; -3.0
+
+; Preserving i32 type
+(assert (== (floor -4) -4)) (assert (== (type-of (floor -4)) i32))
+(assert (== (ceiling -3) -3)) (assert (== (type-of (ceiling -3)) i32))
+(assert (== (round -2) -2)) (assert (== (type-of (round -2)) i32))
+(assert (== (trunc -1) -1)) (assert (== (type-of (trunc -1)) i32))
+
+; Preserving u32 type
+(assert (== (floor 4) 4)) (assert (== (type-of (floor 4)) u32))
+(assert (== (ceiling 3) 3)) (assert (== (type-of (ceiling 3)) u32))
+(assert (== (round 2) 2)) (assert (== (type-of (round 2)) u32))
+(assert (== (trunc 1) 1)) (assert (== (type-of (trunc 1)) u32))

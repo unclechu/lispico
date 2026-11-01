@@ -7,6 +7,6 @@
   (if (< counter 3)
     (goto outer)))
 
+(assert (== counter 3) "Final counter value must be 3")
 (exit 0 counter)
-
 ; Evaluation result is 3, the final counter value

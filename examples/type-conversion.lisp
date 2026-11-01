@@ -1,5 +1,15 @@
-(type i32 123) ; TYPE_I32(123)
-(type f32 123) ; TYPE_F32(123.000000)
-(type i32 123.321) ; TYPE_I32(123)
-(type i32 -123.321) ; TYPE_I32(-123)
-(type u32 (type i32 7)) ; TYPE_U32(7)
+(assert (== (type-of (type i32 123)) i32))
+(assert (== (type u32 (type i32 123)) 123))
+
+(assert (== (type-of (type f32 123)) f32))
+(assert (== (type u32 (type f32 123)) 123))
+
+(assert (== (type-of (type i32 123.321)) i32))
+(assert (== (type i32 123.321) (type i32 123)))
+
+(assert (== (type-of (type i32 -123.321)) i32))
+(assert (== (type i32 -123.321) -123))
+(assert (== (type f32 (type i32 -123.321)) (type f32 -123)))
+
+(assert (== (type-of (type u32 (type i32 7))) u32))
+(assert (== (type u32 (type i32 7)) 7))

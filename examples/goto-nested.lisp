@@ -10,4 +10,5 @@
     (goto loop)
     counter))
 
+(assert (== counter 5) "Final counter value must be 5")
 counter ; Result: SYM_VARIABLE(TYPE_U32(5))

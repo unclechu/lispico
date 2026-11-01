@@ -1,2 +1,3 @@
 ; Unsigned arithmetic wraps modulo 2^32.
-(- 2 3) ; TYPE_U32(4294967295)
+(assert (== (- 2 3) 4294967295))
+(assert (== (type s (- 2 3)) "4294967295"))

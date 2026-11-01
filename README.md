@@ -43,8 +43,6 @@ written in C. That's also where the name comes from: LISP-like + Pico.
   * Evaluator: Memory wipe and cleanup for allocated runtime entities
   * Evaluator: Implement custom expressions list cloning (and expression allocations)
 
-  * Add more string manipulation operations (e.g. per-char reads and writes)
-
   * Compilation parsed expressions to binary
     + Support compiling to binary and evaluating binaries (skipping parsing step)
     + Binary format: Validate loaded binaries
