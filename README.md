@@ -41,13 +41,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + Memory cleanup and repeated evaluation tests
     + Tests for expression, symbol, and allocation capacity limits
 
-  * Many arguments support for:
-    + `(+)`
-    + `(-)`
-    + `(*)`
-    + `(/)`
-    + `(div)`
-
   * Evaluator: Handle maximum evaluation recursion depth / stack exhaustion
 
   * Documentation: Document execution semantics, resource limits,
@@ -699,6 +692,56 @@ features:
 - Supported instructions
 
   * <a id="basic-arithmetics"></a>Basic arithmetics
+
+    + `(+ VALUE...)` — Add two or more numeric values
+      + `(+ 1 2 3)` → `6`
+      + `(+ 1 2 3 4 5)` → `15`
+      + `(+ u32-max 1)` → `0` (`u32` wraparound)
+
+    + `(- VALUE...)` — Subtract two or more numeric values from left to right
+      + `(- 20 3 2)` → `15`
+      + `(- 100 10 5 2)` → `83`
+      + `(- 2 3)` → `4_294_967_295` (`u32` wraparound)
+
+    + `(* VALUE...)` — Multiply two or more numeric values
+      + `(* 2 3 4)` → `24`
+      + `(* 1 2 3 4 5)` → `120`
+
+    + `(/ VALUE...)` — Divide two or more numeric values from left to right
+      + `(/ 100 5 2)` → `10` (`u32`)
+      + `(/ 7.5 2.0 0.5)` → `7.5` (`f32`)
+      + `(/ 7 2)` → `3` (`u32`, fractional part discarded)
+
+    + `(div VALUE...)` — Divide two or more numeric values from left to right,
+      truncating the result toward zero after each division
+      + `(div 100 3 2)` → `16` (`u32`)
+      + `(div 9.0 2.0 0.5)` → `8.0` (`f32`)
+      + `(div -9.0 2.0 0.5)` → `-8.0` (`f32`)
+
+    All five functions require at least two arguments of the same numeric
+    type (`u32`, `i32`, or `f32`). The result preserves the argument type.
+    There is no implicit type conversion.
+
+    Arguments are processed from left to right, equivalent to repeatedly
+    applying the binary operation to the accumulated result and the next
+    argument.
+
+    Examples:
+    + `(- 20 3 2)` is equivalent to `(- (- 20 3) 2)`.
+    + `(/ 100 5 2)` is equivalent to `(/ (/ 100 5) 2)`.
+    + `(div 9.0 2.0 0.5)` is equivalent to `(div (div 9.0 2.0) 0.5)`.
+
+    For `u32`, addition, subtraction, and multiplication wrap modulo `2^32`.
+    For `i32`, results exceeding the signed 32-bit range cause an evaluation
+    failure.
+
+    For `u32` and `i32`, both `(/)` and `(div)` perform integer division,
+    discarding the fractional part. For `f32`, `(/)` preserves the fractional
+    result, while `(div)` truncates toward zero after each step.
+
+    Division by zero in any argument causes an evaluation failure.
+
+    `(mod A B)` remains a binary operation and accepts exactly two arguments.
 
     + `(+ 2 3)` — Addition
     + `(- 3 2)` — Subtraction
