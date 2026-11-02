@@ -42,7 +42,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + Tests for expression, symbol, and allocation capacity limits
 
   * Extra string manipulations:
-    + `(str-get)`
     + `(str-set)`
     + `(str-new)`
     + `(str-copy)`
@@ -372,7 +371,31 @@ features:
       allocate memory.
 
     + `(str-get "NAME" INDEX)` —
-      Reads a byte (`u32`) from a string variable (no allocation)
+      Reads a byte from a named string variable and returns it as `u32`
+      (no allocation).
+
+      + `(var "message" "Hello")`
+      + `(str-get "message" 0)` → `72` (ASCII `H`)
+      + `(str-get "message" 1)` → `101` (ASCII `e`)
+      + `(str-get "message" 4)` → `111` (ASCII `o`)
+      + `(str-get "message" 5)` → Evaluation failure (out of bounds)
+      + `(str-get "unknown" 0)` → Evaluation failure (undefined variable)
+
+      The first argument must evaluate to a valid symbol name as a string.
+      The named symbol must exist and contain a string variable.
+
+      The second argument must evaluate to `u32`. Indexes are zero-based
+      and must be strictly less than the string variable's byte length.
+
+      Bytes are returned as unsigned values from `0` to `255`.
+      Embedded `\0` bytes are readable and return `0`.
+
+      String indexes are measured in bytes, not Unicode characters.
+      The function does not modify the string or allocate memory.
+
+      Unlike `(str-char STRING INDEX)`, which reads from any evaluated
+      string, `(str-get)` reads from a named string variable through
+      the global symbol table.
 
     + `(str-set "NAME" INDEX BYTE)` —
       Changes one byte, numeric BYTE from 0 to 255 (no allocation)
