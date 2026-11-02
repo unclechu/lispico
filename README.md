@@ -42,7 +42,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + Tests for expression, symbol, and allocation capacity limits
 
   * Extra string manipulations:
-    + `(str-char)`
     + `(str-get)`
     + `(str-set)`
     + `(str-new)`
@@ -197,7 +196,34 @@ features:
       failures. No memory allocation or string modification is performed.
 
     + `(str-char STRING INDEX)` —
-      Reads a byte (`u32`) from any evaluated string (no allocation)
+      Reads a byte from any evaluated string and returns it as `u32`
+      (no allocation).
+
+      + `(str-char "hello" 0)` → `104` (ASCII `h`)
+      + `(str-char "hello" 1)` → `101` (ASCII `e`)
+      + `(str-char "hello" 4)` → `111` (ASCII `o`)
+      + `(str-char "hello" 5)` → Evaluation failure (out of bounds)
+      + `(str-char "" 0)` → Evaluation failure (empty string)
+
+      The first argument can be any evaluated string expression, including
+      literals, variables, concatenations, and string conversions.
+
+      The second argument must evaluate to `u32`. String indexes are
+      zero-based and must be strictly less than `String::length`.
+
+      Bytes are returned as unsigned values in the range `0` to `255`,
+      regardless of whether C's `char` type is signed.
+
+      The function reads individual bytes, not Unicode characters. For
+      example, a UTF-8 character encoded using multiple bytes must be
+      accessed one byte at a time.
+
+      Embedded `\0` bytes are readable and return `0`. String boundaries
+      are determined by `String::length`, not a null terminator.
+
+      Non-string arguments, invalid index types, and out-of-bounds indexes
+      cause evaluation failures. The function does not modify strings or
+      allocate memory.
 
     + `(str-get "NAME" INDEX)` —
       Reads a byte (`u32`) from a string variable (no allocation)
