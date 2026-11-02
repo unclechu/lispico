@@ -31,6 +31,8 @@ static uint32_t hash_name(const char *name) {
   ```
 */
 Symbol* symbol_lookup(const char *name) {
+  if (symbols == NULL || symbol_capacity == 0) return NULL;
+
   // Getting hash-table index between 0 and `symbol_capacity`-1.
   // Modulo over `symbol_capacity`.
   size_t i = hash_name(name) & (symbol_capacity - 1u);

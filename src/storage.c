@@ -52,6 +52,16 @@ bool configure_interpreter_storage(const InterpreterStorage *storage) {
   // Open-addressed symbol hashing requires a power-of-two capacity.
   if ((storage->symbol_capacity & (storage->symbol_capacity - 1u)) != 0) return false;
 
+  #if SIZE_MAX <= UINT32_MAX
+    if (
+      storage->expression_capacity > SIZE_MAX / sizeof(*storage->expressions) ||
+      storage->expression_allocation_capacity > SIZE_MAX / sizeof(*storage->expression_allocations) ||
+      storage->symbol_capacity > SIZE_MAX / sizeof(*storage->symbols) ||
+      storage->runtime_allocation_capacity > SIZE_MAX / sizeof(*storage->runtime_allocations) ||
+      storage->deferred_expression_capacity > SIZE_MAX / sizeof(*storage->deferred_expression_indices)
+    ) return false;
+  #endif
+
   expressions = storage->expressions;
   expression_capacity = storage->expression_capacity;
   expression_count = 0;

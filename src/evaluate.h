@@ -48,11 +48,9 @@ typedef struct EvalSettingsInterface {
   );
 } EvalSettingsInterface;
 
+// Evaluate expressions from the configured interpreter storage.
+// TODO: Support evaluating a custom expression array.
 EvalOutcome evaluate(
-  // Optionally custom expressions array.
-  // If you want to use global fixed-memory expressions array just set:
-  // `eval_expressions = expressions` and
-  // `eval_expression_count = expression_count`.
   const Expression *eval_expressions,
   uint32_t eval_expression_count,
 
