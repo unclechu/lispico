@@ -60,21 +60,3 @@ ADD_COMPARISON_FN(std_greater, ">", >)
 ADD_COMPARISON_FN(std_greater_equal, ">=", >=)
 ADD_COMPARISON_FN(std_equal, "==", ==)
 ADD_COMPARISON_FN(std_not_equal, "!=", !=)
-
-// Populate the `symbols` with “standard library” comparison functions
-bool populate_stdlib_comparisons(char (*error_message)[ERR_MSG_SIZE]) {
-  const char *symbol_name;
-
-  ADD_FN_SYMBOL("<", std_less);
-  ADD_FN_SYMBOL("<=", std_less_equal);
-  ADD_FN_SYMBOL(">", std_greater);
-  ADD_FN_SYMBOL(">=", std_greater_equal);
-  ADD_FN_SYMBOL("==", std_equal);
-  ADD_FN_SYMBOL("!=", std_not_equal);
-
-  return true;
-
-  symbol_define_fail:
-    extract_error_message_from_symbol_define_error(error_message, symbol_name);
-    return false;
-}

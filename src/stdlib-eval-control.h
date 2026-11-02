@@ -5,4 +5,5 @@
 
 ADD_STDLIB_FN_TYPE_DEF(std_exit);
 
-bool populate_stdlib_eval_control(char (*error_message)[ERR_MSG_SIZE]);
+#define POPULATE_STDLIB_EVAL_CONTROL() \
+  ADD_FN_SYMBOL("exit", std_exit);

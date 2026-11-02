@@ -20,4 +20,8 @@ ADD_STDLIB_FN_TYPE_DEF(std_println);
 ADD_STDLIB_FN_TYPE_DEF(std_eprint);
 ADD_STDLIB_FN_TYPE_DEF(std_eprintln);
 
-bool populate_stdlib_print(char (*error_message)[ERR_MSG_SIZE]);
+#define POPULATE_STDLIB_PRINT() \
+  ADD_FN_SYMBOL("print", std_print); \
+  ADD_FN_SYMBOL("println", std_println); \
+  ADD_FN_SYMBOL("eprint", std_eprint); \
+  ADD_FN_SYMBOL("eprintln", std_eprintln);

@@ -228,19 +228,3 @@ Datum std_clamp(const Datum *args, size_t argc) {
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
-
-// Populate the `symbols` with “standard library” extra numeric functions
-bool populate_stdlib_numeric_fns(char (*error_message)[ERR_MSG_SIZE]) {
-  const char *symbol_name;
-
-  ADD_FN_SYMBOL("abs", std_abs);
-  ADD_FN_SYMBOL("min", std_min);
-  ADD_FN_SYMBOL("max", std_max);
-  ADD_FN_SYMBOL("clamp", std_clamp);
-
-  return true;
-
-  symbol_define_fail:
-    extract_error_message_from_symbol_define_error(error_message, symbol_name);
-    return false;
-}

@@ -49,16 +49,3 @@ Datum std_exit(const Datum *args, size_t argc) {
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
-
-// Populate the `symbols` with “standard library” evaluation control functions
-bool populate_stdlib_eval_control(char (*error_message)[ERR_MSG_SIZE]) {
-  const char *symbol_name;
-
-  ADD_FN_SYMBOL("exit", std_exit);
-
-  return true;
-
-  symbol_define_fail:
-    extract_error_message_from_symbol_define_error(error_message, symbol_name);
-    return false;
-}

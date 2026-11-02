@@ -3,6 +3,7 @@
 
 #include "src/symbol.h"
 #include "src/symbol-print.h"
+#include "src/symbol-error.h"
 #include "src/evaluate.h"
 #include "src/expression.h"
 #include "src/read-file.h"
@@ -15,24 +16,9 @@ typedef struct {
   Array argv;
 } SettingsState;
 
-#define populate_stdlib_ext(stdlib_ext) { \
-  if (!stdlib_ext(&fail_msg)) { \
-    snprintf( \
-      final_fail_msg, \
-      sizeof(final_fail_msg), \
-      #stdlib_ext ": %.*s", \
-      (int)(sizeof(final_fail_msg) - sizeof(#stdlib_ext ": ")), \
-      fail_msg \
-    ); \
-    interface->report_failure(interface, final_fail_msg); \
-    return; \
-  } \
-}
-
 static void eval_settings_cb(EvalSettingsInterface *interface) {
   SettingsState *state = (SettingsState*) interface->state;
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
-  char final_fail_msg[ERR_MSG_SIZE] = {'\0'};
 
   Symbol *argc_sym = interface->define_symbol(interface, "argc", SYM_VARIABLE);
   if (argc_sym == NULL) return;
@@ -42,8 +28,14 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   if (argv_sym == NULL) return;
   argv_sym->as.array = state->argv;
 
-  populate_stdlib_ext(populate_stdlib_print);
-  populate_stdlib_ext(populate_stdlib_sleep);
+  const char *symbol_name;
+  POPULATE_STDLIB_PRINT();
+  POPULATE_STDLIB_SLEEP();
+  return;
+
+  symbol_define_fail:
+    extract_error_message_from_symbol_define_error(&fail_msg, symbol_name);
+    interface->report_failure(interface, fail_msg);
 }
 
 int main(int argc, char **argv) {

@@ -84,25 +84,3 @@ ADD_UNARY_ROUNDING_FN(std_floor, "floor", floorf(x))
 ADD_UNARY_ROUNDING_FN(std_ceiling, "ceiling", ceilf(x))
 ADD_UNARY_ROUNDING_FN(std_round, "round", roundf(x))
 ADD_UNARY_ROUNDING_FN(std_trunc, "trunc", truncf(x))
-
-// Populate the `symbols` with “standard library” arithmetics functions
-bool populate_stdlib_arithmetics(char (*error_message)[ERR_MSG_SIZE]) {
-  const char *symbol_name;
-
-  ADD_FN_SYMBOL("+", std_add);
-  ADD_FN_SYMBOL("-", std_subtract);
-  ADD_FN_SYMBOL("*", std_mul);
-  ADD_FN_SYMBOL("/", std_divide);
-  ADD_FN_SYMBOL("mod", std_mod);
-  ADD_FN_SYMBOL("div", std_div);
-  ADD_FN_SYMBOL("floor", std_floor);
-  ADD_FN_SYMBOL("ceiling", std_ceiling);
-  ADD_FN_SYMBOL("round", std_round);
-  ADD_FN_SYMBOL("trunc", std_trunc);
-
-  return true;
-
-  symbol_define_fail:
-    extract_error_message_from_symbol_define_error(error_message, symbol_name);
-    return false;
-}

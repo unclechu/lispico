@@ -120,18 +120,3 @@ Datum std_sleep_ms(const Datum *args, size_t argc) {
 Datum std_sleep_us(const Datum *args, size_t argc) {
   return std_sleep_generic(args, argc, "sleep-us", 0.000001);
 }
-
-// Populate the `symbols` with “standard library” sleeping functions
-bool populate_stdlib_sleep(char (*error_message)[ERR_MSG_SIZE]) {
-  const char *symbol_name;
-
-  ADD_FN_SYMBOL("sleep-s", std_sleep_s);
-  ADD_FN_SYMBOL("sleep-ms", std_sleep_ms);
-  ADD_FN_SYMBOL("sleep-us", std_sleep_us);
-
-  return true;
-
-  symbol_define_fail:
-    extract_error_message_from_symbol_define_error(error_message, symbol_name);
-    return false;
-}

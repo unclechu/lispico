@@ -5,4 +5,5 @@
 
 ADD_STDLIB_FN_TYPE_DEF(std_assert);
 
-bool populate_stdlib_assertions(char (*error_message)[ERR_MSG_SIZE]);
+#define POPULATE_STDLIB_ASSERTIONS() \
+  ADD_FN_SYMBOL("assert", std_assert);

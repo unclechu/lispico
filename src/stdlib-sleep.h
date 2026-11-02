@@ -7,4 +7,7 @@ ADD_STDLIB_FN_TYPE_DEF(std_sleep_s);
 ADD_STDLIB_FN_TYPE_DEF(std_sleep_ms);
 ADD_STDLIB_FN_TYPE_DEF(std_sleep_us);
 
-bool populate_stdlib_sleep(char (*error_message)[ERR_MSG_SIZE]);
+#define POPULATE_STDLIB_SLEEP() \
+  ADD_FN_SYMBOL("sleep-s", std_sleep_s); \
+  ADD_FN_SYMBOL("sleep-ms", std_sleep_ms); \
+  ADD_FN_SYMBOL("sleep-us", std_sleep_us);

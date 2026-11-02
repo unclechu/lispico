@@ -3,3 +3,37 @@
 #include "constants.h"
 
 bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]);
+
+#define POPULATE_STDLIB() \
+  /* Assertions */ \
+  POPULATE_STDLIB_ASSERTIONS(); \
+  \
+  /* Evaluation control */ \
+  POPULATE_STDLIB_EVAL_CONTROL(); \
+  \
+  /* Sequences */ \
+  POPULATE_STDLIB_SEQUENCES(); \
+  \
+  /* Variables */ \
+  POPULATE_STDLIB_VARIABLES(); \
+  \
+  /* Types */ \
+  POPULATE_STDLIB_TYPES(); \
+  \
+  /* Strings */ \
+  POPULATE_STDLIB_STRINGS(); \
+  \
+  /* Arithmetics */ \
+  POPULATE_STDLIB_ARITHMETICS(); \
+  /* Basic numeric functions */ \
+  POPULATE_STDLIB_NUMERIC_FNS(); \
+  /* Powers and logarithms */ \
+  POPULATE_STDLIB_POW_N_LOG(); \
+  /* Trigonometry */ \
+  POPULATE_STDLIB_TRIGONOMETRY(); \
+  \
+  /* Comparisons */ \
+  POPULATE_STDLIB_COMPARISONS(); \
+  \
+  /* Jumps */ \
+  POPULATE_STDLIB_JUMPS();

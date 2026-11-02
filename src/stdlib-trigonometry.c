@@ -147,27 +147,3 @@ Datum std_atan2(const Datum *args, size_t argc) {
 Datum std_hypot(const Datum *args, size_t argc) {
   return std_binary_trigonometry(args, argc, "hypot", hypotf);
 }
-
-// Populate the `symbols` with trigonometric functions
-bool populate_stdlib_trigonometry(char (*error_message)[ERR_MSG_SIZE]) {
-  const char *symbol_name;
-
-  ADD_FN_SYMBOL("sin", std_sin);
-  ADD_FN_SYMBOL("cos", std_cos);
-  ADD_FN_SYMBOL("tan", std_tan);
-  ADD_FN_SYMBOL("asin", std_asin);
-  ADD_FN_SYMBOL("acos", std_acos);
-  ADD_FN_SYMBOL("atan", std_atan);
-  ADD_FN_SYMBOL("atan2", std_atan2);
-  ADD_FN_SYMBOL("hypot", std_hypot);
-
-  // Mathematical constants
-  ADD_VAR_SYMBOL("pi", TYPE_F32, f32, 3.14159265358979323846f);
-  ADD_VAR_SYMBOL("e", TYPE_F32, f32, 2.71828182845904523536f);
-
-  return true;
-
-  symbol_define_fail:
-    extract_error_message_from_symbol_define_error(error_message, symbol_name);
-    return false;
-}

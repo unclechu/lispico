@@ -5,4 +5,5 @@
 
 ADD_STDLIB_FN_TYPE_DEF(std_str);
 
-bool populate_stdlib_strings(char (*error_message)[ERR_MSG_SIZE]);
+#define POPULATE_STDLIB_STRINGS() \
+  ADD_FN_SYMBOL("str", std_str);

@@ -8,4 +8,6 @@ ADD_STDLIB_FN_TYPE_DEF(std_set);
 
 bool get_variable_name(const Datum *datum, char (*name)[SYMBOL_NAME_SIZE]);
 
-bool populate_stdlib_variables(char (*error_message)[ERR_MSG_SIZE]);
+#define POPULATE_STDLIB_VARIABLES() \
+  ADD_FN_SYMBOL("var", std_var); \
+  ADD_FN_SYMBOL("set", std_set);

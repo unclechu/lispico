@@ -8,4 +8,8 @@ ADD_STDLIB_FN_TYPE_DEF(std_min);
 ADD_STDLIB_FN_TYPE_DEF(std_max);
 ADD_STDLIB_FN_TYPE_DEF(std_clamp);
 
-bool populate_stdlib_numeric_fns(char (*error_message)[ERR_MSG_SIZE]);
+#define POPULATE_STDLIB_NUMERIC_FNS() \
+  ADD_FN_SYMBOL("abs", std_abs); \
+  ADD_FN_SYMBOL("min", std_min); \
+  ADD_FN_SYMBOL("max", std_max); \
+  ADD_FN_SYMBOL("clamp", std_clamp);
