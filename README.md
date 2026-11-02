@@ -175,7 +175,26 @@ features:
         `String::length` determines its actual length.
 
     + `(str-size STRING)` —
-      Returns length in bytes (`u32`; no allocation)
+      Returns the length of a string in bytes (`u32`; no allocation).
+
+      + `(str-size "")` → `0`
+      + `(str-size "hello")` → `5`
+      + `(str-size "hello world")` → `11`
+      + `(str-size (str "abc" "def"))` → `6`
+
+      The argument can be any evaluated string expression, including string
+      literals, variables, concatenations, and string conversions.
+
+      The length is read directly from `String::length`, not calculated by
+      searching for a `\0` terminator. Embedded `\0` bytes are included in
+      the length.
+
+      String lengths are measured in bytes, not Unicode characters.
+      The result is always `u32`. A length exceeding the `u32` range
+      causes an evaluation failure.
+
+      Non-string arguments and incorrect argument counts cause evaluation
+      failures. No memory allocation or string modification is performed.
 
     + `(str-char STRING INDEX)` —
       Reads a byte (`u32`) from any evaluated string (no allocation)
