@@ -38,28 +38,35 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + Parser tests (valid/invalid syntax, comments, escaping, numeric bounds)
     + Evaluator tests for every supported operation
     + Control-flow tests (`if`, `do`, `goto`, `label`, `exit`)
-    + Memory cleanup and repeated evaluation tests
     + Tests for expression, symbol, and allocation capacity limits
-
-  * Evaluator: Handle maximum evaluation recursion depth / stack exhaustion
+    + Memory cleanup and repeated evaluation tests
+      + Evaluate multiple programs sequentially in the same process.
+      + Verify cleanup after successful evaluations, failures, and exits.
+      + Verify runtime allocations are wiped and released.
+      + Verify parser allocations are wiped and released.
+      + Verify symbols and control-flow state are reset between evaluations.
+      + Verify returned strings are copied before cleanup when needed.
 
   * Documentation: Document execution semantics, resource limits,
     and supported language syntax
 
-  * Evaluator: Runtime allocation for arrays (`(arr-*)`)
-  * Evaluator: More informative error messages
-  * Evaluator: Memory wipe and cleanup for allocated runtime entities
-  * Evaluator: Implement custom expressions list cloning (and expression allocations)
+  * Evaluator:
+    + Runtime allocation for arrays (`(arr-*)`)
+    + More informative error messages
+    + Handle maximum evaluation recursion depth / stack exhaustion
+    + Implement custom expressions list cloning (and expression allocations)
 
   * Compilation parsed expressions to binary
     + Support compiling to binary and evaluating binaries (skipping parsing step)
     + Binary format: Validate loaded binaries
       (version, sizes, expression indexes, allocation references)
 
-  * Try to build for Raspberry Pico (using `nixpkgs.gcc-arm-embedded`)
-    and make necessary changes to make it work on that platform
+  * Raspberry Pico platform support
 
-  * Provide examples how to use it on Raspberry Pico (making parser optional)
+    * Try to build for Raspberry Pico (using `nixpkgs.gcc-arm-embedded`)
+      and make necessary changes to make it work on that platform
+
+    * Provide examples how to use it on Raspberry Pico (making parser optional)
 
   * Interpreter executable:
     + Variables as inputs: `--var foo u32:123`/`--var bar string:test`

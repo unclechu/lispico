@@ -131,5 +131,4 @@ Symbol* symbol_define(const char *name, SymbolKind kind) {
 // Reset `symbols` state (flush the hash-table)
 void clean_symbols() {
   wipe_memory(symbols, sizeof(symbols));
-  // TODO: wipe the allocated strings and arrays (runtime allocation)
 }
