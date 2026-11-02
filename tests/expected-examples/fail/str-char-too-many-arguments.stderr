@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (str-char) expects exactly 2 arguments, got instead: 3
+[FAIL] Evaluation failed: (str-char) expects 1 or 2 arguments

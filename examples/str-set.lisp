@@ -87,10 +87,10 @@
 
 ; Replace char to another char (without manually specifying byte numbers)
 (var "char-replacement" "john")
-(str-set "char-replacement" 0 (str-char "J" 0))
+(str-set "char-replacement" 0 (str-char "J"))
 (assert (== char-replacement "John"))
 
 ; Replace last character
 (var "last-char-replacement" "Hello")
-(str-set "last-char-replacement" (- (str-size last-char-replacement) 1) (str-char "!" 0))
+(str-set "last-char-replacement" (- (str-size last-char-replacement) 1) (str-char "!"))
 (assert (== last-char-replacement "Hell!"))

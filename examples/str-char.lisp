@@ -34,3 +34,19 @@
 (assert (== (str-size "é") 2))
 (assert (== (str-char "é" 0) 195))
 (assert (== (str-char "é" 1) 169))
+
+; Index can be omitted for single-byte strings
+(assert (== (str-char "!") 33))
+(assert (== (str-char "A") 65))
+(assert (== (str-char "0") 48))
+(assert (== (str-char " ") 32))
+(assert (== (str-char "\0") 0))
+
+; Explicit index still works for single-byte strings
+(assert (== (str-char "!" 0) 33))
+
+; Works with evaluated string expressions
+(assert (== (str-char (str "!" "")) 33))
+
+; Result is always u32
+(assert (== (type-of (str-char "!")) u32))

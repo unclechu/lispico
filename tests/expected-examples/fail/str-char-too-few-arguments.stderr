@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (str-char) expects exactly 2 arguments, got instead: 1
+[FAIL] Evaluation failed: (str-char) index is required unless string length is 1

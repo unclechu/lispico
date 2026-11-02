@@ -340,35 +340,42 @@ features:
       Non-string arguments and incorrect argument counts cause evaluation
       failures. No memory allocation or string modification is performed.
 
-    + `(str-char STRING INDEX)` —
+    + `(str-char STRING [INDEX])` —
       Reads a byte from any evaluated string and returns it as `u32`
       (no allocation).
 
+      + `(str-char "!")` → `33` (ASCII `!`)
+      + `(str-char "A")` → `65` (ASCII `A`)
+      + `(str-char "\0")` → `0` (NUL byte)
       + `(str-char "hello" 0)` → `104` (ASCII `h`)
-      + `(str-char "hello" 1)` → `101` (ASCII `e`)
       + `(str-char "hello" 4)` → `111` (ASCII `o`)
+      + `(str-char "hello")` → Evaluation failure (index required)
+      + `(str-char "")` → Evaluation failure (index required)
       + `(str-char "hello" 5)` → Evaluation failure (out of bounds)
-      + `(str-char "" 0)` → Evaluation failure (empty string)
 
       The first argument can be any evaluated string expression, including
       literals, variables, concatenations, and string conversions.
 
-      The second argument must evaluate to `u32`. String indexes are
+      `INDEX` is optional only when the string contains exactly one byte.
+      When omitted, it defaults to `0`. Otherwise, an explicit index is
+      required.
+
+      When provided, `INDEX` must evaluate to `u32`. String indexes are
       zero-based and must be strictly less than `String::length`.
 
       Bytes are returned as unsigned values in the range `0` to `255`,
       regardless of whether C's `char` type is signed.
 
-      The function reads individual bytes, not Unicode characters. For
-      example, a UTF-8 character encoded using multiple bytes must be
-      accessed one byte at a time.
+      The function reads individual bytes, not Unicode characters. A UTF-8
+      character encoded using multiple bytes requires an explicit index,
+      even if it represents only one Unicode character.
 
       Embedded `\0` bytes are readable and return `0`. String boundaries
       are determined by `String::length`, not a null terminator.
 
-      Non-string arguments, invalid index types, and out-of-bounds indexes
-      cause evaluation failures. The function does not modify strings or
-      allocate memory.
+      Non-string arguments, missing required indexes, invalid index types,
+      and out-of-bounds indexes cause evaluation failures. The function
+      does not modify strings or allocate memory.
 
     + `(str-get "NAME" INDEX)` —
       Reads a byte from a named string variable and returns it as `u32`
