@@ -433,3 +433,86 @@ Datum std_str_set(const Datum *args, size_t argc) {
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
+
+// (str-copy) — Create an independent copy of a string with optional length limit
+Datum std_str_copy(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "str-copy";
+
+  if (argc != 1 && argc != 2) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects 1 or 2 arguments", fn_name);
+    goto fail;
+  }
+
+  if (args[0].kind != SYM_VARIABLE || args[0].as.value.type != TYPE_STRING) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a string as the first argument", fn_name);
+    goto fail;
+  }
+
+  String source = args[0].as.value.as.string;
+
+  if (source.length != 0 && source.data == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid source string", fn_name);
+    goto fail;
+  }
+
+  // By default, copy the entire string, including embedded `\0` bytes.
+  size_t length = source.length;
+
+  if (argc == 2) {
+    if (args[1].kind != SYM_VARIABLE || args[1].as.value.type != TYPE_U32) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 length", fn_name);
+      goto fail;
+    }
+
+    length = args[1].as.value.as.u32;
+
+    if (length > source.length) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) requested length exceeds source string length",
+        fn_name
+      );
+      goto fail;
+    }
+  }
+
+  // Reserve one additional byte for a convenience `\0` terminator.
+  if (length == SIZE_MAX) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) resulting string is too large", fn_name);
+    goto fail;
+  }
+
+  // +1 for the final string `\0` terminator
+  char *data = allocate_runtime_data(length + 1);
+  if (data == NULL) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
+  }
+
+  // Copy exactly `length` bytes, regardless of embedded `\0` bytes.
+  if (length != 0) memcpy(data, source.data, length);
+  data[length] = '\0';
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = {
+      .type = TYPE_STRING,
+      .as.string = { .data = data, .length = length },
+    },
+  };
+
+  return return_value;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}

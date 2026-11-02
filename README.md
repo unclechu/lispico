@@ -43,7 +43,13 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
 
   * Extra string manipulations:
     + `(str-new)`
-    + `(str-copy)`
+
+  * Many arguments support for:
+    + `(+)`
+    + `(-)`
+    + `(*)`
+    + `(/)`
+    + `(div)`
 
   * Evaluator: Handle maximum evaluation recursion depth / stack exhaustion
 
@@ -503,11 +509,65 @@ features:
     + `(str-new "NAME" LENGTH)` —
       Defines a new zero-initialized string variable (allocates)
 
-    + `(str-copy STRING)` —
-      Returns an independent copy of a string (allocates).
+    + `(str-copy STRING [LENGTH])` —
+      Creates an independent copy of a string with an optional byte length
+      limit (allocates).
 
-      Useful when a string is shared by reference and may be mutated elsewhere
-      (e.g. strings stored in arrays).
+      + `(str-copy "Hello")` → `"Hello"`
+      + `(str-copy "Hello" 3)` → `"Hel"`
+      + `(str-copy "Hello" 0)` → `""`
+      + `(str-copy "Hello" 5)` → `"Hello"`
+      + `(str-copy "Hello" 6)` → Evaluation failure (out of bounds)
+      + `(str-copy "abc\0def" 5)` → `"abc\0d"`
+
+      The first argument can be any evaluated string expression, including
+      literals, variables, concatenations, and string conversions.
+
+      `LENGTH` is optional and must evaluate to `u32` when provided.
+
+      When omitted, the entire source string is copied, including any
+      embedded `\0` bytes.
+
+      When provided, exactly `LENGTH` bytes are copied from the beginning
+      of the source string. `LENGTH` must not exceed `String::length`.
+      A length of `0` is allowed and produces an empty string.
+
+      The resulting `String::length` equals the number of copied bytes,
+      which may be smaller than the original string length.
+
+      Embedded `\0` bytes are treated as ordinary bytes and do not stop
+      copying. All lengths refer to bytes, not Unicode characters.
+
+      The resulting string has its own independent memory allocation.
+      Modifying the original string does not affect the copy, and modifying
+      the copy does not affect the original.
+
+      One additional `\0` byte is allocated after the copied data as a
+      convenience terminator. This byte is not included in `String::length`.
+
+      All allocations are tracked by the evaluator and released during
+      `clean_evaluation()`.
+
+      Invalid argument types, incorrect argument counts, out-of-bounds
+      lengths, and allocation failures cause evaluation failures.
+
+      `(str-copy)` is useful for creating shorter strings from existing
+      fixed-length buffers, including after `(str-set)` introduces trailing
+      `\0` bytes.
+
+      Example:
+
+      ```lisp
+      (var "message" "Hello world")
+      (str-set "message" "Hi")
+
+      ; Keep only the meaningful bytes before the first NUL.
+      (var "short" (str-copy message (str-len message)))
+
+      (assert (== (str-size message) 11))
+      (assert (== (str-size short) 2))
+      (assert (== short "Hi"))
+      ```
 
     + `(str [STRING-N…])` —
       Creates a new string with all string arguments concatenated together
