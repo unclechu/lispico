@@ -434,6 +434,86 @@ Datum std_str_set(const Datum *args, size_t argc) {
     return return_value;
 }
 
+// (str-new) — Define a new zero-initialized string variable with a fixed byte length
+Datum std_str_new(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "str-new";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
+    goto fail;
+  }
+
+  if (args[1].kind != SYM_VARIABLE || args[1].as.value.type != TYPE_U32) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 length", fn_name);
+    goto fail;
+  }
+
+  // Do not allocate memory if the symbol is already defined.
+  if (symbol_lookup(symbol_name) != NULL) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) variable “%s” is already defined",
+      fn_name,
+      symbol_name
+    );
+    goto fail;
+  }
+
+  size_t length = args[1].as.value.as.u32;
+
+  // Reserve one additional byte for a convenience `\0` terminator.
+  if (length == SIZE_MAX) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) resulting string is too large", fn_name);
+    goto fail;
+  }
+
+  // +1 for the `\0` final terminator
+  char *data = allocate_runtime_data(length + 1);
+  if (data == NULL) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
+  }
+
+  // Initialize all string bytes and the extra terminator to `\0`.
+  memset(data, '\0', length + 1);
+
+  // Allocate the string before defining its symbol, to avoid leaving
+  // a partially initialized variable in case of an allocation failure.
+  Symbol *symbol = symbol_define(symbol_name, SYM_VARIABLE);
+  if (symbol == NULL) {
+    extract_error_message_from_symbol_define_error(&fail_msg, symbol_name);
+    goto fail;
+  }
+
+  symbol->as.variable = (Value) {
+    .type = TYPE_STRING,
+    .as.string = { .data = data, .length = length },
+  };
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = symbol->as.variable,
+  };
+
+  return return_value;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // (str-copy) — Create an independent copy of a string with optional length limit
 Datum std_str_copy(const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };

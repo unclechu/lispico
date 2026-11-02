@@ -41,9 +41,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + Memory cleanup and repeated evaluation tests
     + Tests for expression, symbol, and allocation capacity limits
 
-  * Extra string manipulations:
-    + `(str-new)`
-
   * Many arguments support for:
     + `(+)`
     + `(-)`
@@ -507,7 +504,65 @@ features:
       `(str-set "NAME" STRING)`.
 
     + `(str-new "NAME" LENGTH)` —
-      Defines a new zero-initialized string variable (allocates)
+      Defines a new zero-initialized string variable with a fixed byte length
+      (allocates).
+
+      + `(str-new "buffer" 10)` → Creates a string containing 10 `\0` bytes
+      + `(str-new "empty" 0)` → Creates an empty string
+      + `(str-new "buffer" 10)` again → Evaluation failure (already defined)
+      + `(str-new "other" -1)` → Evaluation failure (length must be `u32`)
+
+      `NAME` must evaluate to a valid, previously undefined symbol name.
+      The new symbol is registered as a string variable (`TYPE_STRING`).
+
+      `LENGTH` must evaluate to `u32` and specifies the exact number of bytes
+      in the resulting string. A length of `0` is allowed.
+
+      All bytes are initialized to `\0`. An additional `\0` byte is
+      allocated after the string as a convenience terminator, but this
+      byte is not included in `String::length`.
+
+      The function allocates independent writable memory for the string.
+      Its memory is tracked by the evaluator and released during
+      `clean_evaluation()`.
+
+      The string length remains fixed. Subsequent `(str-set)` or `(set)`
+      operations can modify its contents in place but cannot increase
+      or decrease its `String::length`.
+
+      `(str-new)` returns the newly created string value, similarly to
+      `(var)`.
+
+      Invalid names, existing symbols, invalid argument counts or types,
+      and allocation failures cause evaluation failures.
+
+      Examples:
+
+      ```lisp
+      ; Create an empty 5-byte buffer
+      (str-new "buffer" 5)
+
+      (assert (== (str-size buffer) 5))
+      (assert (== (str-get "buffer" 0) 0))
+
+      ; Write into the buffer
+      (str-set "buffer" "Hello")
+      (assert (== buffer "Hello"))
+
+      ; Shorter replacements preserve the buffer length
+      (str-set "buffer" "Hi")
+      (assert (== (str-size buffer) 5))
+      (assert (== (str-len buffer) 2))
+
+      ; Create a shorter independent string
+      (var "short" (str-copy buffer (str-len buffer)))
+      (assert (== (str-size short) 2))
+      (assert (== short "Hi"))
+      ```
+
+      `(str-new)` differs from `(var "NAME" STRING)` because it allocates
+      a specified amount of zero-initialized space rather than copying
+      an existing string's contents.
 
     + `(str-copy STRING [LENGTH])` —
       Creates an independent copy of a string with an optional byte length
