@@ -44,7 +44,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
   * Extra string manipulations:
     + `(str-new)`
     + `(str-copy)`
-    + `(str-len)`
 
   * Evaluator: Handle maximum evaluation recursion depth / stack exhaustion
 
@@ -336,6 +335,35 @@ features:
       String lengths are measured in bytes, not Unicode characters.
       The result is always `u32`. A length exceeding the `u32` range
       causes an evaluation failure.
+
+      Non-string arguments and incorrect argument counts cause evaluation
+      failures. No memory allocation or string modification is performed.
+
+    + `(str-len STRING)` —
+      Returns the number of bytes preceding the first `\0` byte (`u32`;
+      no allocation).
+
+      + `(str-len "")` → `0`
+      + `(str-len "hello")` → `5`
+      + `(str-len "abc\0def")` → `3`
+      + `(str-len "\0abc")` → `0`
+      + `(str-len (str "abc" "\0" "def"))` → `3`
+
+      The argument can be any evaluated string expression, including
+      literals, variables, concatenations, and string conversions.
+
+      Unlike `(str-size)`, which returns the complete `String::length`,
+      `(str-len)` stops counting at the first `\0` byte.
+
+      If no `\0` byte exists within `String::length`, the full string
+      length is returned.
+
+      The function uses a bounded search and never reads beyond
+      `String::length`, even when the string is not null-terminated.
+
+      String lengths are measured in bytes, not Unicode characters.
+      The result is always `u32`. A resulting length exceeding the
+      `u32` range causes an evaluation failure.
 
       Non-string arguments and incorrect argument counts cause evaluation
       failures. No memory allocation or string modification is performed.

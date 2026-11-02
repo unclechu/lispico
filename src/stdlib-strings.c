@@ -115,6 +115,54 @@ Datum std_str_size(const Datum *args, size_t argc) {
     return return_value;
 }
 
+// (str-len) — Return the number of bytes before the first '\0' as u32
+Datum std_str_len(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "str-len";
+
+  if (!validate_argc(fn_name, &fail_msg, 1, argc)) return return_value;
+
+  if (args[0].kind != SYM_VARIABLE || args[0].as.value.type != TYPE_STRING) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a string", fn_name);
+    goto fail;
+  }
+
+  String string = args[0].as.value.as.string;
+
+  if (string.length != 0 && string.data == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string argument", fn_name);
+    goto fail;
+  }
+
+  // If `\0` terminator is not found then for this string
+  // (str-len) equals to (str-size).
+  size_t length = string.length;
+
+  // Find the first `\0` byte without reading beyond String.length.
+  if (length != 0) {
+    const char *terminator = memchr(string.data, '\0', length);
+    if (terminator != NULL) length = (size_t)(terminator - string.data);
+  }
+
+  if (length > UINT32_MAX) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) string length exceeds u32 range", fn_name);
+    goto fail;
+  }
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = { .type = TYPE_U32, .as.u32 = (uint32_t)length },
+  };
+
+  return return_value;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // (str-char) — Return a string byte at the specified index as u32
 Datum std_str_char(const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
