@@ -113,3 +113,49 @@ Datum std_str_size(const Datum *args, size_t argc) {
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
+
+// (str-char) — Return a string byte at the specified index as u32
+Datum std_str_char(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "str-char";
+
+  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+
+  if (args[0].kind != SYM_VARIABLE || args[0].as.value.type != TYPE_STRING) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a string as the first argument", fn_name);
+    goto fail;
+  }
+
+  if (args[1].kind != SYM_VARIABLE || args[1].as.value.type != TYPE_U32) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 index as the second argument", fn_name);
+    goto fail;
+  }
+
+  String string = args[0].as.value.as.string;
+  uint32_t index = args[1].as.value.as.u32;
+
+  // The index must point to a byte within String.length.
+  if ((size_t)index >= string.length) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) string index is out of bounds", fn_name);
+    goto fail;
+  }
+
+  if (string.data == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string argument", fn_name);
+    goto fail;
+  }
+
+  // Convert to unsigned char so bytes from 128 to 255 stay positive.
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = { .type = TYPE_U32, .as.u32 = (unsigned char)string.data[index] },
+  };
+
+  return return_value;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
