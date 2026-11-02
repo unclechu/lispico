@@ -16,7 +16,3 @@ ADD_STDLIB_FN_TYPE_DEF(std_exit);
 
 // Assertions
 ADD_STDLIB_FN_TYPE_DEF(std_assert);
-
-// Labels (registering a label and jumping to it)
-ADD_STDLIB_FN_TYPE_DEF(std_label);
-ADD_STDLIB_FN_TYPE_DEF(std_goto);
