@@ -1,6 +1,7 @@
 #pragma once
 
-#include "stdlib.h"
+#include "stdlib-macros.h"
+#include "symbol.h"
 
 // Branching between different kinds of standard library printing functions
 typedef enum {

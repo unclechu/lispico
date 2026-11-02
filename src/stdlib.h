@@ -1,11 +1,5 @@
 #pragma once
 
-#include <stdio.h>
-
-#include "stdlib-macros.h"
-#include "symbol.h"
-
-// Assertions
-ADD_STDLIB_FN_TYPE_DEF(std_assert);
+#include "constants.h"
 
 bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]);

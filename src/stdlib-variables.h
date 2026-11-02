@@ -1,6 +1,7 @@
 #pragma once
 
-#include "stdlib.h"
+#include "stdlib-macros.h"
+#include "symbol.h"
 
 ADD_STDLIB_FN_TYPE_DEF(std_var);
 ADD_STDLIB_FN_TYPE_DEF(std_set);
