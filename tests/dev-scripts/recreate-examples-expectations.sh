@@ -121,7 +121,9 @@ handle-example() {
   fi
 }
 
-# By default do it for all examples
+# By default do it for all examples.
+# Use `missing` argument to kill all examples that already have expectations
+# generated for them.
 if (( $# == 0 )) || ( (( $# == 1 )) && [[ $1 == missing ]] ); then
 
   if (( $# == 1 )) && [[ $1 == missing ]]; then
@@ -141,6 +143,7 @@ if (( $# == 0 )) || ( (( $# == 1 )) && [[ $1 == missing ]] ); then
     handle-example "$source"
   done
 
+# Re-generate only for a specific example file.
 elif (( $# == 1 )); then
 
   if [[ -z $1 || ! -s $1 ]]; then
@@ -151,7 +154,6 @@ elif (( $# == 1 )); then
     exit 1
   fi
 
-  # Get the name with parent directory path and *.lisp extension removed
   source=$1; source=${source#./}
   handle-example "$source"
 
