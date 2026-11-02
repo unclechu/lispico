@@ -161,6 +161,10 @@ bool populate_stdlib_trigonometry(char (*error_message)[ERR_MSG_SIZE]) {
   ADD_FN_SYMBOL("atan2", std_atan2);
   ADD_FN_SYMBOL("hypot", std_hypot);
 
+  // Mathematical constants
+  ADD_VAR_SYMBOL("pi", TYPE_F32, f32, 3.14159265358979323846f);
+  ADD_VAR_SYMBOL("e", TYPE_F32, f32, 2.71828182845904523536f);
+
   return true;
 
   symbol_define_fail:

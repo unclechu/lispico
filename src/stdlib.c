@@ -286,9 +286,6 @@ bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]) {
   if (!populate_stdlib_pow_n_log(error_message)) return false;
   // Trigonometry
   if (!populate_stdlib_trigonometry(error_message)) return false;
-  // Mathematical constants
-  ADD_VAR_SYMBOL("pi", TYPE_F32, f32, 3.14159265358979323846f);
-  ADD_VAR_SYMBOL("e", TYPE_F32, f32, 2.71828182845904523536f);
 
   // Comparisons
   if (!populate_stdlib_comparisons(error_message)) return false;
