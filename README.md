@@ -74,7 +74,90 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + `--` Raw arguments separator for arguments passing for the script only
       (`args` variable, C `argv`/`argc` are already passed to the script)
 
+  * Host-provided interpreter storage
+
+    + Move ownership of fixed-capacity interpreter storage from the parser
+      and evaluator to the host application.
+
+    + Replace statically allocated internal tables with pointers and
+      capacities provided by the host.
+
+    + Apply this design to:
+      + Expression table.
+      + Symbol table.
+      + Runtime allocation tracking table.
+      + Other fixed-capacity interpreter resources, where appropriate.
+
+    + The host decides how much memory each table receives and where that
+      memory is located.
+
+    + Preserve support for statically allocated tables, including stack,
+      global, or statically reserved memory.
+
+    + Example:
+
+      ```c
+      Expression expressions[EXPR_CAPACITY] = {0};
+
+      // Pass the expression storage and its capacity to Lispico.
+      // Exact API to be designed.
+      ```
+
+    + Track the capacity and the number of used entries separately.
+
+    + Define clear ownership and lifetime rules for all host-provided memory.
+
+    + The interpreter must not free or reallocate host-owned static storage.
+
+    + Allow desktop and embedded applications to configure different memory
+      budgets without modifying the interpreter's implementation.
+
+  * Dynamically growing interpreter storage
+
+    + Add optional automatic growth for interpreter tables when their
+      capacities are reached.
+
+    + Support dynamic growth of:
+      + Expression table.
+      + Symbol table.
+      + Runtime allocation tracking table.
+      + Other expandable interpreter resources.
+
+    + Allow the host to choose between fixed-capacity and dynamically growing
+      storage.
+
+    + Support configurable initial capacities and growth strategies.
+
+    + Possible growth strategies:
+      + Fixed increments (e.g. 50 → 100 → 150 entries).
+      + Multiplicative growth (e.g. 50 → 100 → 200 entries).
+      + Custom growth policies provided by the host.
+
+    + Use a configurable allocator or allocation callbacks, allowing
+      platform-specific allocation strategies.
+
+    + For dynamically allocated tables, use `realloc()` or equivalent
+      allocation mechanisms when growth is required.
+
+    + Preserve existing contents and expression indices when tables grow.
+
+    + Ensure symbol-table growth correctly handles hash-table resizing
+      and rehashing.
+
+    + Handle allocation failures gracefully without corrupting interpreter
+      state.
+
+    + Allow maximum capacities to be configured, even when dynamic growth
+      is enabled.
+
+    + Expose initial capacities, maximum capacities, and growth policies
+      through the desktop CLI where appropriate.
+
+    + Embedded hosts may disable growth entirely to guarantee bounded
+      memory consumption.
+
 - **TODO** For next releases
+
   * Runtime manually invoked GC for runtime-allocated entities
   * Pseudo-scoped variables vs. global ones
   * Macroses/functions
@@ -83,6 +166,69 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
   * Streamed parsing + evaluation
   * REPL
   * Linked lists (maybe cons-lists?)
+
+  * Resumable evaluation and coroutines
+
+    + Add a `(yield [VALUE])` special form that temporarily suspends program
+      evaluation and returns control to the host.
+
+    + `(yield)` suspends evaluation with `SYM_EMPTY`.
+    + `(yield VALUE)` evaluates `VALUE` and suspends evaluation with its result.
+
+    + The evaluator returns a new outcome kind, `EVAL_YIELD`, rather than
+      `EVAL_OK` or `EVAL_EXIT`.
+
+    + The host can inspect the yielded value, modify interpreter state
+      (including variables), and resume evaluation from the suspension point.
+
+    + Evaluation resumes after the `(yield)` expression without re-executing
+      previously completed expressions.
+
+    + Preserve active `(do)` sequences, `(depth)`, pending `(defer)`
+      registrations, and other evaluation state across suspension and resumption.
+
+    + Support repeated yielding and resumption, allowing bidirectional
+      communication between Lispico and its host application.
+
+    + Examples:
+
+      ```lisp
+      (var "input" 0)
+
+      (yield "Waiting for input")
+
+      ; The host modifies `input` before resuming evaluation.
+      (println input)
+
+      (yield input)
+      ```
+
+  * Evaluation inspection and external interruption
+
+    + Allow the host to register an optional callback invoked during expression
+      evaluation.
+
+    + The callback can inspect the current expression, evaluation depth,
+      symbols, variables, and other interpreter state.
+
+    + The callback can request suspension, causing the evaluator to return
+      a new outcome kind, `EVAL_INTERRUPTED`.
+
+    + The host can inspect or modify interpreter state before resuming
+      evaluation.
+
+    + Evaluation resumes from the interrupted position without losing
+      active sequences, deferred expressions, or pending control flow.
+
+    + Define whether callbacks execute before or after expression evaluation,
+      and ensure that resumption does not accidentally evaluate an expression
+      twice.
+
+    + Potential applications:
+      + Debuggers and single-step execution.
+      + Breakpoints and expression tracing.
+      + Interactive host-controlled execution.
+      + External event handling and cooperative scheduling.
 
 To keep the implementation simple, the language supports only a limited set of
 features:
