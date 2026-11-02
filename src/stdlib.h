@@ -25,9 +25,6 @@ ADD_STDLIB_FN_TYPE_DEF(std_assert);
 ADD_STDLIB_FN_TYPE_DEF(std_var);
 ADD_STDLIB_FN_TYPE_DEF(std_set);
 
-// Strings
-ADD_STDLIB_FN_TYPE_DEF(std_str);
-
 // Labels (registering a label and jumping to it)
 ADD_STDLIB_FN_TYPE_DEF(std_label);
 ADD_STDLIB_FN_TYPE_DEF(std_goto);
