@@ -74,3 +74,42 @@ Datum std_str(const Datum *args, size_t argc) {
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
+
+// (str-size) — Return the byte length of a string as u32
+Datum std_str_size(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "str-size";
+
+  if (!validate_argc(fn_name, &fail_msg, 1, argc)) return return_value;
+
+  if (args[0].kind != SYM_VARIABLE || args[0].as.value.type != TYPE_STRING) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a string", fn_name);
+    goto fail;
+  }
+
+  String string = args[0].as.value.as.string;
+
+  if (string.length != 0 && string.data == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string argument", fn_name);
+    goto fail;
+  }
+
+  // String lengths are stored as size_t but returned as u32
+  if (string.length > UINT32_MAX) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) string length exceeds u32 range", fn_name);
+    goto fail;
+  }
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = { .type = TYPE_U32, .as.u32 = (uint32_t)string.length },
+  };
+
+  return return_value;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}

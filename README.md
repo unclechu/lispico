@@ -42,14 +42,11 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + Tests for expression, symbol, and allocation capacity limits
 
   * Extra string manipulations:
-    + `(str-size)`
     + `(str-char)`
     + `(str-get)`
     + `(str-set)`
     + `(str-new)`
     + `(str-copy)`
-
-  * Split printing functions as optional ones from basic stdlib
 
   * Evaluator: Handle maximum evaluation recursion depth / stack exhaustion
 
@@ -160,6 +157,10 @@ features:
 
 - <a id="strings"></a>Strings
 
+  * Literals
+    + A string wrapped with double quotes (`"foo"`)
+      where quotation marks inside can be escaped with a backslash `\"`
+
   * Semantics and behavior
 
     + Behavior notes
@@ -206,9 +207,15 @@ features:
       Useful when a string is shared by reference and may be mutated elsewhere
       (e.g. strings stored in arrays).
 
-    + `(str STRING-1 [STRING-N…])` —
+    + `(str [STRING-N…])` —
       Creates a new string with all string arguments concatenated together
       (allocates)
+
+      + Examples:
+        + `(str)` → Empty string (`""`)
+        + `(str "foo" "bar")` → `"foobar"`
+        + `(str "foo bar" "baz")` → `"foo barbaz"`
+        + `(str "foo" (str "bar" "baz"))` → `"foobarbaz"`
 
     + `(var "NAME" STRING)` —
       Creates an independent copy of the string and saves it as a variable
@@ -592,17 +599,6 @@ features:
 
           + `(and false "hello")` equals to `false` (`u32`)
           + `(or true "hello")` equals to `true` (`u32`)
-
-  * Strings
-
-    + Literals
-      + A string wrapped with double quotes (`"foo"`)
-        where quotation marks inside can be escaped with a backslash `\"`
-
-    + String concatenation
-      + `(str "foo" "bar")`
-      + `(str "foo bar" "baz")`
-      + `(str "foo" (str "bar" "baz"))`
 
   * Extendable standard library
 
