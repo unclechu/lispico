@@ -4,6 +4,7 @@
 #include "symbol-error.h"
 #include "wipe-memory.h"
 #include "evaluate.h"
+#include "storage.h"
 
 // (label) — Define or update a global label at the current expression
 Datum std_label(const Datum *args, size_t argc) {

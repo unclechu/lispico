@@ -2,9 +2,7 @@
 
 #include "symbol.h"
 #include "wipe-memory.h"
-
-// `Symbol`s hash-table (program state)
-static Symbol symbols[SYMBOL_CAPACITY];
+#include "storage.h"
 
 // Calculate hash for a given string (simple and fast FNV-1a algorithm)
 static uint32_t hash_name(const char *name) {
@@ -33,13 +31,13 @@ static uint32_t hash_name(const char *name) {
   ```
 */
 Symbol* symbol_lookup(const char *name) {
-  // Getting hash-table index between 0 and `SYMBOL_CAPACITY`-1.
-  // Modulo over `SYMBOL_CAPACITY`.
-  size_t i = hash_name(name) & (SYMBOL_CAPACITY - 1u);
+  // Getting hash-table index between 0 and `symbol_capacity`-1.
+  // Modulo over `symbol_capacity`.
+  size_t i = hash_name(name) & (symbol_capacity - 1u);
 
   // Finding the `Symbol` by name starting with calculated hash address.
   // Shifting forward in case of a hash-collision.
-  for (size_t n = 0; n < SYMBOL_CAPACITY; ++n) {
+  for (size_t n = 0; n < symbol_capacity; ++n) {
     // Starting with calculating hash-address.
     Symbol *s = &symbols[i];
 
@@ -51,9 +49,9 @@ Symbol* symbol_lookup(const char *name) {
     // Otherwise it’s a hash-collision, continue search.
     if (strcmp(s->name, name) == 0) return s;
 
-    // Shift index of the hash table (with modulo over `SYMBOL_CAPACITY`).
+    // Shift index of the hash table (with modulo over `symbol_capacity`).
     // Slot occupied by another name; continue probing.
-    i = (i + 1u) & (SYMBOL_CAPACITY - 1u);
+    i = (i + 1u) & (symbol_capacity - 1u);
   }
 
   return NULL; // `Symbol` not found
@@ -88,6 +86,11 @@ symbol_define_error_t symbol_define_error;
   ```
 */
 Symbol* symbol_define(const char *name, SymbolKind kind) {
+  if (symbols == NULL || symbol_capacity == 0) {
+    symbol_define_error = TABLE_IS_FULL;
+    return NULL;
+  }
+
   size_t len = strlen(name);
 
   // If `Symbol` name is empty, or exceeds `Symbol` name size limit,
@@ -99,17 +102,18 @@ Symbol* symbol_define(const char *name, SymbolKind kind) {
 
   // Bit-wise modulo over the hash of the name
   // (initiall guess, can be shifted forward in case of a hash conflict).
-  size_t i = hash_name(name) & (SYMBOL_CAPACITY - 1u);
+  size_t i = hash_name(name) & (symbol_capacity - 1u);
 
   // Resolve potential hash-conflicts.
-  for (size_t n = 0; n < SYMBOL_CAPACITY; ++n) {
+  for (size_t n = 0; n < symbol_capacity; ++n) {
     // Starting with calculated hash-address.
     Symbol *s = &symbols[i];
 
     // Free spot found, continuing with defining a symbol.
     if (s->kind == SYM_EMPTY) {
-      memcpy(s->name, name, len + 1u); // Plus 1u for \0 termination
+      memcpy(s->name, name, len + 1u);
       s->kind = kind;
+      symbol_count++;
       return s;
     }
 
@@ -119,9 +123,9 @@ Symbol* symbol_define(const char *name, SymbolKind kind) {
       return NULL;
     }
 
-    // Shift index of the hash table (with modulo over `SYMBOL_CAPACITY`).
+    // Shift index of the hash table (with modulo over `symbol_capacity`).
     // Slot occupied by another name; continue probing.
-    i = (i + 1u) & (SYMBOL_CAPACITY - 1u);
+    i = (i + 1u) & (symbol_capacity - 1u);
   }
 
   symbol_define_error = TABLE_IS_FULL;
@@ -130,5 +134,6 @@ Symbol* symbol_define(const char *name, SymbolKind kind) {
 
 // Reset `symbols` state (flush the hash-table)
 void clean_symbols() {
-  wipe_memory(symbols, sizeof(symbols));
+  symbol_count = 0;
+  if (symbols != NULL) wipe_memory(symbols, (size_t)symbol_capacity * sizeof(*symbols));
 }

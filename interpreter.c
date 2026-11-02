@@ -10,6 +10,7 @@
 #include "src/parse.h"
 #include "src/stdlib-print.h"
 #include "src/stdlib-sleep.h"
+#include "src/storage.h"
 
 typedef struct {
   int argc;
@@ -39,6 +40,36 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
 }
 
 int main(int argc, char **argv) {
+  // Host-provided fixed-capacity interpreter storage.
+  // Static storage keeps these tables off the C call stack.
+  static Expression expression_storage[EXPR_CAPACITY] = {0};
+  static ExpressionAllocation expression_allocation_storage[EXPR_ALLOCATION_CAPACITY] = {0};
+  static Symbol symbol_storage[SYMBOL_CAPACITY] = {0};
+  static EvalRuntimeAllocation runtime_allocation_storage[EVAL_RUNTIME_ALLOCATION_CAPACITY] = {0};
+  static uint32_t deferred_expression_storage[EVAL_DEFER_CAPACITY] = {0};
+
+  InterpreterStorage storage = {
+    .expressions = expression_storage,
+    .expression_capacity = EXPR_CAPACITY,
+
+    .expression_allocations = expression_allocation_storage,
+    .expression_allocation_capacity = EXPR_ALLOCATION_CAPACITY,
+
+    .symbols = symbol_storage,
+    .symbol_capacity = SYMBOL_CAPACITY,
+
+    .runtime_allocations = runtime_allocation_storage,
+    .runtime_allocation_capacity = EVAL_RUNTIME_ALLOCATION_CAPACITY,
+
+    .deferred_expression_indices = deferred_expression_storage,
+    .deferred_expression_capacity = EVAL_DEFER_CAPACITY,
+  };
+
+  if (!configure_interpreter_storage(&storage)) {
+    fprintf(stderr, "[FAIL] Unable to configure interpreter storage\n");
+    return 1;
+  }
+
   int exit_code = 0;
 
   char parse_error[ERR_MSG_SIZE] = {'\0'};

@@ -23,6 +23,7 @@
 
 #include "parse.h"
 #include "number.h"
+#include "storage.h"
 
 typedef struct {
   // Input text
@@ -136,7 +137,9 @@ static bool skip_layout(Parser *parser) {
 }
 
 static bool new_expression(Parser *parser, uint32_t kind, uint32_t *index) {
-  if (expression_count >= EXPR_CAPACITY) return parser_fail(parser, "Expression capacity exceeded");
+  if (expression_count >= expression_capacity)
+    return parser_fail(parser, "Expression capacity exceeded");
+
   *index = expression_count;
   expression_count++;
   expressions[*index] = (Expression) { .kind = kind, .first_child = EXPR_NONE, .next = EXPR_NONE };
@@ -354,6 +357,12 @@ static bool parse_expression(Parser *parser, uint32_t *index) {
 bool parse_source(const char *source, size_t length, char (*error)[ERR_MSG_SIZE]) {
   if (error == NULL) return false;
   (*error)[0] = '\0';
+
+  if (expressions == NULL || expression_allocations == NULL) {
+    snprintf(*error, sizeof(*error), "Interpreter storage is not configured");
+    return false;
+  }
+
   clean_expressions();
 
   if (source != NULL && memchr(source, '\0', length) != NULL) {

@@ -6,6 +6,7 @@
 #include "stdlib.h"
 #include "symbol.h"
 #include "wipe-memory.h"
+#include "storage.h"
 
 // Current expression evaluation result.
 //
@@ -27,11 +28,6 @@ typedef struct {
   char fail_msg[ERR_MSG_SIZE];
 } EvalSettingsInterfaceContext;
 
-typedef struct {
-  void *data;
-  size_t size;
-} EvalRuntimeAllocation;
-
 // Current expression index (for `(label)` to read)
 static uint32_t current_native_call_expression_index = EXPR_NONE;
 
@@ -43,10 +39,6 @@ static uint32_t pending_jump_index = EXPR_NONE;
 // Cleared once the destination expression is reached.
 static uint32_t resume_target_index = EXPR_NONE;
 
-// Runtime dynamic memory allocations storage
-static EvalRuntimeAllocation runtime_allocations[EVAL_RUNTIME_ALLOCATION_CAPACITY];
-static uint32_t runtime_allocation_count = 0;
-
 // Current nesting level of `(do)` sequences.
 // Top-level evaluation starts at 0.
 static uint32_t current_sequence_depth = 0;
@@ -54,10 +46,6 @@ static uint32_t current_sequence_depth = 0;
 // Number of `(do)` sequences that `(leave)` still needs to terminate.
 // Zero means there is no pending leave request.
 static uint32_t pending_leave_count = 0;
-
-// Deferred expressions registered by active `(do)` sequences.
-static uint32_t deferred_expression_indices[EVAL_DEFER_CAPACITY];
-static uint32_t deferred_expression_count = 0;
 
 // Depth of the `(do)` sequence whose deferred expressions are executing.
 // Zero means no deferred expressions are currently executing.
@@ -584,7 +572,7 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
           return false;
         }
 
-        if (deferred_expression_count >= EVAL_DEFER_CAPACITY) {
+        if (deferred_expression_count >= deferred_expression_capacity) {
           report_evaluation_failure("(defer) registration capacity reached");
           return false;
         }
@@ -770,24 +758,34 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
   (see `EvalSettingsInterface::state`).
 */
 EvalOutcome evaluate(
+  // TODO: Add support for custom expressions set
   const Expression *eval_expressions,
   uint32_t eval_expression_count,
+
   void (*settings_cb)(EvalSettingsInterface*),
   void *state
 ) {
+  if (
+    expressions == NULL ||
+    expression_allocations == NULL ||
+    symbols == NULL ||
+    runtime_allocations == NULL ||
+    deferred_expression_indices == NULL ||
+    eval_expressions != expressions ||
+    eval_expression_count != expression_count ||
+    eval_expression_count > expression_capacity
+  )
+    return (EvalOutcome) {
+      .kind = EVAL_FAIL,
+      .result = { .kind = SYM_EMPTY },
+      .as.fail_msg = "Interpreter storage is not configured or expression table mismatch",
+    };
+
   // Reset symbols
   clean_symbols();
 
   // Wipe leftovers of previous evaluation
   clean_evaluation();
-
-  // Wipe global expressions table if expressions are coming from somewhere else.
-  // TODO: Copy `eval_expressions` into the global `expressions`.
-  if (eval_expressions != expressions) {
-    clean_expressions();
-  }
-
-  expression_count = eval_expression_count;
 
   // Reset evaluation state
   eval_outcome = (EvalOutcome) {
@@ -863,16 +861,25 @@ void clean_evaluation() {
   // (defer)
   deferred_expression_count = 0;
   executing_deferred_depth = 0;
-  wipe_memory(deferred_expression_indices, sizeof(deferred_expression_indices));
+  if (deferred_expression_indices != NULL)
+    wipe_memory(
+      deferred_expression_indices,
+      (size_t)deferred_expression_capacity * sizeof(*deferred_expression_indices)
+    );
 
   // Runtime allocations
-  for (uint32_t i = 0; i < runtime_allocation_count; ++i) {
-    EvalRuntimeAllocation *allocation = &runtime_allocations[i];
-    wipe_memory(allocation->data, allocation->size);
-    free(allocation->data);
+  if (runtime_allocations != NULL) {
+    for (uint32_t i = 0; i < runtime_allocation_count; ++i) {
+      EvalRuntimeAllocation *allocation = &runtime_allocations[i];
+      wipe_memory(allocation->data, allocation->size);
+      free(allocation->data);
+    }
+    wipe_memory(
+      runtime_allocations,
+      (size_t)runtime_allocation_capacity * sizeof(*runtime_allocations)
+    );
   }
   runtime_allocation_count = 0;
-  wipe_memory(runtime_allocations, sizeof(runtime_allocations));
 
   // Eval outcome
   wipe_memory(&eval_outcome, sizeof(eval_outcome));
@@ -904,7 +911,10 @@ void request_evaluation_jump(uint32_t instruction_index) {
 }
 
 void* allocate_runtime_data(size_t size) {
-  if (runtime_allocation_count >= EVAL_RUNTIME_ALLOCATION_CAPACITY) return NULL;
+  if (
+    runtime_allocations == NULL ||
+    runtime_allocation_count >= runtime_allocation_capacity
+  ) return NULL;
 
   // Allow zero-length objects without relying on malloc(0).
   size_t allocated_size = size == 0 ? 1 : size;

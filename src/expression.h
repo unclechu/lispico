@@ -42,10 +42,6 @@ typedef struct {
   uint32_t data;
 } Expression;
 
-// Global fixed-memory expressions storage
-extern Expression expressions[EXPR_CAPACITY];
-extern uint32_t expression_count;
-
 typedef struct {
   void *data; // A pointer to the allocated memory (must be `free`-d when resetting evaluation)
   size_t size; // Allocated size in bytes (corresponds to `sizeof` value)
@@ -53,9 +49,6 @@ typedef struct {
   ValueType element_type; // For array allocations
   uint32_t length; // String length or array element count
 } ExpressionAllocation;
-
-extern ExpressionAllocation expression_allocations[EXPR_ALLOCATION_CAPACITY];
-extern uint32_t expression_allocation_count;
 
 bool allocate_expression_data(
   const void *source,

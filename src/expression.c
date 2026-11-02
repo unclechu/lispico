@@ -2,21 +2,12 @@
 
 #include "expression.h"
 #include "wipe-memory.h"
-
-// All parsed expressions.
-Expression expressions[EXPR_CAPACITY] = {0};
-uint32_t expression_count = 0;
-
-ExpressionAllocation expression_allocations[EXPR_ALLOCATION_CAPACITY] = {0};
-uint32_t expression_allocation_count = 0;
+#include "storage.h"
 
 void clean_expressions() {
-  expression_count = 0;
-  wipe_memory(expressions, sizeof(expressions));
-
+  // Free parser-allocated strings and other expression data.
   for (uint32_t i = 0; i < expression_allocation_count; ++i) {
     ExpressionAllocation *allocation = &expression_allocations[i];
-
     if (allocation->data != NULL) {
       wipe_memory(allocation->data, allocation->size);
       free(allocation->data);
@@ -24,7 +15,17 @@ void clean_expressions() {
   }
 
   expression_allocation_count = 0;
-  wipe_memory(expression_allocations, sizeof(expression_allocations));
+  expression_count = 0;
+
+  // Wipe host-provided tables without freeing their storage.
+  if (expressions != NULL)
+    wipe_memory(expressions, (size_t)expression_capacity * sizeof(*expressions));
+
+  if (expression_allocations != NULL)
+    wipe_memory(
+      expression_allocations,
+      (size_t)expression_allocation_capacity * sizeof(*expression_allocations)
+    );
 }
 
 bool allocate_expression_data(
@@ -36,7 +37,10 @@ bool allocate_expression_data(
 ) {
   if (allocation_index == NULL) return false;
   if (size != 0 && source == NULL) return false;
-  if (expression_allocation_count >= EXPR_ALLOCATION_CAPACITY) return false;
+  if (
+    expression_allocations == NULL ||
+    expression_allocation_count >= expression_allocation_capacity
+  ) return false;
 
   void *data = NULL;
 

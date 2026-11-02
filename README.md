@@ -75,44 +75,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + `--` Raw arguments separator for arguments passing for the script only
       (`args` variable, C `argv`/`argc` are already passed to the script)
 
-  * Host-provided interpreter storage
-
-    + Move ownership of fixed-capacity interpreter storage from the parser
-      and evaluator to the host application.
-
-    + Replace statically allocated internal tables with pointers and
-      capacities provided by the host.
-
-    + Apply this design to:
-      + Expression table.
-      + Symbol table.
-      + Runtime allocation tracking table.
-      + Other fixed-capacity interpreter resources, where appropriate.
-
-    + The host decides how much memory each table receives and where that
-      memory is located.
-
-    + Preserve support for statically allocated tables, including stack,
-      global, or statically reserved memory.
-
-    + Example:
-
-      ```c
-      Expression expressions[EXPR_CAPACITY] = {0};
-
-      // Pass the expression storage and its capacity to Lispico.
-      // Exact API to be designed.
-      ```
-
-    + Track the capacity and the number of used entries separately.
-
-    + Define clear ownership and lifetime rules for all host-provided memory.
-
-    + The interpreter must not free or reallocate host-owned static storage.
-
-    + Allow desktop and embedded applications to configure different memory
-      budgets without modifying the interpreter's implementation.
-
   * Dynamically growing interpreter storage
 
     + Add optional automatic growth for interpreter tables when their
@@ -1684,6 +1646,54 @@ it and fails on the attempt.
 - `(/ 10 0)` / `(/ 10.0 0.0)` → Failure
 - `(div 10 0)` / `(div 10.0 0.0)` → Failure
 - `(mod 10 0)` / `(mod 10.0 0.0)` → Failure
+
+### Host-provided interpreter storage
+
+Lispico uses host-provided memory for its fixed-capacity interpreter tables.
+The parser and evaluator do not allocate these tables themselves.
+
+The host application provides:
+
+* Expression storage and its capacity.
+* Expression allocation tracking storage and its capacity.
+* Symbol hash-table storage and its capacity.
+* Runtime allocation tracking storage and its capacity.
+* Deferred-expression index storage and its capacity.
+
+Storage is configured using `configure_interpreter_storage()` before parsing
+or evaluation.
+
+The host may use static, stack, or dynamically allocated memory. Each table
+has an independently configurable capacity.
+
+The symbol table uses open addressing and requires a power-of-two capacity.
+
+The interpreter tracks used entries independently of the configured
+capacities. Exceeding a table's capacity causes the corresponding parsing,
+registration, or evaluation operation to fail.
+
+#### Ownership and cleanup
+
+* The host owns the table buffers and is responsible for their lifetime.
+* Lispico never frees or reallocates host-provided table storage.
+* `clean_expressions()`, `clean_symbols()`, and `clean_evaluation()` reset or
+  wipe the corresponding tables without releasing their backing storage.
+* Memory allocated by Lispico for expression data and runtime string values
+  remains owned by Lispico and is wiped and freed during the corresponding
+  cleanup operation.
+* The host must keep all configured table buffers valid for the interpreter's
+  lifetime.
+* Host-provided table buffers must not overlap.
+* Configuration currently occurs once, before interpreter initialization.
+* Returned string values may reference interpreter-managed memory. The host
+  must copy them before cleanup if their contents are needed afterward.
+
+The desktop executable uses statically allocated tables with the default
+capacities defined in `constants.h`. Embedded applications may provide
+smaller buffers or use a different memory layout without modifying the parser
+or evaluator.
+
+Automatic table growth is not yet supported. It is a separate planned feature.
 
 ## Usage examples
 
