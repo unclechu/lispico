@@ -1,7 +1,8 @@
 ; Strings concatenation using `(str)` (runtime string allocation)
 
-(var "message" "Hello")
-(set "message" (str message ", " (str "Lisp" "ico")))
+; Reserve 14 bytes so the concatenated string fits
+(var "message" "Hello         ")
+(set "message" (str "Hello" ", " (str "Lisp" "ico")))
 (println message) ; Will print “Hello, Lispico”
 
 (println (str)) ; Will print just an empty line

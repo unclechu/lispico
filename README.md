@@ -42,9 +42,9 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + Tests for expression, symbol, and allocation capacity limits
 
   * Extra string manipulations:
-    + `(str-set)`
     + `(str-new)`
     + `(str-copy)`
+    + `(str-len)`
 
   * Evaluator: Handle maximum evaluation recursion depth / stack exhaustion
 
@@ -397,20 +397,73 @@ features:
       string, `(str-get)` reads from a named string variable through
       the global symbol table.
 
-    + `(str-set "NAME" INDEX BYTE)` —
-      Changes one byte, numeric BYTE from 0 to 255 (no allocation)
+    + `(str-set)`
 
-    + `(str-set "NAME" INDEX STRING)` —
-      Overwrites bytes starting at INDEX
-      (does not change the string length; no allocation).
-      Entire STRING must fit starting from INDEX
-      (otherwise an out-of-bounds evaluation failure occurs)
+      + `(str-set "NAME" INDEX BYTE)` —
+        Overwrites one byte of a named string variable (no allocation).
 
-    + `(str-set "NAME" STRING)` —
-      Overwrites from the beginning and zero-fills the remainder with `\0`
-      (does not change the string length; no allocation).
-      Entire STRING must fit the original string variable length
-      (otherwise an out-of-bounds evaluation failure occurs)
+        + `(var "message" "Hello")`
+        + `(str-set "message" 0 74)` → Changes `"Hello"` to `"Jello"`
+        + `(str-set "message" 1 0)` → Writes a `\0` byte at index `1`
+        + `(str-set "message" 0 255)` → Writes byte value `255`
+        + `(str-set "message" 5 65)` → Evaluation failure (out of bounds)
+
+        `INDEX` must be `u32` and strictly less than the string length.
+        `BYTE` must be `u32` between `0` and `255`, inclusive.
+
+      + `(str-set "NAME" INDEX STRING)` —
+        Overwrites a range of bytes starting at `INDEX` (no allocation).
+
+        + `(var "message" "Hello")`
+        + `(str-set "message" 1 "abc")` → Changes `"Hello"` to `"Habco"`
+        + `(str-set "message" 4 "!")` → Overwrites the final byte
+        + `(str-set "message" 3 "abc")` → Evaluation failure (out of bounds)
+
+        `INDEX` must be `u32`. The entire source string must fit within
+        the remaining space starting at `INDEX`.
+
+        Bytes outside the replaced range remain unchanged. The string length
+        is preserved, and no zero-filling is performed.
+
+        Empty replacement strings are allowed, including at an index equal
+        to the destination string's length.
+
+      + `(str-set "NAME" STRING)` —
+        Overwrites the contents of a named string variable from the beginning,
+        zero-filling any remaining bytes (no allocation).
+
+        + `(var "message" "Hello")`
+        + `(str-set "message" "Hi")` → `"Hi\0\0\0"`
+        + `(str-set "message" "")` → `"\0\0\0\0\0"`
+        + `(str-set "message" "Goodbye")` → Evaluation failure (out of bounds)
+
+        The replacement must not be longer than the existing string variable.
+        The original `String::length` is preserved, even when the replacement
+        is shorter or contains embedded `\0` bytes.
+
+      All three forms modify the existing string variable in place and return
+      the modified string value (`TYPE_STRING`).
+
+      The first argument must evaluate to a valid name of an existing string
+      variable. The source string can be any evaluated string expression.
+
+      String indexes and lengths refer to bytes, not Unicode characters.
+      Embedded `\0` bytes are treated as ordinary bytes.
+
+      Invalid argument types, invalid variable names, undefined variables,
+      and out-of-bounds writes cause evaluation failures. All bounds and type
+      checks are performed before modifying the destination, so invalid writes
+      do not partially modify the string.
+
+      When source and destination data overlap, `memmove()` semantics are used
+      to preserve the original source bytes during copying.
+
+      Unlike `(var "NAME" STRING)`, which creates an independent string copy,
+      `(str-set)` never allocates new memory or replaces the existing string
+      buffer.
+
+      `(set "NAME" STRING)` uses the same in-place replacement behavior as
+      `(str-set "NAME" STRING)`.
 
     + `(str-new "NAME" LENGTH)` —
       Defines a new zero-initialized string variable (allocates)

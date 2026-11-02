@@ -183,13 +183,7 @@ Datum std_str_get(const Datum *args, size_t argc) {
   Symbol *symbol = symbol_lookup(symbol_name);
 
   if (symbol == NULL) {
-    snprintf(
-      fail_msg,
-      sizeof(fail_msg),
-      "(%s) variable “%s” is not defined",
-      fn_name,
-      symbol_name
-    );
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) variable “%s” is not defined", fn_name, symbol_name);
     goto fail;
   }
 
@@ -224,6 +218,144 @@ Datum std_str_get(const Datum *args, size_t argc) {
   };
 
   return return_value;
+
+  fail:
+    report_evaluation_failure(fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
+// (str-set) — Modify bytes in a named string variable without allocation
+Datum std_str_set(const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "str-set";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (argc != 2 && argc != 3) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects 2 or 3 arguments", fn_name);
+    goto fail;
+  }
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
+    goto fail;
+  }
+
+  Symbol *symbol = symbol_lookup(symbol_name);
+
+  if (symbol == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) variable “%s” is not defined", fn_name, symbol_name);
+    goto fail;
+  }
+
+  if (symbol->kind != SYM_VARIABLE || symbol->as.variable.type != TYPE_STRING) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) symbol “%s” is not a string variable",
+      fn_name,
+      symbol_name
+    );
+    goto fail;
+  }
+
+  String destination = symbol->as.variable.as.string;
+
+  if (destination.data == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string variable", fn_name);
+    goto fail;
+  }
+
+  char *data = (char *)destination.data;
+
+  if (argc == 2) {
+    // (str-set "NAME" STRING) — Replace from the beginning and zero-fill.
+    if (args[1].kind != SYM_VARIABLE || args[1].as.value.type != TYPE_STRING) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a string as the second argument", fn_name);
+      goto fail;
+    }
+
+    String source = args[1].as.value.as.string;
+
+    if (source.length != 0 && source.data == NULL) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid source string", fn_name);
+      goto fail;
+    }
+
+    if (source.length > destination.length) goto out_of_bounds;
+
+    // Copy first, then zero-fill the remaining bytes.
+    // memmove() also handles overlapping source and destination.
+    if (source.length != 0) memmove(data, source.data, source.length);
+    memset(data + source.length, '\0', destination.length - source.length);
+  } else {
+    // (str-set "NAME" INDEX BYTE/STRING)
+    if (args[1].kind != SYM_VARIABLE || args[1].as.value.type != TYPE_U32) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 index", fn_name);
+      goto fail;
+    }
+
+    if (args[2].kind != SYM_VARIABLE) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 byte or string", fn_name);
+      goto fail;
+    }
+
+    size_t index = args[1].as.value.as.u32;
+
+    switch (args[2].as.value.type) {
+      case TYPE_U32: {
+        // (str-set "NAME" INDEX BYTE) — Replace exactly one byte.
+        uint32_t byte = args[2].as.value.as.u32;
+
+        if (byte > 255) {
+          snprintf(fail_msg, sizeof(fail_msg), "(%s) byte must be between 0 and 255", fn_name);
+          goto fail;
+        }
+
+        if (index >= destination.length) goto out_of_bounds;
+
+        // data[index] = (char)(unsigned char)byte;
+        // For better portability between platforms.
+        // It makes storing values 128–255 explicit, even on platforms where
+        // plain `char` is signed.
+        ((unsigned char *)data)[index] = (unsigned char)byte;
+
+        break;
+      }
+
+      case TYPE_STRING: {
+        // (str-set "NAME" INDEX STRING) — Replace a range of bytes.
+        String source = args[2].as.value.as.string;
+
+        if (source.length != 0 && source.data == NULL) {
+          snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid source string", fn_name);
+          goto fail;
+        }
+
+        // Check the entire range before modifying the destination.
+        if (index > destination.length || source.length > destination.length - index)
+          goto out_of_bounds;
+
+        // Preserve the original string length and all untouched bytes.
+        // `memmove` handles overlapping source and destination.
+        if (source.length != 0) memmove(data + index, source.data, source.length);
+        break;
+      }
+
+      default:
+        snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 byte or string", fn_name);
+        goto fail;
+    }
+  }
+
+  // Return the modified string variable, like (set).
+  return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = symbol->as.variable };
+  return return_value;
+
+  out_of_bounds:
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) string write is out of bounds", fn_name);
+    goto fail;
 
   fail:
     report_evaluation_failure(fail_msg);

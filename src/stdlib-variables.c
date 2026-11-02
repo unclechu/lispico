@@ -55,6 +55,33 @@ Datum std_var(const Datum *args, size_t argc) {
       return return_value;
   }
 
+  Value value = args[1].as.value;
+
+  if (value.type == TYPE_STRING) {
+    String string = value.as.string;
+
+    if (string.length == SIZE_MAX || (string.length != 0 && string.data == NULL)) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string value", fn_name);
+      goto fail;
+    }
+
+    // String variables own independent writable storage.
+    // Reserve one extra byte for a convenient '\0' terminator.
+    char *data = allocate_runtime_data(string.length + 1);
+    if (data == NULL) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) runtime allocation failed", fn_name);
+      goto fail;
+    }
+
+    if (string.length != 0) memcpy(data, string.data, string.length);
+    data[string.length] = '\0';
+
+    value.as.string.data = data;
+  }
+
+  // Important: Allocate the string before calling `symbol_define`, rather than
+  // using that replacement verbatim after symbol creation. Otherwise an
+  // allocation failure could leave a partially initialized symbol in the table.
   Symbol *symbol = symbol_define(symbol_name, SYM_VARIABLE);
 
   if (symbol == NULL) {
@@ -62,8 +89,9 @@ Datum std_var(const Datum *args, size_t argc) {
     goto fail;
   }
 
-  symbol->as.variable = args[1].as.value;
-  return_value = args[1];
+  symbol->as.variable = value;
+
+  return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = value };
   return return_value;
 
   fail:
@@ -138,8 +166,31 @@ Datum std_set(const Datum *args, size_t argc) {
       return return_value;
   }
 
-  symbol->as.variable = args[1].as.value;
-  return_value = args[1];
+  if (args[1].as.value.type == TYPE_STRING) {
+    String destination = symbol->as.variable.as.string;
+    String source = args[1].as.value.as.string;
+
+    if (
+      destination.data == NULL ||
+      (source.length != 0 && source.data == NULL) ||
+      source.length > destination.length
+    ) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string or out-of-bounds write", fn_name);
+      goto fail;
+    }
+
+    // Overwrite without changing the string length or allocating memory.
+    // `memmove` is safe even if source and destination overlap.
+    char *data = (char *)destination.data;
+    if (source.length != 0) memmove(data, source.data, source.length);
+
+    // Clear (`\0`-fill) any unused bytes after the new content.
+    memset(data + source.length, '\0', destination.length - source.length);
+  } else {
+    symbol->as.variable = args[1].as.value;
+  }
+
+  return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = symbol->as.variable };
   return return_value;
 
   fail:
