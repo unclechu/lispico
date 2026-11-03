@@ -53,9 +53,19 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     and supported language syntax
 
   * Evaluator:
-    + Replace `(str-copy)` with `(str-slice)`
     + More informative error messages
     + Handle maximum evaluation recursion depth / stack exhaustion
+
+  * stdlib:
+    + Remove `(str-copy)` (replaced with the following functions)
+    + `(str-slice STRING FROM LENGTH)`
+    + `(str-take STRING N)`
+    + `(str-drop STRING N)`
+    + `(arr [VALUE-N…])` — to create a new array
+    + `(var STRING [VALUE-N…])` — to assign new array from array value
+    + `(arr-slice ARRAY FROM LENGTH)`
+    + `(arr-take ARRAY N)`
+    + `(arr-drop ARRAY N)`
 
   * Compilation parsed expressions to binary
     + Support compiling to binary and evaluating binaries (skipping parsing step)
