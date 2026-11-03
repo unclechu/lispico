@@ -7,11 +7,12 @@
 #include "wipe-memory.h"
 
 #define ADD_ARITHMETIC_FN_IMPL(name, expr_name, u32_op, i32_op, f_op, check) \
-Datum name(const Datum *args, size_t argc) { \
+Datum name(Interpreter *interpreter, const Datum *args, size_t argc) { \
   Datum return_value = { .kind = SYM_EMPTY }; \
   char fail_msg[ERR_MSG_SIZE] = {'\0'}; \
   char fn_name[] = expr_name; \
-  if (!validate_two_same_type_variables_inputs(fn_name, &fail_msg, args, argc)) return return_value; \
+  if (!validate_two_same_type_variables_inputs(interpreter, fn_name, &fail_msg, args, argc)) \
+    return return_value; \
   if (!(check)) return return_value; \
   switch (args[0].as.value.type) { \
     case TYPE_U32: { \
@@ -30,7 +31,7 @@ Datum name(const Datum *args, size_t argc) { \
       break; \
     } \
     default: \
-      report_unexpected_value_type(fn_name, &fail_msg, args[0].as.value.type); \
+      report_unexpected_value_type(interpreter, fn_name, &fail_msg, args[0].as.value.type); \
       return return_value; \
   } \
   return_value.kind = SYM_VARIABLE; \
@@ -39,10 +40,10 @@ Datum name(const Datum *args, size_t argc) { \
 }
 
 #define ADD_UNARY_ROUNDING_FN(name, expr_name, f_op) \
-Datum name(const Datum *args, size_t argc) { \
+Datum name(Interpreter *interpreter, const Datum *args, size_t argc) { \
   Datum return_value = { .kind = SYM_EMPTY }; \
   char fail_msg[ERR_MSG_SIZE] = {'\0'}; \
-  if (!validate_unary_numeric_input(expr_name, &fail_msg, args, argc)) \
+  if (!validate_unary_numeric_input(interpreter, expr_name, &fail_msg, args, argc)) \
     return return_value; \
   return_value.kind = SYM_VARIABLE; \
   return_value.as.value.type = args[0].as.value.type; \
@@ -58,7 +59,7 @@ Datum name(const Datum *args, size_t argc) { \
 #define ADD_ARITHMETIC_FN_TYPED_NO_ZERO_DIVISOR(name, expr_name, u32_op, i32_op, f_op) \
   ADD_ARITHMETIC_FN_IMPL( \
     name, expr_name, u32_op, i32_op, f_op, \
-    validate_nonzero_divisor(fn_name, &fail_msg, args) \
+    validate_nonzero_divisor(interpreter, fn_name, &fail_msg, args) \
   )
 
 typedef enum {
@@ -71,6 +72,7 @@ typedef enum {
 
 // Apply an arithmetic operation to two or more arguments from left to right.
 static Datum std_variadic_arithmetic(
+  Interpreter *interpreter,
   const Datum *args,
   size_t argc,
   const char *fn_name,
@@ -202,34 +204,34 @@ static Datum std_variadic_arithmetic(
     goto fail;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (+) — Add two or more values
-Datum std_add(const Datum *args, size_t argc) {
-  return std_variadic_arithmetic(args, argc, "+", ARITH_ADD);
+Datum std_add(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_variadic_arithmetic(interpreter, args, argc, "+", ARITH_ADD);
 }
 
 // (-) — Subtract two or more values
-Datum std_subtract(const Datum *args, size_t argc) {
-  return std_variadic_arithmetic(args, argc, "-", ARITH_SUBTRACT);
+Datum std_subtract(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_variadic_arithmetic(interpreter, args, argc, "-", ARITH_SUBTRACT);
 }
 
 // (*) — Multiply two or more values
-Datum std_mul(const Datum *args, size_t argc) {
-  return std_variadic_arithmetic(args, argc, "*", ARITH_MULTIPLY);
+Datum std_mul(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_variadic_arithmetic(interpreter, args, argc, "*", ARITH_MULTIPLY);
 }
 
 // (/) — Divide two or more values
-Datum std_divide(const Datum *args, size_t argc) {
-  return std_variadic_arithmetic(args, argc, "/", ARITH_DIVIDE);
+Datum std_divide(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_variadic_arithmetic(interpreter, args, argc, "/", ARITH_DIVIDE);
 }
 
 // (div) — Divide two or more values, truncating f32 results
-Datum std_div(const Datum *args, size_t argc) {
-  return std_variadic_arithmetic(args, argc, "div", ARITH_DIV);
+Datum std_div(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_variadic_arithmetic(interpreter, args, argc, "div", ARITH_DIV);
 }
 
 ADD_ARITHMETIC_FN_TYPED_NO_ZERO_DIVISOR(std_mod, "mod", a % b, a % b, fmodf(a, b))

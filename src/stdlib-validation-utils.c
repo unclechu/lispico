@@ -2,10 +2,11 @@
 
 #include "stdlib-validation-utils.h"
 #include "wipe-memory.h"
-#include "evaluate.h"
+#include "symbol-print.h"
 
 // Validate exact amount of arguments
 bool validate_argc(
+  Interpreter *interpreter,
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
   size_t wanted_argc,
@@ -32,13 +33,14 @@ bool validate_argc(
       argc
     );
   }
-  report_evaluation_failure(*fail_msg);
+  report_evaluation_failure(interpreter, *fail_msg);
   wipe_memory(*fail_msg, sizeof(*fail_msg));
   return false;
 }
 
 // Report receiving unexpected value type
 void report_unexpected_value_type(
+  Interpreter *interpreter,
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
   ValueType type
@@ -50,22 +52,23 @@ void report_unexpected_value_type(
     fn_name,
     show_ValueType(type)
   );
-  report_evaluation_failure(*fail_msg);
+  report_evaluation_failure(interpreter, *fail_msg);
   wipe_memory(*fail_msg, sizeof(*fail_msg));
 }
 
 // Validate arithmetic inputs and report failure if validation fails
 bool validate_two_same_type_variables_inputs(
+  Interpreter *interpreter,
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
   const Datum *args,
   size_t argc
 ) {
-  if (!validate_argc(fn_name, fail_msg, 2, argc)) {
+  if (!validate_argc(interpreter, fn_name, fail_msg, 2, argc)) {
     return false;
   } else if (args[0].kind != SYM_VARIABLE || args[1].kind != SYM_VARIABLE) {
     snprintf(*fail_msg, sizeof(*fail_msg), "(%s) expects two values, not arrays", fn_name);
-    report_evaluation_failure(*fail_msg);
+    report_evaluation_failure(interpreter, *fail_msg);
     wipe_memory(*fail_msg, sizeof(*fail_msg));
     return false;
   } else if (args[0].as.value.type != args[1].as.value.type) {
@@ -77,7 +80,7 @@ bool validate_two_same_type_variables_inputs(
       show_ValueType(args[0].as.value.type),
       show_ValueType(args[1].as.value.type)
     );
-    report_evaluation_failure(*fail_msg);
+    report_evaluation_failure(interpreter, *fail_msg);
     wipe_memory(*fail_msg, sizeof(*fail_msg));
     return false;
   } else {
@@ -87,6 +90,7 @@ bool validate_two_same_type_variables_inputs(
 
 // Assuming both arguments are already validated with `validate_two_same_type_variables_inputs`
 bool validate_nonzero_divisor(
+  Interpreter *interpreter,
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
   const Datum *args
@@ -104,19 +108,20 @@ bool validate_nonzero_divisor(
   if (!is_zero) return true;
 
   snprintf(*fail_msg, sizeof(*fail_msg), "(%s) division by zero", fn_name);
-  report_evaluation_failure(*fail_msg);
+  report_evaluation_failure(interpreter, *fail_msg);
   wipe_memory(*fail_msg, sizeof(*fail_msg));
   return false;
 }
 
 // Validate unary numeric input and report failure if validation fails
 bool validate_unary_numeric_input(
+  Interpreter *interpreter,
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
   const Datum *args,
   size_t argc
 ) {
-  if (!validate_argc(fn_name, fail_msg, 1, argc)) {
+  if (!validate_argc(interpreter, fn_name, fail_msg, 1, argc)) {
     return false;
   } else if (args[0].kind != SYM_VARIABLE) {
     snprintf(
@@ -125,7 +130,7 @@ bool validate_unary_numeric_input(
       "(%s) expects a numeric value, not an array",
       fn_name
     );
-    report_evaluation_failure(*fail_msg);
+    report_evaluation_failure(interpreter, *fail_msg);
     wipe_memory(*fail_msg, sizeof(*fail_msg));
     return false;
   } else {
@@ -135,7 +140,7 @@ bool validate_unary_numeric_input(
       case TYPE_F32:
         return true;
       default:
-        report_unexpected_value_type(fn_name, fail_msg, args[0].as.value.type);
+        report_unexpected_value_type(interpreter, fn_name, fail_msg, args[0].as.value.type);
         return false;
     }
   }
@@ -143,6 +148,7 @@ bool validate_unary_numeric_input(
 
 // Apply a unary f32 mathematical function and reject non-finite values
 Datum std_unary_f32_math(
+  Interpreter *interpreter,
   const Datum *args,
   size_t argc,
   const char *fn_name,
@@ -151,7 +157,7 @@ Datum std_unary_f32_math(
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
 
-  if (!validate_unary_numeric_input(fn_name, &fail_msg, args, argc))
+  if (!validate_unary_numeric_input(interpreter, fn_name, &fail_msg, args, argc))
     return return_value;
 
   if (args[0].as.value.type != TYPE_F32) {
@@ -184,7 +190,7 @@ Datum std_unary_f32_math(
     goto fail;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }

@@ -17,12 +17,17 @@ const char* show_StdPrintVariant(StdPrintVariant variant) {
 }
 
 // Generic standard library printing implementation
-Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc) {
+Datum std_generic_print(
+  Interpreter *interpreter,
+  StdPrintVariant variant,
+  const Datum *args,
+  size_t argc
+) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char *fn_name = show_StdPrintVariant(variant);
 
-  if (!validate_argc(fn_name, &fail_msg, 1, argc)) {
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) {
     return return_value;
   } else if (args[0].kind != SYM_VARIABLE) {
     snprintf(
@@ -32,7 +37,7 @@ Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc)
       fn_name,
       show_SymbolKind(args[0].kind)
     );
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
   } else if (args[0].as.value.type != TYPE_STRING) {
@@ -43,7 +48,7 @@ Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc)
       fn_name,
       show_ValueType(args[0].as.value.type)
     );
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
   }
@@ -66,21 +71,21 @@ Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc)
 }
 
 // (print)
-Datum std_print(const Datum *args, size_t argc) {
-  return std_generic_print(STD_PRINT, args, argc);
+Datum std_print(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_generic_print(interpreter, STD_PRINT, args, argc);
 }
 
 // (println)
-Datum std_println(const Datum *args, size_t argc) {
-  return std_generic_print(STD_PRINTLN, args, argc);
+Datum std_println(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_generic_print(interpreter, STD_PRINTLN, args, argc);
 }
 
 // (eprint)
-Datum std_eprint(const Datum *args, size_t argc) {
-  return std_generic_print(STD_EPRINT, args, argc);
+Datum std_eprint(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_generic_print(interpreter, STD_EPRINT, args, argc);
 }
 
 // (eprintln)
-Datum std_eprintln(const Datum *args, size_t argc) {
-  return std_generic_print(STD_EPRINTLN, args, argc);
+Datum std_eprintln(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_generic_print(interpreter, STD_EPRINTLN, args, argc);
 }

@@ -17,6 +17,7 @@
 // Sleep for a specified duration, with fractional values supported.
 // Returns the last evaluated value without changing it.
 static Datum std_sleep_generic(
+  Interpreter *interpreter,
   const Datum *args,
   size_t argc,
   const char *fn_name,
@@ -25,7 +26,7 @@ static Datum std_sleep_generic(
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
 
-  if (!validate_argc(fn_name, &fail_msg, 1, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
 
   if (args[0].kind != SYM_VARIABLE) goto invalid_duration;
 
@@ -89,7 +90,7 @@ static Datum std_sleep_generic(
   // `get_last_evaluation_value` may fail on `SYM_EMPTY` and won’t update
   // `return_value` but default `return_value` is `SYM_EMPTY` anyway.
   // So that the value is forwarded correctly.
-  (void)get_last_evaluation_value(&return_value);
+  (void)get_last_evaluation_value(interpreter, &return_value);
   return return_value;
 
   invalid_duration:
@@ -101,22 +102,22 @@ static Datum std_sleep_generic(
     );
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (sleep-s) — Sleep for a duration in seconds
-Datum std_sleep_s(const Datum *args, size_t argc) {
-  return std_sleep_generic(args, argc, "sleep-s", 1.0);
+Datum std_sleep_s(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_sleep_generic(interpreter, args, argc, "sleep-s", 1.0);
 }
 
 // (sleep-ms) — Sleep for a duration in milliseconds
-Datum std_sleep_ms(const Datum *args, size_t argc) {
-  return std_sleep_generic(args, argc, "sleep-ms", 0.001);
+Datum std_sleep_ms(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_sleep_generic(interpreter, args, argc, "sleep-ms", 0.001);
 }
 
 // (sleep-us) — Sleep for a duration in microseconds
-Datum std_sleep_us(const Datum *args, size_t argc) {
-  return std_sleep_generic(args, argc, "sleep-us", 0.000001);
+Datum std_sleep_us(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_sleep_generic(interpreter, args, argc, "sleep-us", 0.000001);
 }

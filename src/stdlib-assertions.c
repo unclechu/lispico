@@ -5,7 +5,7 @@
 #include "evaluate.h"
 
 // (assert) — Fail evaluation if the condition is false
-Datum std_assert(const Datum *args, size_t argc) {
+Datum std_assert(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "assert";
@@ -62,7 +62,7 @@ Datum std_assert(const Datum *args, size_t argc) {
   snprintf(fail_msg, sizeof(fail_msg), "(%s) assertion failed", fn_name);
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }

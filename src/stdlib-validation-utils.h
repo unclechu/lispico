@@ -5,9 +5,10 @@
 #include <stdio.h>
 
 #include "constants.h"
-#include "symbol-print.h"
+#include "storage.h"
 
 bool validate_argc(
+  Interpreter *interpreter,
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
   size_t wanted_argc,
@@ -15,12 +16,14 @@ bool validate_argc(
 );
 
 void report_unexpected_value_type(
+  Interpreter *interpreter,
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
   ValueType type
 );
 
 bool validate_two_same_type_variables_inputs(
+  Interpreter *interpreter,
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
   const Datum *args,
@@ -28,12 +31,14 @@ bool validate_two_same_type_variables_inputs(
 );
 
 bool validate_nonzero_divisor(
+  Interpreter *interpreter,
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
   const Datum *args
 );
 
 bool validate_unary_numeric_input(
+  Interpreter *interpreter,
   const char *fn_name,
   char (*fail_msg)[ERR_MSG_SIZE],
   const Datum *args,
@@ -41,6 +46,7 @@ bool validate_unary_numeric_input(
 );
 
 Datum std_unary_f32_math(
+  Interpreter *interpreter,
   const Datum *args,
   size_t argc,
   const char *fn_name,

@@ -3,6 +3,7 @@
 #include "stdlib-variables.h"
 #include "stdlib-validation-utils.h"
 #include "symbol-error.h"
+#include "symbol-print.h"
 #include "wipe-memory.h"
 #include "evaluate.h"
 
@@ -25,13 +26,13 @@ bool get_variable_name(const Datum *datum, char (*name)[SYMBOL_NAME_SIZE]) {
 }
 
 // (var) — Define a new variable, inferring its type from the initial value
-Datum std_var(const Datum *args, size_t argc) {
+Datum std_var(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "var";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
 
-  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
 
   if (!get_variable_name(&args[0], &symbol_name)) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
@@ -51,7 +52,7 @@ Datum std_var(const Datum *args, size_t argc) {
     case TYPE_STRING:
       break;
     default:
-      report_unexpected_value_type(fn_name, &fail_msg, args[1].as.value.type);
+      report_unexpected_value_type(interpreter, fn_name, &fail_msg, args[1].as.value.type);
       return return_value;
   }
 
@@ -67,7 +68,7 @@ Datum std_var(const Datum *args, size_t argc) {
 
     // String variables own independent writable storage.
     // Reserve one extra byte for a convenient '\0' terminator.
-    char *data = allocate_runtime_data(string.length + 1);
+    char *data = allocate_runtime_data(interpreter, string.length + 1);
     if (data == NULL) {
       snprintf(fail_msg, sizeof(fail_msg), "(%s) runtime allocation failed", fn_name);
       goto fail;
@@ -82,10 +83,10 @@ Datum std_var(const Datum *args, size_t argc) {
   // Important: Allocate the string before calling `symbol_define`, rather than
   // using that replacement verbatim after symbol creation. Otherwise an
   // allocation failure could leave a partially initialized symbol in the table.
-  Symbol *symbol = symbol_define(symbol_name, SYM_VARIABLE);
+  Symbol *symbol = symbol_define(interpreter, symbol_name, SYM_VARIABLE);
 
   if (symbol == NULL) {
-    extract_error_message_from_symbol_define_error(&fail_msg, symbol_name);
+    extract_error_message_from_symbol_define_error(interpreter, &fail_msg, symbol_name);
     goto fail;
   }
 
@@ -95,19 +96,19 @@ Datum std_var(const Datum *args, size_t argc) {
   return return_value;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (set) — Overwrite an existing variable
-Datum std_set(const Datum *args, size_t argc) {
+Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "set";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
 
-  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
 
   if (!get_variable_name(&args[0], &symbol_name)) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
@@ -119,7 +120,7 @@ Datum std_set(const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = symbol_lookup(symbol_name);
+  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
 
   if (symbol == NULL) {
     snprintf(
@@ -162,7 +163,7 @@ Datum std_set(const Datum *args, size_t argc) {
     case TYPE_STRING:
       break;
     default:
-      report_unexpected_value_type(fn_name, &fail_msg, args[1].as.value.type);
+      report_unexpected_value_type(interpreter, fn_name, &fail_msg, args[1].as.value.type);
       return return_value;
   }
 
@@ -194,7 +195,7 @@ Datum std_set(const Datum *args, size_t argc) {
   return return_value;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }

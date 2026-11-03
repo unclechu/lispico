@@ -1,40 +1,8 @@
 #include "storage.h"
 #include "wipe-memory.h"
 
-// *** Active host-provided storage and its usage ***
-
-// Expressions
-Expression *expressions = NULL;
-uint32_t expression_capacity = 0;
-uint32_t expression_count = 0;
-
-// Allocated expression entities (strings & arrays)
-ExpressionAllocation *expression_allocations = NULL;
-uint32_t expression_allocation_capacity = 0;
-uint32_t expression_allocation_count = 0;
-
-// Symbols
-Symbol *symbols = NULL;
-uint32_t symbol_capacity = 0;
-uint32_t symbol_count = 0;
-
-// Runtime allocation records
-EvalRuntimeAllocation *runtime_allocations = NULL;
-uint32_t runtime_allocation_capacity = 0;
-uint32_t runtime_allocation_count = 0;
-
-// Deferred expression indices
-uint32_t *deferred_expression_indices = NULL;
-uint32_t deferred_expression_capacity = 0;
-uint32_t deferred_expression_count = 0;
-
-// *** END: Active host-provided storage and its usage ***
-
-// Bind host-provided storage without taking ownership of its memory.
-bool configure_interpreter_storage(const InterpreterStorage *storage) {
-  static bool configured = false;
-
-  if (configured || storage == NULL) return false;
+bool configure_interpreter_storage(Interpreter *interpreter, const InterpreterStorage *storage) {
+  if (interpreter == NULL || storage == NULL || interpreter->configured) return false;
 
   if (
     storage->expressions == NULL ||
@@ -62,42 +30,36 @@ bool configure_interpreter_storage(const InterpreterStorage *storage) {
     ) return false;
   #endif
 
-  expressions = storage->expressions;
-  expression_capacity = storage->expression_capacity;
-  expression_count = 0;
+  *interpreter = (Interpreter) {
+    .storage = *storage,
+    .current_native_call_expression_index = EXPR_NONE,
+    .pending_jump_index = EXPR_NONE,
+    .resume_target_index = EXPR_NONE,
+    .eval_outcome = { .kind = EVAL_OK, .result = { .kind = SYM_EMPTY } },
+    .configured = true,
+  };
 
-  expression_allocations = storage->expression_allocations;
-  expression_allocation_capacity = storage->expression_allocation_capacity;
-  expression_allocation_count = 0;
-
-  symbols = storage->symbols;
-  symbol_capacity = storage->symbol_capacity;
-  symbol_count = 0;
-
-  runtime_allocations = storage->runtime_allocations;
-  runtime_allocation_capacity = storage->runtime_allocation_capacity;
-  runtime_allocation_count = 0;
-
-  deferred_expression_indices = storage->deferred_expression_indices;
-  deferred_expression_capacity = storage->deferred_expression_capacity;
-  deferred_expression_count = 0;
-
-  // Start with empty tables, including when the host supplies stack memory.
-  wipe_memory(expressions, (size_t)expression_capacity * sizeof(*expressions));
+  // Initialize host-provided tables without taking ownership.
   wipe_memory(
-    expression_allocations,
-    (size_t)expression_allocation_capacity * sizeof(*expression_allocations)
-  );
-  wipe_memory(symbols, (size_t)symbol_capacity * sizeof(*symbols));
-  wipe_memory(
-    runtime_allocations,
-    (size_t)runtime_allocation_capacity * sizeof(*runtime_allocations)
+    storage->expressions,
+    (size_t)storage->expression_capacity * sizeof(*storage->expressions)
   );
   wipe_memory(
-    deferred_expression_indices,
-    (size_t)deferred_expression_capacity * sizeof(*deferred_expression_indices)
+    storage->expression_allocations,
+    (size_t)storage->expression_allocation_capacity * sizeof(*storage->expression_allocations)
+  );
+  wipe_memory(
+    storage->symbols,
+    (size_t)storage->symbol_capacity * sizeof(*storage->symbols)
+  );
+  wipe_memory(
+    storage->runtime_allocations,
+    (size_t)storage->runtime_allocation_capacity * sizeof(*storage->runtime_allocations)
+  );
+  wipe_memory(
+    storage->deferred_expression_indices,
+    (size_t)storage->deferred_expression_capacity * sizeof(*storage->deferred_expression_indices)
   );
 
-  configured = true;
   return true;
 }

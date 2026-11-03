@@ -1,8 +1,9 @@
 #pragma once
 
 #include "constants.h"
+#include "storage.h"
 
-bool populate_stdlib(char (*error_message)[ERR_MSG_SIZE]);
+bool populate_stdlib(Interpreter *interpreter, char (*error_message)[ERR_MSG_SIZE]);
 
 #define POPULATE_STDLIB() \
   /* Assertions */ \

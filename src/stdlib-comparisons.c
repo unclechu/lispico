@@ -15,11 +15,12 @@ static int compare_strings(String a, String b) {
 }
 
 #define ADD_COMPARISON_FN(name, expr_name, op) \
-Datum name(const Datum *args, size_t argc) { \
+Datum name(Interpreter *interpreter, const Datum *args, size_t argc) { \
   Datum return_value = { .kind = SYM_EMPTY }; \
   char fail_msg[ERR_MSG_SIZE] = {'\0'}; \
   const char fn_name[] = expr_name; \
-  if (!validate_two_same_type_variables_inputs(fn_name, &fail_msg, args, argc)) return return_value; \
+  if (!validate_two_same_type_variables_inputs(interpreter, fn_name, &fail_msg, args, argc)) \
+    return return_value; \
   uint32_t comparison_result; \
   switch (args[0].as.value.type) { \
     case TYPE_U32: { \
@@ -45,7 +46,7 @@ Datum name(const Datum *args, size_t argc) { \
       break; \
     } \
     default: \
-      report_unexpected_value_type(fn_name, &fail_msg, args[0].as.value.type); \
+      report_unexpected_value_type(interpreter, fn_name, &fail_msg, args[0].as.value.type); \
       return return_value; \
   } \
   return_value.kind = SYM_VARIABLE; \

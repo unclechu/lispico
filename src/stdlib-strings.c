@@ -8,7 +8,7 @@
 #include "wipe-memory.h"
 
 // (str) — Concatenate zero or more strings
-Datum std_str(const Datum *args, size_t argc) {
+Datum std_str(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "str";
@@ -37,7 +37,7 @@ Datum std_str(const Datum *args, size_t argc) {
   }
 
   // +1 for the '\0' terminator
-  char *data = allocate_runtime_data(length + 1);
+  char *data = allocate_runtime_data(interpreter, length + 1);
   if (data == NULL) {
     snprintf(
       fail_msg,
@@ -71,18 +71,18 @@ Datum std_str(const Datum *args, size_t argc) {
   return return_value;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (str-size) — Return the byte length of a string as u32
-Datum std_str_size(const Datum *args, size_t argc) {
+Datum std_str_size(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "str-size";
 
-  if (!validate_argc(fn_name, &fail_msg, 1, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
 
   if (args[0].kind != SYM_VARIABLE || args[0].as.value.type != TYPE_STRING) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a string", fn_name);
@@ -110,18 +110,18 @@ Datum std_str_size(const Datum *args, size_t argc) {
   return return_value;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (str-len) — Return the number of bytes before the first '\0' as u32
-Datum std_str_len(const Datum *args, size_t argc) {
+Datum std_str_len(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "str-len";
 
-  if (!validate_argc(fn_name, &fail_msg, 1, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
 
   if (args[0].kind != SYM_VARIABLE || args[0].as.value.type != TYPE_STRING) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a string", fn_name);
@@ -158,13 +158,13 @@ Datum std_str_len(const Datum *args, size_t argc) {
   return return_value;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (str-char) — Return a string byte at the specified index as u32
-Datum std_str_char(const Datum *args, size_t argc) {
+Datum std_str_char(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "str-char";
@@ -227,19 +227,19 @@ Datum std_str_char(const Datum *args, size_t argc) {
   return return_value;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (str-get) — Read a byte from a named string variable as u32
-Datum std_str_get(const Datum *args, size_t argc) {
+Datum std_str_get(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "str-get";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
 
-  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
 
   if (!get_variable_name(&args[0], &symbol_name)) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
@@ -251,7 +251,7 @@ Datum std_str_get(const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = symbol_lookup(symbol_name);
+  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
 
   if (symbol == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) variable “%s” is not defined", fn_name, symbol_name);
@@ -291,13 +291,13 @@ Datum std_str_get(const Datum *args, size_t argc) {
   return return_value;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (str-set) — Modify bytes in a named string variable without allocation
-Datum std_str_set(const Datum *args, size_t argc) {
+Datum std_str_set(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "str-set";
@@ -313,7 +313,7 @@ Datum std_str_set(const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = symbol_lookup(symbol_name);
+  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
 
   if (symbol == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) variable “%s” is not defined", fn_name, symbol_name);
@@ -429,19 +429,19 @@ Datum std_str_set(const Datum *args, size_t argc) {
     goto fail;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (str-new) — Define a new zero-initialized string variable with a fixed byte length
-Datum std_str_new(const Datum *args, size_t argc) {
+Datum std_str_new(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "str-new";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
 
-  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
 
   if (!get_variable_name(&args[0], &symbol_name)) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
@@ -454,7 +454,7 @@ Datum std_str_new(const Datum *args, size_t argc) {
   }
 
   // Do not allocate memory if the symbol is already defined.
-  if (symbol_lookup(symbol_name) != NULL) {
+  if (symbol_lookup(interpreter, symbol_name) != NULL) {
     snprintf(
       fail_msg,
       sizeof(fail_msg),
@@ -474,7 +474,7 @@ Datum std_str_new(const Datum *args, size_t argc) {
   }
 
   // +1 for the `\0` final terminator
-  char *data = allocate_runtime_data(length + 1);
+  char *data = allocate_runtime_data(interpreter, length + 1);
   if (data == NULL) {
     snprintf(
       fail_msg,
@@ -490,9 +490,9 @@ Datum std_str_new(const Datum *args, size_t argc) {
 
   // Allocate the string before defining its symbol, to avoid leaving
   // a partially initialized variable in case of an allocation failure.
-  Symbol *symbol = symbol_define(symbol_name, SYM_VARIABLE);
+  Symbol *symbol = symbol_define(interpreter, symbol_name, SYM_VARIABLE);
   if (symbol == NULL) {
-    extract_error_message_from_symbol_define_error(&fail_msg, symbol_name);
+    extract_error_message_from_symbol_define_error(interpreter, &fail_msg, symbol_name);
     goto fail;
   }
 
@@ -509,13 +509,13 @@ Datum std_str_new(const Datum *args, size_t argc) {
   return return_value;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (str-copy) — Create an independent copy of a string with optional length limit
-Datum std_str_copy(const Datum *args, size_t argc) {
+Datum std_str_copy(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "str-copy";
@@ -566,7 +566,7 @@ Datum std_str_copy(const Datum *args, size_t argc) {
   }
 
   // +1 for the final string `\0` terminator
-  char *data = allocate_runtime_data(length + 1);
+  char *data = allocate_runtime_data(interpreter, length + 1);
   if (data == NULL) {
     snprintf(
       fail_msg,
@@ -592,7 +592,7 @@ Datum std_str_copy(const Datum *args, size_t argc) {
   return return_value;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }

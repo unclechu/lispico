@@ -29,13 +29,14 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   if (argv_sym == NULL) return;
   argv_sym->as.array = state->argv;
 
+  Interpreter *interpreter = interface->interpreter;
   const char *symbol_name;
   POPULATE_STDLIB_PRINT();
   POPULATE_STDLIB_SLEEP();
   return;
 
   symbol_define_fail:
-    extract_error_message_from_symbol_define_error(&fail_msg, symbol_name);
+    extract_error_message_from_symbol_define_error(interface->interpreter, &fail_msg, symbol_name);
     interface->report_failure(interface, fail_msg);
 }
 
@@ -65,7 +66,9 @@ int main(int argc, char **argv) {
     .deferred_expression_capacity = EVAL_DEFER_CAPACITY,
   };
 
-  if (!configure_interpreter_storage(&storage)) {
+  Interpreter interpreter = {0};
+
+  if (!configure_interpreter_storage(&interpreter, &storage)) {
     fprintf(stderr, "[FAIL] Unable to configure interpreter storage\n");
     return 1;
   }
@@ -97,18 +100,13 @@ int main(int argc, char **argv) {
     goto done;
   }
 
-  if (!parse_source(source, source_size, &parse_error)) {
+  if (!parse_source(&interpreter, source, source_size, &parse_error)) {
     fprintf(stderr, "Parse error: %s\n", parse_error);
     exit_code = 1;
     goto done;
   }
 
-  EvalOutcome eval_outcome = evaluate(
-    expressions,
-    expression_count,
-    eval_settings_cb,
-    (void*) &state
-  );
+  EvalOutcome eval_outcome = evaluate(&interpreter, eval_settings_cb, (void*) &state);
 
   switch (eval_outcome.kind) {
     case EVAL_OK:
@@ -167,9 +165,9 @@ int main(int argc, char **argv) {
     return 1;
 
   done:
-    clean_evaluation();
-    clean_symbols();
-    clean_expressions();
+    clean_evaluation(&interpreter);
+    clean_symbols(&interpreter);
+    clean_expressions(&interpreter);
     free(argv_as_Array.data);
     return exit_code;
 }

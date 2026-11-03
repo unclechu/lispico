@@ -6,17 +6,18 @@
 #include "stdlib-variables.h"
 #include "stdlib-validation-utils.h"
 #include "symbol-error.h"
+#include "symbol-print.h"
 #include "number.h"
 #include "wipe-memory.h"
 #include "evaluate.h"
 
 // (type) — Explicit scalar type conversion
-Datum std_type(const Datum *args, size_t argc) {
+Datum std_type(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "type";
 
-  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
   if (
     args[0].kind != SYM_VARIABLE ||
     args[0].as.value.type != TYPE_U32 ||
@@ -112,7 +113,7 @@ Datum std_type(const Datum *args, size_t argc) {
     }
 
     // +1 for the `\0` terminator
-    char *data = allocate_runtime_data((size_t)length + 1);
+    char *data = allocate_runtime_data(interpreter, (size_t)length + 1);
     if (data == NULL) {
       snprintf(
         fail_msg,
@@ -205,18 +206,18 @@ Datum std_type(const Datum *args, size_t argc) {
     goto fail;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (type-of) — Get the `ValueType` of a primitive value or string
-Datum std_type_of(const Datum *args, size_t argc) {
+Datum std_type_of(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "type-of";
 
-  if (!validate_argc(fn_name, &fail_msg, 1, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
 
   ValueType type;
   switch (args[0].kind) {
@@ -241,26 +242,26 @@ Datum std_type_of(const Datum *args, size_t argc) {
   return return_value;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (kind-of) — Get the `SymbolKind` of a registered name
-Datum std_kind_of(const Datum *args, size_t argc) {
+Datum std_kind_of(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "kind-of";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
 
-  if (!validate_argc(fn_name, &fail_msg, 1, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
 
   if (!get_variable_name(&args[0], &symbol_name)) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
     goto fail;
   }
 
-  const Symbol *symbol = symbol_lookup(symbol_name);
+  const Symbol *symbol = symbol_lookup(interpreter, symbol_name);
 
   return_value = (Datum) {
     .kind = SYM_VARIABLE,
@@ -273,7 +274,7 @@ Datum std_kind_of(const Datum *args, size_t argc) {
   return return_value;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }

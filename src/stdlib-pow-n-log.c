@@ -7,12 +7,12 @@
 #include "evaluate.h"
 
 // (pow) — Raise a numeric value to a power, preserving its type
-Datum std_pow(const Datum *args, size_t argc) {
+Datum std_pow(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "pow";
 
-  if (!validate_two_same_type_variables_inputs(fn_name, &fail_msg, args, argc))
+  if (!validate_two_same_type_variables_inputs(interpreter, fn_name, &fail_msg, args, argc))
     return return_value;
 
   Value value = { .type = args[0].as.value.type };
@@ -106,7 +106,7 @@ Datum std_pow(const Datum *args, size_t argc) {
     }
 
     default:
-      report_unexpected_value_type(fn_name, &fail_msg, value.type);
+      report_unexpected_value_type(interpreter, fn_name, &fail_msg, value.type);
       return return_value;
   }
 
@@ -126,27 +126,27 @@ Datum std_pow(const Datum *args, size_t argc) {
     goto fail;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (sqrt) — Square root
-Datum std_sqrt(const Datum *args, size_t argc) {
-  return std_unary_f32_math(args, argc, "sqrt", sqrtf);
+Datum std_sqrt(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_unary_f32_math(interpreter, args, argc, "sqrt", sqrtf);
 }
 
 // (log) — Natural logarithm
-Datum std_log(const Datum *args, size_t argc) {
-  return std_unary_f32_math(args, argc, "log", logf);
+Datum std_log(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_unary_f32_math(interpreter, args, argc, "log", logf);
 }
 
 // (log10) — Base-10 logarithm
-Datum std_log10(const Datum *args, size_t argc) {
-  return std_unary_f32_math(args, argc, "log10", log10f);
+Datum std_log10(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_unary_f32_math(interpreter, args, argc, "log10", log10f);
 }
 
 // (exp) — Exponential function
-Datum std_exp(const Datum *args, size_t argc) {
-  return std_unary_f32_math(args, argc, "exp", expf);
+Datum std_exp(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_unary_f32_math(interpreter, args, argc, "exp", expf);
 }

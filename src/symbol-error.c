@@ -2,14 +2,15 @@
 #include <string.h>
 
 #include "symbol-error.h"
-#include "symbol.h"
+#include "storage.h"
 
 void extract_error_message_from_symbol_define_error(
+  Interpreter *interpreter,
   char (*error_message)[ERR_MSG_SIZE],
   const char *symbol_name
 ) {
   snprintf(*error_message, sizeof(*error_message), "symbol_define for “%s”: ", symbol_name);
-  switch (symbol_define_error) {
+  switch (interpreter->symbol_define_error) {
     case INCORRECT_INPUT:
       snprintf(
         *error_message + strlen(*error_message),

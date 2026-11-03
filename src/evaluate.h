@@ -24,6 +24,8 @@ typedef struct EvalSettingsInterface {
   void *context; // Internal context
   void *state;
 
+  Interpreter *interpreter;
+
   // Caller is expect to stop settings callback evaluation if `NULL` is returned
   // (it indicates a failure, which is automatically forwarded to `EvalOutcome`).
   Symbol* (*define_symbol)(
@@ -49,27 +51,14 @@ typedef struct EvalSettingsInterface {
 } EvalSettingsInterface;
 
 // Evaluate expressions from the configured interpreter storage.
-// TODO: Support evaluating a custom expression array.
 EvalOutcome evaluate(
-  const Expression *eval_expressions,
-  uint32_t eval_expression_count,
-
+  Interpreter *interpreter,
   void (*settings_cb)(EvalSettingsInterface*),
   void *state
 );
 
-void report_evaluation_failure(char *fail_msg);
-void clean_evaluation();
-
-bool get_last_evaluation_value(Datum *result);
-
-void report_evaluation_exit(int exit_code, Datum result);
-
-uint32_t get_current_native_call_expression_index(void);
-void request_evaluation_jump(uint32_t instruction_index);
+void clean_evaluation(Interpreter *interpreter);
 
 // Memory is tracked by the evaluator and freed by `clean_evaluation`.
 // The caller must not free the returned pointer.
-void *allocate_runtime_data(size_t size);
-
-uint32_t get_current_sequence_depth(void);
+void *allocate_runtime_data(Interpreter *interpreter, size_t size);

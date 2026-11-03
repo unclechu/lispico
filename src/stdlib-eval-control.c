@@ -7,12 +7,12 @@
 #include "evaluate.h"
 
 // (exit) — Stop program evaluation and return the provided result
-Datum std_exit(const Datum *args, size_t argc) {
+Datum std_exit(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "exit";
 
-  if (!validate_argc(fn_name, &fail_msg, 2, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
 
   if (args[0].kind != SYM_VARIABLE) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code must be a numeric value", fn_name);
@@ -37,7 +37,7 @@ Datum std_exit(const Datum *args, size_t argc) {
   }
 
   return_value = args[1];
-  report_evaluation_exit(exit_code, return_value);
+  report_evaluation_exit(interpreter, exit_code, return_value);
   return return_value;
 
   out_of_range:
@@ -45,7 +45,7 @@ Datum std_exit(const Datum *args, size_t argc) {
     goto fail;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }

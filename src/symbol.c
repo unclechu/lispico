@@ -16,21 +16,26 @@ static uint32_t hash_name(const char *name) {
 }
 
 /*
-  Find a `Symbol` in a `symbols` hash-table.
+  Find a `Symbol` in a `interpreter->storage.symbols` hash-table.
 
   Returns `NULL` if `Symbol` is not found.
 
   Usage example:
 
   ```c
-  Symbol *s = symbol_lookup("foo");
+  Symbol *s = symbol_lookup(interpreter, "foo");
 
   if (s && s->kind == SYM_VARIABLE) {
     uint32_t value = s->as.variable.as.u32;
   }
   ```
 */
-Symbol* symbol_lookup(const char *name) {
+Symbol* symbol_lookup(Interpreter *interpreter, const char *name) {
+  if (interpreter == NULL || !interpreter->configured || name == NULL) return NULL;
+
+  Symbol *symbols = interpreter->storage.symbols;
+  uint32_t symbol_capacity = interpreter->storage.symbol_capacity;
+
   if (symbols == NULL || symbol_capacity == 0) return NULL;
 
   // Getting hash-table index between 0 and `symbol_capacity`-1.
@@ -59,25 +64,23 @@ Symbol* symbol_lookup(const char *name) {
   return NULL; // `Symbol` not found
 }
 
-symbol_define_error_t symbol_define_error;
-
 /*
-  Define a new symbol in the `symbols` hash-table.
+  Define a new symbol in the `interpreter->storage.symbols` hash-table.
 
-  Returns `NULL` and updates `symbol_define_error` in case of an error:
+  Returns `NULL` and updates `interpreter->symbol_define_error` in case of an error:
 
-  - `symbol_define_error == INCORRECT_INPUT` —
+  - `interpreter->symbol_define_error == INCORRECT_INPUT` —
     Either `Symbol` name is wrong (empty or exceeds limit)
     or `Symbol` kind is `SYM_EMPTY`
-  - `symbol_define_error == ALREADY_DEFINED` —
+  - `interpreter->symbol_define_error == ALREADY_DEFINED` —
     A `Symbol` with this name is already defined
-  - `symbol_define_error == TABLE_IS_FULL` —
+  - `interpreter->symbol_define_error == TABLE_IS_FULL` —
     The `symbols` hash-table is full (no space left)
 
   Usage example:
 
-  ```
-  Symbol *s = symbol_define("foo", SYM_VARIABLE);
+  ```c
+  Symbol *s = symbol_define(interpreter, "foo", SYM_VARIABLE);
 
   if (s) {
     s->as.variable = (Value) {
@@ -87,9 +90,14 @@ symbol_define_error_t symbol_define_error;
   }
   ```
 */
-Symbol* symbol_define(const char *name, SymbolKind kind) {
+Symbol* symbol_define(Interpreter *interpreter, const char *name, SymbolKind kind) {
+  if (interpreter == NULL || !interpreter->configured) return NULL;
+
+  Symbol *symbols = interpreter->storage.symbols;
+  uint32_t symbol_capacity = interpreter->storage.symbol_capacity;
+
   if (symbols == NULL || symbol_capacity == 0) {
-    symbol_define_error = TABLE_IS_FULL;
+    interpreter->symbol_define_error = TABLE_IS_FULL;
     return NULL;
   }
 
@@ -98,7 +106,7 @@ Symbol* symbol_define(const char *name, SymbolKind kind) {
   // If `Symbol` name is empty, or exceeds `Symbol` name size limit,
   // or provided `kind` is `SYM_EMPTY` then abort operation as an error.
   if (len == 0 || len >= SYMBOL_NAME_SIZE || kind == SYM_EMPTY) {
-    symbol_define_error = INCORRECT_INPUT;
+    interpreter->symbol_define_error = INCORRECT_INPUT;
     return NULL;
   }
 
@@ -115,13 +123,13 @@ Symbol* symbol_define(const char *name, SymbolKind kind) {
     if (s->kind == SYM_EMPTY) {
       memcpy(s->name, name, len + 1u);
       s->kind = kind;
-      symbol_count++;
+      interpreter->symbol_count++;
       return s;
     }
 
     // `Symbol` with specified name is already defined (error)
     if (strcmp(s->name, name) == 0) {
-      symbol_define_error = ALREADY_DEFINED;
+      interpreter->symbol_define_error = ALREADY_DEFINED;
       return NULL;
     }
 
@@ -130,12 +138,19 @@ Symbol* symbol_define(const char *name, SymbolKind kind) {
     i = (i + 1u) & (symbol_capacity - 1u);
   }
 
-  symbol_define_error = TABLE_IS_FULL;
+  interpreter->symbol_define_error = TABLE_IS_FULL;
   return NULL; // `symbols` hash-table is full (error)
 }
 
 // Reset `symbols` state (flush the hash-table)
-void clean_symbols() {
-  symbol_count = 0;
-  if (symbols != NULL) wipe_memory(symbols, (size_t)symbol_capacity * sizeof(*symbols));
+void clean_symbols(Interpreter *interpreter) {
+  if (interpreter == NULL || !interpreter->configured) return;
+
+  interpreter->symbol_count = 0;
+
+  if (interpreter->storage.symbols != NULL)
+    wipe_memory(
+      interpreter->storage.symbols,
+      (size_t)interpreter->storage.symbol_capacity * sizeof(*interpreter->storage.symbols)
+    );
 }

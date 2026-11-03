@@ -13,8 +13,13 @@ typedef enum {
 
 const char* show_StdPrintVariant(StdPrintVariant variant);
 
-// Printing functions
-Datum std_generic_print(StdPrintVariant variant, const Datum *args, size_t argc);
+Datum std_generic_print(
+  Interpreter *interpreter,
+  StdPrintVariant variant,
+  const Datum *args,
+  size_t argc
+);
+
 ADD_STDLIB_FN_TYPE_DEF(std_print);
 ADD_STDLIB_FN_TYPE_DEF(std_println);
 ADD_STDLIB_FN_TYPE_DEF(std_eprint);

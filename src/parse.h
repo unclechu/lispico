@@ -7,4 +7,9 @@
 
 // Parse source into the global `expressions` and `expression_allocations` tables.
 // Clears previous expressions first; leaves both tables empty on failure.
-bool parse_source(const char *source, size_t length, char (*error)[ERR_MSG_SIZE]);
+bool parse_source(
+  Interpreter *interpreter,
+  const char *source,
+  size_t length,
+  char (*error)[ERR_MSG_SIZE]
+);

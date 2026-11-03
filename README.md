@@ -54,7 +54,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + Runtime allocation for arrays (`(arr-*)`)
     + More informative error messages
     + Handle maximum evaluation recursion depth / stack exhaustion
-    + Implement custom expressions list cloning (and expression allocations)
 
   * Compilation parsed expressions to binary
     + Support compiling to binary and evaluating binaries (skipping parsing step)

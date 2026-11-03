@@ -8,48 +8,12 @@
 #include "wipe-memory.h"
 #include "storage.h"
 
-// Current expression evaluation result.
-//
-// Evaluator must reset this value at the beginning of the program evaluation
-// (to prevent stale evaluation state).
-//
-// When `kind` is either `EVAL_EXIT` or `EVAL_FAIL` the evaluator must stop
-// evaluating the program.
-//
-// When a `NativeFunction` fails it must set `kind` to `EVAL_FAIL` and provide
-// `fail_msg`.
-static EvalOutcome eval_outcome = {
-  .kind = EVAL_OK,
-  .result = { .kind = SYM_EMPTY },
-};
-
+// Intentionally private (internal evaluator initialization state)
 typedef struct {
+  Interpreter *interpreter;
   bool is_failed;
   char fail_msg[ERR_MSG_SIZE];
 } EvalSettingsInterfaceContext;
-
-// Current expression index (for `(label)` to read)
-static uint32_t current_native_call_expression_index = EXPR_NONE;
-
-// Target `(label)` evaluator is jumping to.
-// When set: A native `(goto)` has requested a jump that hasn't been handled yet.
-static uint32_t pending_jump_index = EXPR_NONE;
-
-// Label we're re-entering through nested (do) expressions.
-// Cleared once the destination expression is reached.
-static uint32_t resume_target_index = EXPR_NONE;
-
-// Current nesting level of `(do)` sequences.
-// Top-level evaluation starts at 0.
-static uint32_t current_sequence_depth = 0;
-
-// Number of `(do)` sequences that `(leave)` still needs to terminate.
-// Zero means there is no pending leave request.
-static uint32_t pending_leave_count = 0;
-
-// Depth of the `(do)` sequence whose deferred expressions are executing.
-// Zero means no deferred expressions are currently executing.
-static uint32_t executing_deferred_depth = 0;
 
 static Symbol* define_symbol_interface(
   const struct EvalSettingsInterface *self,
@@ -58,9 +22,9 @@ static Symbol* define_symbol_interface(
 ) {
   EvalSettingsInterfaceContext *ctx = (EvalSettingsInterfaceContext*) self->context;
   if (ctx->is_failed) return NULL; // Already failed, can’t continue
-  Symbol *sym = symbol_define(name, kind);
+  Symbol *sym = symbol_define(ctx->interpreter, name, kind);
   if (sym == NULL) {
-    extract_error_message_from_symbol_define_error(&ctx->fail_msg, name);
+    extract_error_message_from_symbol_define_error(ctx->interpreter, &ctx->fail_msg, name);
     return NULL;
   } else {
     return sym;
@@ -68,10 +32,11 @@ static Symbol* define_symbol_interface(
 }
 
 static Symbol* symbol_lookup_interface(
-  const struct EvalSettingsInterface*,
+  const struct EvalSettingsInterface* self,
   const char *name
 ) {
-  return symbol_lookup(name);
+  EvalSettingsInterfaceContext *ctx = (EvalSettingsInterfaceContext*) self->context;
+  return symbol_lookup(ctx->interpreter, name);
 }
 
 static void report_failure_interface(
@@ -90,6 +55,7 @@ static void report_failure_interface(
 // If the target is inside a nested `(do)`, return the containing `(do)` expression.
 // Returns `EXPR_NONE` when the target cannot be reached through this sequence.
 static uint32_t find_sequence_jump_entry(
+  Interpreter *interpreter,
   uint32_t first_expression_index,
   uint32_t target_index
 ) {
@@ -97,21 +63,21 @@ static uint32_t find_sequence_jump_entry(
 
   while (index != EXPR_NONE) {
     // Incorrect index
-    if (index >= expression_count) return EXPR_NONE;
+    if (index >= interpreter->expression_count) return EXPR_NONE;
 
     // The target `(label)` is found
     if (index == target_index) return index;
 
-    const Expression *expr = &expressions[index];
+    const Expression *expr = &interpreter->storage.expressions[index];
 
     if (expr->kind == EXPR_LIST) {
       uint32_t fn_index = expr->first_child;
 
-      if (fn_index != EXPR_NONE && fn_index < expression_count) {
-        const Expression *fn = &expressions[fn_index];
+      if (fn_index != EXPR_NONE && fn_index < interpreter->expression_count) {
+        const Expression *fn = &interpreter->storage.expressions[fn_index];
 
         if (fn->kind == EXPR_NAME) {
-          const ExpressionAllocation *allocation = get_expression_allocation(fn->data);
+          const ExpressionAllocation *allocation = get_expression_allocation(interpreter, fn->data);
 
           if (
             allocation != NULL &&
@@ -119,7 +85,7 @@ static uint32_t find_sequence_jump_entry(
             strcmp(allocation->data, "do") == 0
           ) {
             // Search nested `(do)` expressions, without evaluating anything.
-            uint32_t nested_entry = find_sequence_jump_entry(fn->next, target_index);
+            uint32_t nested_entry = find_sequence_jump_entry(interpreter, fn->next, target_index);
             // Target jump label is found, return the index of the `(do)` sequence containing it
             if (nested_entry != EXPR_NONE) return index;
           }
@@ -133,30 +99,36 @@ static uint32_t find_sequence_jump_entry(
   return EXPR_NONE;
 }
 
-static bool evaluate_expression(uint32_t current_expression_index, Datum *result);
+static bool evaluate_expression(
+  Interpreter *interpreter,
+  uint32_t current_expression_index,
+  Datum *result
+);
 
 // Execute deferred expressions in reverse registration order.
 // Preserve the original evaluation result and pending control flow.
-static bool run_deferred_expressions(uint32_t defer_start) {
+static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_start) {
   // No (defer)s to handle, done
-  if (deferred_expression_count == defer_start) return true;
+  if (interpreter->deferred_expression_count == defer_start) return true;
 
   // Preserve current sequence state first
-  EvalOutcome saved_outcome = eval_outcome;
-  Datum saved_result = eval_outcome.result;
-  uint32_t saved_jump_index = pending_jump_index;
-  uint32_t saved_resume_index = resume_target_index;
-  uint32_t saved_leave_count = pending_leave_count;
-  uint32_t saved_deferred_depth = executing_deferred_depth;
+  EvalOutcome saved_outcome = interpreter->eval_outcome;
+  Datum saved_result = interpreter->eval_outcome.result;
+  uint32_t saved_jump_index = interpreter->pending_jump_index;
+  uint32_t saved_resume_index = interpreter->resume_target_index;
+  uint32_t saved_leave_count = interpreter->pending_leave_count;
+  uint32_t saved_deferred_depth = interpreter->executing_deferred_depth;
 
   bool deferred_failure = false;
 
-  executing_deferred_depth = current_sequence_depth;
+  interpreter->executing_deferred_depth = interpreter->current_sequence_depth;
 
   // Evaluate all (defer)s sequentially in reverse order (LIFO)
-  while (deferred_expression_count > defer_start) {
-    --deferred_expression_count; // Shift to last (defer) index
-    uint32_t expression_index = deferred_expression_indices[deferred_expression_count];
+  while (interpreter->deferred_expression_count > defer_start) {
+    interpreter->deferred_expression_count--; // Shift to last (defer) index
+
+    uint32_t expression_index =
+      interpreter->storage.deferred_expression_indices[interpreter->deferred_expression_count];
 
     // Execute each deferred expression independently of the control flow
     // that caused this sequence to terminate. Each (defer) sees its original
@@ -164,26 +136,29 @@ static bool run_deferred_expressions(uint32_t defer_start) {
     // (leave) jumps are reset). Other (defer)s do not affect state of the others.
     // N.B. Not considering variables (they can be mutated, and different
     // (defer)s will observe these mutations).
-    eval_outcome = saved_outcome;
-    eval_outcome.kind = EVAL_OK;
-    eval_outcome.result = saved_result;
-    pending_jump_index = EXPR_NONE;
-    resume_target_index = EXPR_NONE;
-    pending_leave_count = 0;
+    interpreter->eval_outcome = saved_outcome;
+    interpreter->eval_outcome.kind = EVAL_OK;
+    interpreter->eval_outcome.result = saved_result;
+    interpreter->pending_jump_index = EXPR_NONE;
+    interpreter->resume_target_index = EXPR_NONE;
+    interpreter->pending_leave_count = 0;
 
     // Evaluate the (defer) expression
     Datum ignored_result = { .kind = SYM_EMPTY };
-    bool ok = evaluate_expression(expression_index, &ignored_result);
+    bool ok = evaluate_expression(interpreter, expression_index, &ignored_result);
 
     // Preserve only the first (defer) failure, but continue executing all defers
     if (
       (
-       !ok ||
-        eval_outcome.kind != EVAL_OK ||
+        !ok ||
+        interpreter->eval_outcome.kind != EVAL_OK ||
         // (defer)s cannot make jumps outside of their parent sequence scope
-        (pending_jump_index != EXPR_NONE || resume_target_index != EXPR_NONE) ||
+        (
+          interpreter->pending_jump_index != EXPR_NONE ||
+          interpreter->resume_target_index != EXPR_NONE
+        ) ||
         // (defer)s cannot invoke (leave)s outside of their parent sequence
-        pending_leave_count != 0
+        interpreter->pending_leave_count != 0
       ) && !deferred_failure
     ) {
       deferred_failure = true;
@@ -197,8 +172,8 @@ static bool run_deferred_expressions(uint32_t defer_start) {
       // still evaluated, though first failure becomes the evaluation failure,
       // while next (defer) failures are just ignored.
       if (saved_outcome.kind != EVAL_FAIL) {
-        if (eval_outcome.kind == EVAL_FAIL) {
-          saved_outcome = eval_outcome;
+        if (interpreter->eval_outcome.kind == EVAL_FAIL) {
+          saved_outcome = interpreter->eval_outcome;
         } else {
           saved_outcome.kind = EVAL_FAIL;
           snprintf(
@@ -217,18 +192,18 @@ static bool run_deferred_expressions(uint32_t defer_start) {
   // Restore the original state (except propagate first (defer) failure if there
   // were any, while preserving original sequence failure if there was one which
   // takes priority over (defer)’s failure)
-  executing_deferred_depth = saved_deferred_depth;
-  eval_outcome = saved_outcome;
-  pending_jump_index = saved_jump_index;
-  resume_target_index = saved_resume_index;
-  pending_leave_count = saved_leave_count;
+  interpreter->executing_deferred_depth = saved_deferred_depth;
+  interpreter->eval_outcome = saved_outcome;
+  interpreter->pending_jump_index = saved_jump_index;
+  interpreter->resume_target_index = saved_resume_index;
+  interpreter->pending_leave_count = saved_leave_count;
 
   if (deferred_failure) {
     // A deferred failure cancels pending jumps, leaves, or exits.
     // The evaluation failure is already stored in `eval_outcome`.
-    pending_jump_index = EXPR_NONE;
-    resume_target_index = EXPR_NONE;
-    pending_leave_count = 0;
+    interpreter->pending_jump_index = EXPR_NONE;
+    interpreter->resume_target_index = EXPR_NONE;
+    interpreter->pending_leave_count = 0;
   }
 
   return !deferred_failure;
@@ -237,48 +212,52 @@ static bool run_deferred_expressions(uint32_t defer_start) {
 // Evaluate top-level or `(do)` expressions sequence.
 // Also supports jumping into inactive nested `(do)` sequences.
 static bool evaluate_sequence(
+  Interpreter *interpreter,
   uint32_t first_expression_index,
   Datum *result,
   bool is_top_level
 ) {
   uint32_t current_expression_index = first_expression_index;
-  uint32_t defer_start = deferred_expression_count;
+  uint32_t defer_start = interpreter->deferred_expression_count;
   bool ok = true;
 
   *result = (Datum) { .kind = SYM_EMPTY };
 
   // If re-entering a nested sequence, skip expressions preceding the target.
-  if (resume_target_index != EXPR_NONE) {
-    current_expression_index =
-      find_sequence_jump_entry(first_expression_index, resume_target_index);
+  if (interpreter->resume_target_index != EXPR_NONE) {
+    current_expression_index = find_sequence_jump_entry(
+      interpreter,
+      first_expression_index,
+      interpreter->resume_target_index
+    );
 
     if (current_expression_index == EXPR_NONE) {
-      report_evaluation_failure("(goto) cannot find nested jump destination");
+      report_evaluation_failure(interpreter, "(goto) cannot find nested jump destination");
       ok = false;
       goto finish;
     }
   }
 
   while (current_expression_index != EXPR_NONE) {
-    if (current_expression_index >= expression_count) {
-      report_evaluation_failure("Invalid expression index");
+    if (current_expression_index >= interpreter->expression_count) {
+      report_evaluation_failure(interpreter, "Invalid expression index");
       ok = false;
       goto finish;
     }
 
     // The requested label has been reached. Resume ordinary evaluation.
-    if (current_expression_index == resume_target_index) {
-      resume_target_index = EXPR_NONE;
+    if (current_expression_index == interpreter->resume_target_index) {
+      interpreter->resume_target_index = EXPR_NONE;
     }
 
-    if (!evaluate_expression(current_expression_index, result)) {
+    if (!evaluate_expression(interpreter, current_expression_index, result)) {
       // Propagate `(leave)` through the requested number of `(do)` sequences.
-      if (pending_leave_count != 0) {
+      if (interpreter->pending_leave_count != 0) {
         if (!is_top_level) {
-          pending_leave_count--;
+          interpreter->pending_leave_count--;
 
-          if (pending_leave_count == 0) {
-            *result = eval_outcome.result;
+          if (interpreter->pending_leave_count == 0) {
+            *result = interpreter->eval_outcome.result;
             goto finish;
           }
         }
@@ -287,18 +266,27 @@ static bool evaluate_sequence(
         goto finish;
       }
 
-      if (eval_outcome.kind == EVAL_OK && pending_jump_index != EXPR_NONE) {
+      if (
+        interpreter->eval_outcome.kind == EVAL_OK &&
+        interpreter->pending_jump_index != EXPR_NONE
+      ) {
         // Check whether this sequence can handle the requested jump,
         // either directly or through one of its nested (do) expressions.
-        uint32_t jump_entry =
-          find_sequence_jump_entry(first_expression_index, pending_jump_index);
+        uint32_t jump_entry = find_sequence_jump_entry(
+          interpreter,
+          first_expression_index,
+          interpreter->pending_jump_index
+        );
 
         if (jump_entry != EXPR_NONE) {
           // A direct jump needs no nested re-entry.
           // Otherwise remember the final target while entering nested (do)s.
-          resume_target_index = jump_entry == pending_jump_index ? EXPR_NONE : pending_jump_index;
+          interpreter->resume_target_index =
+            jump_entry == interpreter->pending_jump_index
+              ? EXPR_NONE
+              : interpreter->pending_jump_index;
 
-          pending_jump_index = EXPR_NONE;
+          interpreter->pending_jump_index = EXPR_NONE;
           current_expression_index = jump_entry;
           continue;
         }
@@ -306,8 +294,11 @@ static bool evaluate_sequence(
         // Otherwise let the enclosing sequence try to handle the jump.
         // Only the top-level sequence reports an unresolved destination.
         if (is_top_level) {
-          pending_jump_index = EXPR_NONE;
-          report_evaluation_failure("(goto) destination is not reachable through (do)");
+          interpreter->pending_jump_index = EXPR_NONE;
+          report_evaluation_failure(
+            interpreter,
+            "(goto) destination is not reachable through (do)"
+          );
         }
       }
 
@@ -317,26 +308,33 @@ static bool evaluate_sequence(
     }
 
     // Save the result of the most recently completed expression.
-    eval_outcome.result = *result;
+    interpreter->eval_outcome.result = *result;
 
     // Move to the next expression in the sequence.
-    current_expression_index = expressions[current_expression_index].next;
+    current_expression_index = interpreter->storage.expressions[current_expression_index].next;
   }
 
   finish:
     // Deferred expressions run before the enclosing `(do)` decreases
     // `current_sequence_depth`.
-    if (!run_deferred_expressions(defer_start)) return false;
+    if (!run_deferred_expressions(interpreter, defer_start)) return false;
     return ok;
 }
 
-static bool evaluate_expression(uint32_t current_expression_index, Datum *result) {
-  if (current_expression_index == EXPR_NONE || current_expression_index >= expression_count) {
-    report_evaluation_failure("Invalid expression index");
+static bool evaluate_expression(
+  Interpreter *interpreter,
+  uint32_t current_expression_index,
+  Datum *result
+) {
+  if (
+    current_expression_index == EXPR_NONE ||
+    current_expression_index >= interpreter->expression_count
+  ) {
+    report_evaluation_failure(interpreter, "Invalid expression index");
     return false;
   }
 
-  const Expression *expr = &expressions[current_expression_index];
+  const Expression *expr = &interpreter->storage.expressions[current_expression_index];
 
   switch (expr->kind) {
     case EXPR_U32:
@@ -367,9 +365,9 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
     }
 
     case EXPR_STRING: {
-      const ExpressionAllocation *allocation = get_expression_allocation(expr->data);
+      const ExpressionAllocation *allocation = get_expression_allocation(interpreter, expr->data);
       if (allocation == NULL || allocation->data == NULL) {
-        report_evaluation_failure("Invalid string allocation");
+        report_evaluation_failure(interpreter, "Invalid string allocation");
         return false;
       }
       *result = (Datum) {
@@ -386,9 +384,9 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
     }
 
     case EXPR_ARRAY: {
-      const ExpressionAllocation *allocation = get_expression_allocation(expr->data);
+      const ExpressionAllocation *allocation = get_expression_allocation(interpreter, expr->data);
       if (allocation == NULL) {
-        report_evaluation_failure("Invalid array allocation");
+        report_evaluation_failure(interpreter, "Invalid array allocation");
         return false;
       }
       *result = (Datum) {
@@ -405,23 +403,23 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
     case EXPR_LIST: {
       uint32_t fn_name_index = expr->first_child;
 
-      if (fn_name_index == EXPR_NONE || fn_name_index >= expression_count) {
-        report_evaluation_failure("Expression list has no valid function name");
+      if (fn_name_index == EXPR_NONE || fn_name_index >= interpreter->expression_count) {
+        report_evaluation_failure(interpreter, "Expression list has no valid function name");
         return false;
       }
 
-      const Expression *fn = &expressions[fn_name_index];
+      const Expression *fn = &interpreter->storage.expressions[fn_name_index];
 
       if (fn->kind != EXPR_NAME) {
-        report_evaluation_failure("Expression function name must be a name");
+        report_evaluation_failure(interpreter, "Expression function name must be a name");
         return false;
       }
 
       // Resolve function name from expression allocations.
-      const ExpressionAllocation *allocation = get_expression_allocation(fn->data);
+      const ExpressionAllocation *allocation = get_expression_allocation(interpreter, fn->data);
 
       if (allocation == NULL || allocation->data == NULL) {
-        report_evaluation_failure("Invalid function name allocation");
+        report_evaluation_failure(interpreter, "Invalid function name allocation");
         return false;
       }
 
@@ -435,16 +433,17 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
         uint32_t arg_index = fn->next;
 
         while (arg_index != EXPR_NONE) {
-          if (arg_index >= expression_count) {
-            report_evaluation_failure("Invalid argument expression index");
+          if (arg_index >= interpreter->expression_count) {
+            report_evaluation_failure(interpreter, "Invalid argument expression index");
             return false;
           }
 
           Datum condition = { .kind = SYM_EMPTY };
-          if (!evaluate_expression(arg_index, &condition)) return false;
+          if (!evaluate_expression(interpreter, arg_index, &condition)) return false;
 
           if (condition.kind != SYM_VARIABLE) {
             report_evaluation_failure(
+              interpreter,
               is_and
                 ? "(and) condition must be a numeric value"
                 : "(or) condition must be a numeric value"
@@ -459,6 +458,7 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
             case TYPE_F32: is_true = condition.as.value.as.f32 != 0.0f; break;
             default:
               report_evaluation_failure(
+                interpreter,
                 is_and
                   ? "(and) condition must be a numeric value"
                   : "(or) condition must be a numeric value"
@@ -471,7 +471,7 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
           // Stop at the first false for `(and)`, or first true for `(or)`.
           if (is_and ? !is_true : is_true) break;
 
-          arg_index = expressions[arg_index].next;
+          arg_index = interpreter->storage.expressions[arg_index].next;
         }
 
         *result = (Datum) {
@@ -490,26 +490,26 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
         // Require a condition and a true branch; false branch is optional.
         uint32_t condition_index = fn->next;
 
-        if (condition_index == EXPR_NONE || condition_index >= expression_count) {
-          report_evaluation_failure("(if) expects 2 or 3 arguments");
+        if (condition_index == EXPR_NONE || condition_index >= interpreter->expression_count) {
+          report_evaluation_failure(interpreter, "(if) expects 2 or 3 arguments");
           return false;
         }
 
-        uint32_t true_index = expressions[condition_index].next;
+        uint32_t true_index = interpreter->storage.expressions[condition_index].next;
 
-        if (true_index == EXPR_NONE || true_index >= expression_count) {
-          report_evaluation_failure("(if) expects 2 or 3 arguments");
+        if (true_index == EXPR_NONE || true_index >= interpreter->expression_count) {
+          report_evaluation_failure(interpreter, "(if) expects 2 or 3 arguments");
           return false;
         }
 
-        uint32_t false_index = expressions[true_index].next;
+        uint32_t false_index = interpreter->storage.expressions[true_index].next;
 
         if (false_index != EXPR_NONE) {
           if (
-            false_index >= expression_count ||
-            expressions[false_index].next != EXPR_NONE
+            false_index >= interpreter->expression_count ||
+            interpreter->storage.expressions[false_index].next != EXPR_NONE
           ) {
-            report_evaluation_failure("(if) expects 2 or 3 arguments");
+            report_evaluation_failure(interpreter, "(if) expects 2 or 3 arguments");
             return false;
           }
         }
@@ -517,10 +517,10 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
         // Evaluate only the condition first.
         Datum condition = { .kind = SYM_EMPTY };
 
-        if (!evaluate_expression(condition_index, &condition)) return false;
+        if (!evaluate_expression(interpreter, condition_index, &condition)) return false;
 
         if (condition.kind != SYM_VARIABLE) {
-          report_evaluation_failure("(if) condition must be a numeric value");
+          report_evaluation_failure(interpreter, "(if) condition must be a numeric value");
           return false;
         }
 
@@ -531,7 +531,7 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
           case TYPE_I32: is_true = condition.as.value.as.i32 != 0; break;
           case TYPE_F32: is_true = condition.as.value.as.f32 != 0.0f; break;
           default:
-            report_evaluation_failure("(if) condition must be a numeric value");
+            report_evaluation_failure(interpreter, "(if) condition must be a numeric value");
             return false;
         }
 
@@ -544,7 +544,7 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
           return true;
         }
 
-        return evaluate_expression(selected_index, result);
+        return evaluate_expression(interpreter, selected_index, result);
       }
 
       // Special form: defer evaluation until the enclosing `(do)` terminates.
@@ -553,35 +553,43 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
 
         if (
           deferred_index == EXPR_NONE ||
-          deferred_index >= expression_count ||
-          expressions[deferred_index].next != EXPR_NONE
+          deferred_index >= interpreter->expression_count ||
+          interpreter->storage.expressions[deferred_index].next != EXPR_NONE
         ) {
-          report_evaluation_failure("(defer) expects exactly 1 expression");
+          report_evaluation_failure(interpreter, "(defer) expects exactly 1 expression");
           return false;
         }
 
-        if (current_sequence_depth == 0) {
-          report_evaluation_failure("(defer) requires an active (do) sequence");
+        if (interpreter->current_sequence_depth == 0) {
+          report_evaluation_failure(interpreter, "(defer) requires an active (do) sequence");
           return false;
         }
 
         // A deferred expression may create and use nested `(do)` sequences,
         // but it cannot register another defer in the block already exiting.
-        if (executing_deferred_depth == current_sequence_depth) {
-          report_evaluation_failure("(defer) cannot register in an exiting (do) sequence");
+        if (interpreter->executing_deferred_depth == interpreter->current_sequence_depth) {
+          report_evaluation_failure(
+            interpreter,
+            "(defer) cannot register in an exiting (do) sequence"
+          );
           return false;
         }
 
-        if (deferred_expression_count >= deferred_expression_capacity) {
-          report_evaluation_failure("(defer) registration capacity reached");
+        if (
+          interpreter->deferred_expression_count >=
+          interpreter->storage.deferred_expression_capacity
+        ) {
+          report_evaluation_failure(interpreter, "(defer) registration capacity reached");
           return false;
         }
 
-        deferred_expression_indices[deferred_expression_count] = deferred_index;
-        deferred_expression_count++;
+        interpreter->storage.deferred_expression_indices[
+          interpreter->deferred_expression_count
+        ] = deferred_index;
+        interpreter->deferred_expression_count++;
 
         // Registration does not evaluate the argument or replace the last value.
-        *result = eval_outcome.result;
+        *result = interpreter->eval_outcome.result;
         return true;
       }
 
@@ -591,14 +599,17 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
 
         if (
           arg_index != EXPR_NONE &&
-          (arg_index >= expression_count || expressions[arg_index].next != EXPR_NONE)
+          (
+            arg_index >= interpreter->expression_count ||
+            interpreter->storage.expressions[arg_index].next != EXPR_NONE
+          )
         ) {
-          report_evaluation_failure("(leave) expects 0 or 1 arguments");
+          report_evaluation_failure(interpreter, "(leave) expects 0 or 1 arguments");
           return false;
         }
 
-        if (current_sequence_depth == 0) {
-          report_evaluation_failure("(leave) requires an active (do) sequence");
+        if (interpreter->current_sequence_depth == 0) {
+          report_evaluation_failure(interpreter, "(leave) requires an active (do) sequence");
           return false;
         }
 
@@ -606,10 +617,10 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
 
         if (arg_index != EXPR_NONE) {
           Datum arg = { .kind = SYM_EMPTY };
-          if (!evaluate_expression(arg_index, &arg)) return false;
+          if (!evaluate_expression(interpreter, arg_index, &arg)) return false;
 
           if (arg.kind != SYM_VARIABLE || arg.as.value.type != TYPE_U32) {
-            report_evaluation_failure("(leave) argument must be u32");
+            report_evaluation_failure(interpreter, "(leave) argument must be u32");
             return false;
           }
 
@@ -617,35 +628,35 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
         }
 
         if (leave_count == 0) {
-          report_evaluation_failure("(leave) count must be greater than 0");
+          report_evaluation_failure(interpreter, "(leave) count must be greater than 0");
           return false;
         }
 
-        if (leave_count > current_sequence_depth) {
-          report_evaluation_failure("(leave) count exceeds current (depth)");
+        if (leave_count > interpreter->current_sequence_depth) {
+          report_evaluation_failure(interpreter, "(leave) count exceeds current (depth)");
           return false;
         }
 
-        pending_leave_count = leave_count;
+        interpreter->pending_leave_count = leave_count;
         return false;
       }
 
       // Special form: evaluate child expressions sequentially.
       if (strcmp(function_name, "do") == 0) {
-        current_sequence_depth++;
-        bool ok = evaluate_sequence(fn->next, result, false);
-        current_sequence_depth--;
+        interpreter->current_sequence_depth++;
+        bool ok = evaluate_sequence(interpreter, fn->next, result, false);
+        interpreter->current_sequence_depth--;
         return ok;
       }
 
       // Resolve the function from the existing global symbol table.
-      const Symbol *symbol = symbol_lookup(function_name);
+      const Symbol *symbol = symbol_lookup(interpreter, function_name);
 
       if (symbol == NULL) {
-        report_evaluation_failure("Undefined function");
+        report_evaluation_failure(interpreter, "Undefined function");
         return false;
       } else if (symbol->kind != SYM_NATIVE_FUNCTION) {
-        report_evaluation_failure("Symbol is not a native function");
+        report_evaluation_failure(interpreter, "Symbol is not a native function");
         return false;
       }
 
@@ -655,18 +666,18 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
       uint32_t arg_index = fn->next;
 
       while (arg_index != EXPR_NONE) {
-        if (arg_index >= expression_count) {
-          report_evaluation_failure("Invalid argument expression index");
+        if (arg_index >= interpreter->expression_count) {
+          report_evaluation_failure(interpreter, "Invalid argument expression index");
           return false;
         } else if (argc >= EVAL_ARG_CAPACITY) {
-          report_evaluation_failure("Too many function arguments");
+          report_evaluation_failure(interpreter, "Too many function arguments");
           return false;
         }
 
-        uint32_t next_index = expressions[arg_index].next;
+        uint32_t next_index = interpreter->storage.expressions[arg_index].next;
 
         // Evaluate child expressions recursively
-        if (!evaluate_expression(arg_index, &args[argc])) {
+        if (!evaluate_expression(interpreter, arg_index, &args[argc])) {
           return false;
         }
 
@@ -676,16 +687,16 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
 
       // Temporarily expose the calling expression's index to the native function.
       // Save and restore the previous index to support nested native calls.
-      uint32_t previous_call_index = current_native_call_expression_index;
+      uint32_t previous_call_index = interpreter->current_native_call_expression_index;
 
       // Make the current expression location available to the native function.
-      current_native_call_expression_index = current_expression_index;
+      interpreter->current_native_call_expression_index = current_expression_index;
 
       // Execute the native function (e.g. `std_label` reads this location).
-      *result = symbol->as.native_function(args, argc);
+      *result = symbol->as.native_function(interpreter, args, argc);
 
       // Restore the previous call location after the native function returns.
-      current_native_call_expression_index = previous_call_index;
+      interpreter->current_native_call_expression_index = previous_call_index;
 
       // Why restore the previous value?
       //
@@ -700,12 +711,15 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
       // Stop current evaluation when a jump, exit, or failure is requested.
       // In case of a jump this helps to avoid growing recursion.
       // Native functions report failures through the evaluation state.
-      return eval_outcome.kind == EVAL_OK && pending_jump_index == EXPR_NONE;
+      return (
+        interpreter->eval_outcome.kind == EVAL_OK &&
+        interpreter->pending_jump_index == EXPR_NONE
+      );
     }
 
     // Resolving variable reference by name
     case EXPR_NAME: {
-      const ExpressionAllocation *allocation = get_expression_allocation(expr->data);
+      const ExpressionAllocation *allocation = get_expression_allocation(interpreter, expr->data);
 
       if (
         allocation == NULL ||
@@ -713,15 +727,15 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
         allocation->length >= allocation->size ||
         ((const char *)allocation->data)[allocation->length] != '\0'
       ) {
-        report_evaluation_failure("Invalid expression name allocation");
+        report_evaluation_failure(interpreter, "Invalid expression name allocation");
         return false;
       }
 
       const char *symbol_name = allocation->data;
-      const Symbol *symbol = symbol_lookup(symbol_name);
+      const Symbol *symbol = symbol_lookup(interpreter, symbol_name);
 
       if (symbol == NULL) {
-        report_evaluation_failure("Undefined variable");
+        report_evaluation_failure(interpreter, "Undefined variable");
         return false;
       }
 
@@ -739,13 +753,13 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
           };
           return true;
         default:
-          report_evaluation_failure("Symbol is not a variable or array");
+          report_evaluation_failure(interpreter, "Symbol is not a variable or array");
           return false;
       }
     }
 
     default:
-      report_evaluation_failure("Unsupported expression kind");
+      report_evaluation_failure(interpreter, "Unsupported expression kind");
       return false;
   }
 }
@@ -755,25 +769,22 @@ static bool evaluate_expression(uint32_t current_expression_index, Datum *result
 
   Set `settings_cb` and `state` to `NULL` if you don’t need to modify any settings.
   `state` is forwarded to `settings_cb` via `EvalSettingsInterface`
-  (see `EvalSettingsInterface::state`).
+  (see `EvalSettingsInterface::state`). Note that in this case only basic stdlib
+  functions will be provided (no platform-specific IO, like `(println)`).
 */
 EvalOutcome evaluate(
-  // TODO: Add support for custom expressions set
-  const Expression *eval_expressions,
-  uint32_t eval_expression_count,
-
+  Interpreter *interpreter,
   void (*settings_cb)(EvalSettingsInterface*),
   void *state
 ) {
   if (
-    expressions == NULL ||
-    expression_allocations == NULL ||
-    symbols == NULL ||
-    runtime_allocations == NULL ||
-    deferred_expression_indices == NULL ||
-    eval_expressions != expressions ||
-    eval_expression_count != expression_count ||
-    eval_expression_count > expression_capacity
+    interpreter == NULL ||
+    !interpreter->configured ||
+    interpreter->storage.expressions == NULL ||
+    interpreter->storage.expression_allocations == NULL ||
+    interpreter->storage.symbols == NULL ||
+    interpreter->storage.runtime_allocations == NULL ||
+    interpreter->storage.deferred_expression_indices == NULL
   )
     return (EvalOutcome) {
       .kind = EVAL_FAIL,
@@ -782,18 +793,19 @@ EvalOutcome evaluate(
     };
 
   // Reset symbols
-  clean_symbols();
+  clean_symbols(interpreter);
 
   // Wipe leftovers of previous evaluation
-  clean_evaluation();
+  clean_evaluation(interpreter);
 
   // Reset evaluation state
-  eval_outcome = (EvalOutcome) {
+  interpreter->eval_outcome = (EvalOutcome) {
     .kind = EVAL_OK,
     .result = { .kind = SYM_EMPTY },
   };
 
   EvalSettingsInterfaceContext settings_ctx = {
+    .interpreter = interpreter,
     .is_failed = false,
     .fail_msg = {'\0'},
   };
@@ -801,11 +813,12 @@ EvalOutcome evaluate(
   char fail_prefix[64] = {'\0'};
 
   snprintf(settings_ctx.fail_msg, sizeof(settings_ctx.fail_msg), "populate_std failed: ");
-  if (!populate_stdlib(&settings_ctx.fail_msg)) goto fail;
+  if (!populate_stdlib(interpreter, &settings_ctx.fail_msg)) goto fail;
 
   EvalSettingsInterface settings_interface = {
     .context = &settings_ctx,
     .state = state,
+    .interpreter = interpreter,
     .define_symbol = define_symbol_interface,
     .symbol_lookup = symbol_lookup_interface,
     .report_failure = report_failure_interface,
@@ -815,19 +828,20 @@ EvalOutcome evaluate(
     snprintf(settings_ctx.fail_msg, sizeof(settings_ctx.fail_msg), "EvalSettingsCallback failed: ");
     settings_cb(&settings_interface);
     if (settings_ctx.is_failed) goto fail;
+    wipe_memory(&settings_ctx, sizeof(settings_ctx));
   }
 
-  if (expression_count != 0) {
+  if (interpreter->expression_count != 0) {
     Datum result_value = { .kind = SYM_EMPTY };
 
     // Evaluate all top-level expressions sequentially.
     // Discard returned boolean, the result is already reported to `eval_outcome`.
-    (void)evaluate_sequence(0, &result_value, true);
+    (void)evaluate_sequence(interpreter, 0, &result_value, true);
 
     wipe_memory(&result_value, sizeof(result_value));
   }
 
-  return eval_outcome;
+  return interpreter->eval_outcome;
 
   fail:
     EvalOutcome result = {
@@ -846,74 +860,51 @@ EvalOutcome evaluate(
     return result;
 }
 
-void clean_evaluation() {
+void clean_evaluation(Interpreter *interpreter) {
   // (label) & (goto)
-  pending_jump_index = EXPR_NONE;
-  resume_target_index = EXPR_NONE;
-  current_native_call_expression_index = EXPR_NONE;
+  interpreter->pending_jump_index = EXPR_NONE;
+  interpreter->resume_target_index = EXPR_NONE;
+  interpreter->current_native_call_expression_index = EXPR_NONE;
 
   // (depth)
-  current_sequence_depth = 0;
+  interpreter->current_sequence_depth = 0;
 
   // (leave)
-  pending_leave_count = 0;
+  interpreter->pending_leave_count = 0;
 
   // (defer)
-  deferred_expression_count = 0;
-  executing_deferred_depth = 0;
-  if (deferred_expression_indices != NULL)
+  interpreter->deferred_expression_count = 0;
+  interpreter->executing_deferred_depth = 0;
+  if (interpreter->storage.deferred_expression_indices != NULL)
     wipe_memory(
-      deferred_expression_indices,
-      (size_t)deferred_expression_capacity * sizeof(*deferred_expression_indices)
+      interpreter->storage.deferred_expression_indices,
+      (size_t)interpreter->storage.deferred_expression_capacity
+        * sizeof(*interpreter->storage.deferred_expression_indices)
     );
 
   // Runtime allocations
-  if (runtime_allocations != NULL) {
-    for (uint32_t i = 0; i < runtime_allocation_count; ++i) {
-      EvalRuntimeAllocation *allocation = &runtime_allocations[i];
+  if (interpreter->storage.runtime_allocations != NULL) {
+    for (uint32_t i = 0; i < interpreter->runtime_allocation_count; ++i) {
+      EvalRuntimeAllocation *allocation = &interpreter->storage.runtime_allocations[i];
       wipe_memory(allocation->data, allocation->size);
       free(allocation->data);
     }
     wipe_memory(
-      runtime_allocations,
-      (size_t)runtime_allocation_capacity * sizeof(*runtime_allocations)
+      interpreter->storage.runtime_allocations,
+      (size_t)interpreter->storage.runtime_allocation_capacity
+        * sizeof(*interpreter->storage.runtime_allocations)
     );
   }
-  runtime_allocation_count = 0;
+  interpreter->runtime_allocation_count = 0;
 
   // Eval outcome
-  wipe_memory(&eval_outcome, sizeof(eval_outcome));
+  wipe_memory(&interpreter->eval_outcome, sizeof(interpreter->eval_outcome));
 }
 
-void report_evaluation_failure(char *fail_msg) {
-  eval_outcome.kind = EVAL_FAIL;
-  snprintf(eval_outcome.as.fail_msg, sizeof(eval_outcome.as.fail_msg), "%s", fail_msg);
-}
-
-bool get_last_evaluation_value(Datum *result) {
-  if (eval_outcome.result.kind == SYM_EMPTY) return false;
-  *result = eval_outcome.result;
-  return true;
-}
-
-void report_evaluation_exit(int exit_code, Datum result) {
-  eval_outcome.kind = EVAL_EXIT;
-  eval_outcome.as.exit_code = exit_code;
-  eval_outcome.result = result;
-}
-
-uint32_t get_current_native_call_expression_index(void) {
-  return current_native_call_expression_index;
-}
-
-void request_evaluation_jump(uint32_t instruction_index) {
-  pending_jump_index = instruction_index;
-}
-
-void* allocate_runtime_data(size_t size) {
+void* allocate_runtime_data(Interpreter *interpreter, size_t size) {
   if (
-    runtime_allocations == NULL ||
-    runtime_allocation_count >= runtime_allocation_capacity
+    interpreter->storage.runtime_allocations == NULL ||
+    interpreter->runtime_allocation_count >= interpreter->storage.runtime_allocation_capacity
   ) return NULL;
 
   // Allow zero-length objects without relying on malloc(0).
@@ -921,15 +912,11 @@ void* allocate_runtime_data(size_t size) {
   void *data = malloc(allocated_size);
   if (data == NULL) return NULL;
 
-  runtime_allocations[runtime_allocation_count] = (EvalRuntimeAllocation) {
+  interpreter->storage.runtime_allocations[interpreter->runtime_allocation_count] = (EvalRuntimeAllocation) {
     .data = data,
     .size = allocated_size,
   };
 
-  runtime_allocation_count++;
+  interpreter->runtime_allocation_count++;
   return data;
-}
-
-uint32_t get_current_sequence_depth(void) {
-  return current_sequence_depth;
 }

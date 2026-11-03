@@ -61,10 +61,13 @@ typedef struct {
   } as;
 } Datum;
 
+// Forward declaration to avoid circular header dependencies.
+typedef struct Interpreter Interpreter;
+
 // A native C-function pointer to be stored in a `Symbol`.
 // Allowing you to make wrapper functions compatible with the interpreted
 // language that would execute arbitrary C-code (e.g. FFI bindings for IO).
-typedef Datum (*NativeFunction)(const Datum *args, size_t argc);
+typedef Datum (*NativeFunction)(Interpreter *interpreter, const Datum *args, size_t argc);
 
 typedef struct {
   char name[SYMBOL_NAME_SIZE];
@@ -88,9 +91,9 @@ typedef struct {
   } as;
 } Symbol;
 
-Symbol* symbol_lookup(const char *name);
-Symbol* symbol_define(const char *name, SymbolKind kind);
-void clean_symbols();
+Symbol* symbol_lookup(Interpreter *interpreter, const char *name);
+Symbol* symbol_define(Interpreter *interpreter, const char *name, SymbolKind kind);
+void clean_symbols(Interpreter *interpreter);
 
 // Error outcomes for the `symbol_define` function.
 typedef enum {
@@ -98,6 +101,3 @@ typedef enum {
   ALREADY_DEFINED,
   TABLE_IS_FULL,
 } symbol_define_error_t;
-
-// Error from the most recent failed `symbol_define` call.
-extern symbol_define_error_t symbol_define_error;

@@ -26,6 +26,8 @@
 #include "storage.h"
 
 typedef struct {
+  Interpreter *interpreter;
+
   // Input text
   const char *source;
   size_t length;
@@ -137,12 +139,20 @@ static bool skip_layout(Parser *parser) {
 }
 
 static bool new_expression(Parser *parser, uint32_t kind, uint32_t *index) {
-  if (expression_count >= expression_capacity)
+  Interpreter *interpreter = parser->interpreter;
+
+  if (interpreter->expression_count >= interpreter->storage.expression_capacity)
     return parser_fail(parser, "Expression capacity exceeded");
 
-  *index = expression_count;
-  expression_count++;
-  expressions[*index] = (Expression) { .kind = kind, .first_child = EXPR_NONE, .next = EXPR_NONE };
+  *index = interpreter->expression_count;
+  interpreter->expression_count++;
+
+  interpreter->storage.expressions[*index] = (Expression) {
+    .kind = kind,
+    .first_child = EXPR_NONE,
+    .next = EXPR_NONE,
+  };
+
   return true;
 }
 
@@ -151,8 +161,10 @@ static bool allocate_text(Parser *parser, const char *text, size_t length, uint3
   size_t length_bytes = sizeof(char) * (length + 1);
 
   // Reuse identical immutable strings, including function and variable names.
-  for (uint32_t i = 0; i < expression_allocation_count; ++i) {
-    const ExpressionAllocation *allocation = &expression_allocations[i];
+  for (uint32_t i = 0; i < parser->interpreter->expression_allocation_count; ++i) {
+    const ExpressionAllocation *allocation =
+      &parser->interpreter->storage.expression_allocations[i];
+
     if (
       allocation->data != NULL &&
       allocation->element_type == TYPE_STRING &&
@@ -167,7 +179,14 @@ static bool allocate_text(Parser *parser, const char *text, size_t length, uint3
   }
 
   // No such string found in already allocated table, allocating new
-  if (!allocate_expression_data(text, length_bytes, TYPE_STRING, (uint32_t)length, index))
+  if (!allocate_expression_data(
+    parser->interpreter,
+    text,
+    length_bytes,
+    TYPE_STRING,
+    (uint32_t)length,
+    index
+  ))
     return parser_fail(parser, "Unable to allocate expression text");
 
   return true;
@@ -201,8 +220,10 @@ static bool parse_list(Parser *parser, uint32_t *index) {
     // Recursively parse children
     if (!parse_expression(parser, &child)) return false;
 
-    if (previous_child == EXPR_NONE) expressions[*index].first_child = child;
-    else expressions[previous_child].next = child;
+    if (previous_child == EXPR_NONE)
+      parser->interpreter->storage.expressions[*index].first_child = child;
+    else
+      parser->interpreter->storage.expressions[previous_child].next = child;
 
     previous_child = child;
   }
@@ -251,7 +272,12 @@ static bool parse_string(Parser *parser, uint32_t *index) {
   text[length] = '\0';
 
   if (!new_expression(parser, EXPR_STRING, index)) return false;
-  return allocate_text(parser, text, length, &expressions[*index].data);
+  return allocate_text(
+    parser,
+    text,
+    length,
+    &parser->interpreter->storage.expressions[*index].data
+  );
 }
 
 static bool is_atom_delimiter(const Parser *parser) {
@@ -306,7 +332,7 @@ static bool parse_number(Parser *parser, String text, uint32_t *index) {
   }
 
   if (!new_expression(parser, kind, index)) return false;
-  expressions[*index].data = data;
+  parser->interpreter->storage.expressions[*index].data = data;
 
   return true;
 }
@@ -334,7 +360,12 @@ static bool parse_atom(Parser *parser, uint32_t *index) {
 
   if (!new_expression(parser, EXPR_NAME, index)) return false;
 
-  return allocate_text(parser, text, length, &expressions[*index].data);
+  return allocate_text(
+    parser,
+    text,
+    length,
+    &parser->interpreter->storage.expressions[*index].data
+  );
 }
 
 // Parse an expression
@@ -353,17 +384,29 @@ static bool parse_expression(Parser *parser, uint32_t *index) {
   return parse_atom(parser, index);
 }
 
-// Parse expressions from a string into global `expressions` and `expression_allocations` tables
-bool parse_source(const char *source, size_t length, char (*error)[ERR_MSG_SIZE]) {
+// Parse expressions from a string into
+// `interpreter->storage.expressions` and
+// `interpreter->storage.expression_allocations` tables.
+bool parse_source(
+  Interpreter *interpreter,
+  const char *source,
+  size_t length,
+  char (*error)[ERR_MSG_SIZE]
+) {
   if (error == NULL) return false;
   (*error)[0] = '\0';
 
-  if (expressions == NULL || expression_allocations == NULL) {
+  if (
+    interpreter == NULL ||
+    !interpreter->configured ||
+    interpreter->storage.expressions == NULL ||
+    interpreter->storage.expression_allocations == NULL
+  ) {
     snprintf(*error, sizeof(*error), "Interpreter storage is not configured");
     return false;
   }
 
-  clean_expressions();
+  clean_expressions(interpreter);
 
   if (source != NULL && memchr(source, '\0', length) != NULL) {
     snprintf(*error, sizeof(*error), "Source contains a null byte");
@@ -377,6 +420,7 @@ bool parse_source(const char *source, size_t length, char (*error)[ERR_MSG_SIZE]
 
   // Parser state
   Parser parser = {
+    .interpreter = interpreter,
     .source = source,
     .length = length,
     .line = 1,
@@ -400,12 +444,12 @@ bool parse_source(const char *source, size_t length, char (*error)[ERR_MSG_SIZE]
     if (!parse_expression(&parser, &current_expression_index)) goto fail;
 
     if (previous_expression_index != EXPR_NONE)
-      expressions[previous_expression_index].next = current_expression_index;
+      interpreter->storage.expressions[previous_expression_index].next = current_expression_index;
 
     previous_expression_index = current_expression_index;
   }
 
   fail:
-    clean_expressions();
+    clean_expressions(interpreter);
     return false;
 }

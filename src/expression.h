@@ -51,6 +51,7 @@ typedef struct {
 } ExpressionAllocation;
 
 bool allocate_expression_data(
+  Interpreter *interpreter,
   const void *source,
   size_t size,
   ValueType element_type,
@@ -58,6 +59,9 @@ bool allocate_expression_data(
   uint32_t *allocation_index
 );
 
-const ExpressionAllocation* get_expression_allocation(uint32_t index);
+const ExpressionAllocation* get_expression_allocation(
+  const Interpreter *interpreter,
+  uint32_t index
+);
 
-void clean_expressions();
+void clean_expressions(Interpreter *interpreter);

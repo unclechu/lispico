@@ -7,12 +7,12 @@
 #include "evaluate.h"
 
 // (abs) — Absolute value of a numeric value
-Datum std_abs(const Datum *args, size_t argc) {
+Datum std_abs(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "abs";
 
-  if (!validate_unary_numeric_input(fn_name, &fail_msg, args, argc))
+  if (!validate_unary_numeric_input(interpreter, fn_name, &fail_msg, args, argc))
     return return_value;
 
   Value value = args[0].as.value;
@@ -34,7 +34,7 @@ Datum std_abs(const Datum *args, size_t argc) {
       break;
 
     default:
-      report_unexpected_value_type(fn_name, &fail_msg, value.type);
+      report_unexpected_value_type(interpreter, fn_name, &fail_msg, value.type);
       return return_value;
   }
 
@@ -46,13 +46,14 @@ Datum std_abs(const Datum *args, size_t argc) {
     goto fail;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // Select the minimum or maximum of one or more numeric values.
 static Datum std_minmax_generic(
+  Interpreter *interpreter,
   const Datum *args,
   size_t argc,
   const char *fn_name,
@@ -133,28 +134,28 @@ static Datum std_minmax_generic(
     goto fail;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (min) — Return the smallest of one or more values
-Datum std_min(const Datum *args, size_t argc) {
-  return std_minmax_generic(args, argc, "min", true);
+Datum std_min(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_minmax_generic(interpreter, args, argc, "min", true);
 }
 
 // (max) — Return the largest of one or more values
-Datum std_max(const Datum *args, size_t argc) {
-  return std_minmax_generic(args, argc, "max", false);
+Datum std_max(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_minmax_generic(interpreter, args, argc, "max", false);
 }
 
 // (clamp VALUE MIN MAX) — Restrict a numeric value to an inclusive range
-Datum std_clamp(const Datum *args, size_t argc) {
+Datum std_clamp(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "clamp";
 
-  if (!validate_argc(fn_name, &fail_msg, 3, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 3, argc)) return return_value;
 
   if (
     args[0].kind != SYM_VARIABLE ||
@@ -208,7 +209,7 @@ Datum std_clamp(const Datum *args, size_t argc) {
     }
 
     default:
-      report_unexpected_value_type(fn_name, &fail_msg, type);
+      report_unexpected_value_type(interpreter, fn_name, &fail_msg, type);
       return return_value;
   }
 
@@ -224,7 +225,7 @@ Datum std_clamp(const Datum *args, size_t argc) {
     goto fail;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }

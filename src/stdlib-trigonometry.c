@@ -8,6 +8,7 @@
 
 // Apply a unary f32 trigonometric function.
 static Datum std_unary_trigonometry(
+  Interpreter *interpreter,
   const Datum *args,
   size_t argc,
   const char *fn_name,
@@ -17,7 +18,7 @@ static Datum std_unary_trigonometry(
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
 
-  if (!validate_unary_numeric_input(fn_name, &fail_msg, args, argc))
+  if (!validate_unary_numeric_input(interpreter, fn_name, &fail_msg, args, argc))
     return return_value;
 
   if (args[0].as.value.type != TYPE_F32) {
@@ -54,13 +55,14 @@ static Datum std_unary_trigonometry(
     goto fail;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // Apply a binary f32 trigonometric or geometric function.
 static Datum std_binary_trigonometry(
+  Interpreter *interpreter,
   const Datum *args,
   size_t argc,
   const char *fn_name,
@@ -69,7 +71,7 @@ static Datum std_binary_trigonometry(
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
 
-  if (!validate_two_same_type_variables_inputs(fn_name, &fail_msg, args, argc))
+  if (!validate_two_same_type_variables_inputs(interpreter, fn_name, &fail_msg, args, argc))
     return return_value;
 
   if (args[0].as.value.type != TYPE_F32) {
@@ -103,47 +105,47 @@ static Datum std_binary_trigonometry(
     goto fail;
 
   fail:
-    report_evaluation_failure(fail_msg);
+    report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
 
 // (sin) — Sine of an angle in radians
-Datum std_sin(const Datum *args, size_t argc) {
-  return std_unary_trigonometry(args, argc, "sin", sinf, false);
+Datum std_sin(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_unary_trigonometry(interpreter, args, argc, "sin", sinf, false);
 }
 
 // (cos) — Cosine of an angle in radians
-Datum std_cos(const Datum *args, size_t argc) {
-  return std_unary_trigonometry(args, argc, "cos", cosf, false);
+Datum std_cos(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_unary_trigonometry(interpreter, args, argc, "cos", cosf, false);
 }
 
 // (tan) — Tangent of an angle in radians
-Datum std_tan(const Datum *args, size_t argc) {
-  return std_unary_trigonometry(args, argc, "tan", tanf, false);
+Datum std_tan(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_unary_trigonometry(interpreter, args, argc, "tan", tanf, false);
 }
 
 // (asin) — Inverse sine, returning radians
-Datum std_asin(const Datum *args, size_t argc) {
-  return std_unary_trigonometry(args, argc, "asin", asinf, true);
+Datum std_asin(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_unary_trigonometry(interpreter, args, argc, "asin", asinf, true);
 }
 
 // (acos) — Inverse cosine, returning radians
-Datum std_acos(const Datum *args, size_t argc) {
-  return std_unary_trigonometry(args, argc, "acos", acosf, true);
+Datum std_acos(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_unary_trigonometry(interpreter, args, argc, "acos", acosf, true);
 }
 
 // (atan) — Inverse tangent, returning radians
-Datum std_atan(const Datum *args, size_t argc) {
-  return std_unary_trigonometry(args, argc, "atan", atanf, false);
+Datum std_atan(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_unary_trigonometry(interpreter, args, argc, "atan", atanf, false);
 }
 
 // (atan2 Y X) — Angle of a vector, returning radians
-Datum std_atan2(const Datum *args, size_t argc) {
-  return std_binary_trigonometry(args, argc, "atan2", atan2f);
+Datum std_atan2(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_binary_trigonometry(interpreter, args, argc, "atan2", atan2f);
 }
 
 // (hypot X Y) — Euclidean distance, sqrt(X*X + Y*Y)
-Datum std_hypot(const Datum *args, size_t argc) {
-  return std_binary_trigonometry(args, argc, "hypot", hypotf);
+Datum std_hypot(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_binary_trigonometry(interpreter, args, argc, "hypot", hypotf);
 }
