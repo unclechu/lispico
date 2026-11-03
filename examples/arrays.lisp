@@ -77,3 +77,27 @@
 (arr-set "direct-strings" 0 "Hello")
 (assert (== (arr-get direct-strings 0) "Hello"))
 (assert (== (arr-get direct-strings 1) ""))
+
+; Array size accepts both names and evaluated array values
+(arr-new "numbers-2" u32 3)
+(assert (== (arr-size "numbers-2") 3))
+(assert (== (arr-size numbers-2) 3))
+
+; Array element type accepts both names and evaluated array values
+(assert (== (arr-type "numbers-2") u32))
+(assert (== (arr-type numbers-2) u32))
+
+; Directly use results returned by array functions
+(assert (== (arr-size (arr-new "created-2" i32 5)) 5))
+(assert (== (arr-type (arr-new "created-strings" s 2)) s))
+(assert (== (arr-size (arr-set "numbers-2" 0 123)) 3))
+(assert (== (arr-type (arr-set "numbers-2" 1 456)) u32))
+
+; Empty arrays are valid
+(arr-new "empty-2" f32 0)
+(assert (== (arr-size empty-2) 0))
+(assert (== (arr-type empty-2) f32))
+
+; The result types remain u32
+(assert (== (type-of (arr-size numbers-2)) u32))
+(assert (== (type-of (arr-type numbers-2)) u32))

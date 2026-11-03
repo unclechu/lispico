@@ -281,13 +281,22 @@ Datum std_arr_size(Interpreter *interpreter, const Datum *args, size_t argc) {
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
 
-  Symbol *symbol = get_array(interpreter, &args[0], fn_name, &fail_msg);
-  if (symbol == NULL) goto fail;
+  Array array;
+  if (args[0].kind == SYM_ARRAY) {
+    // Read directly from an evaluated array value.
+    array = args[0].as.array;
+  } else {
+    // Otherwise, resolve the array by its variable name.
+    Symbol *symbol = get_array(interpreter, &args[0], fn_name, &fail_msg);
+    if (symbol == NULL) goto fail;
+    array = symbol->as.array;
+  }
 
   return_value = (Datum) {
     .kind = SYM_VARIABLE,
-    .as.value = { .type = TYPE_U32, .as.u32 = symbol->as.array.length },
+    .as.value = { .type = TYPE_U32, .as.u32 = array.length },
   };
+
   return return_value;
 
   fail:
@@ -304,12 +313,20 @@ Datum std_arr_type(Interpreter *interpreter, const Datum *args, size_t argc) {
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
 
-  Symbol *symbol = get_array(interpreter, &args[0], fn_name, &fail_msg);
-  if (symbol == NULL) goto fail;
+  Array array;
+  if (args[0].kind == SYM_ARRAY) {
+    // Read directly from an evaluated array value.
+    array = args[0].as.array;
+  } else {
+    // Otherwise, resolve the array by its variable name.
+    Symbol *symbol = get_array(interpreter, &args[0], fn_name, &fail_msg);
+    if (symbol == NULL) goto fail;
+    array = symbol->as.array;
+  }
 
   return_value = (Datum) {
     .kind = SYM_VARIABLE,
-    .as.value = { .type = TYPE_U32, .as.u32 = (uint32_t)symbol->as.array.element_type },
+    .as.value = { .type = TYPE_U32, .as.u32 = (uint32_t)array.element_type },
   };
 
   return return_value;

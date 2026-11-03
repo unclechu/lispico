@@ -72,7 +72,7 @@ run-c-test() {
     shopt -s nullglob
 
     if [[ -s $ENV_FILE ]]; then
-      printf 'Applying “%s%s%s” file\n' "$O_SECONDARY_COLOR" "$ENV_FILE" "$O_RESET_COLOR"
+      printf 'Applying “%s%s%s” file…\n' "$O_SECONDARY_COLOR" "$ENV_FILE" "$O_RESET_COLOR"
       ENV_CONTENTS=$(<"$ENV_FILE")
       printf '%s%s%s\n' "$O_SECONDARY_COLOR" "$ENV_CONTENTS" "$O_RESET_COLOR"
       eval -- "$ENV_CONTENTS"
@@ -86,6 +86,7 @@ run-c-test() {
     # shellcheck disable=SC2125
     CFLAGS="$CFLAGS tests/c/utils/*.c"
 
+    printf 'Building “%s%s%s”…\n' "$O_SECONDARY_COLOR" "$MAIN_SOURCE_FILE" "$O_RESET_COLOR"
     set -o xtrace
     /usr/bin/env time -f "$TIME_FORMAT" env \
       CC="$CC" \
@@ -103,6 +104,7 @@ run-c-test() {
   fi
 
   (
+    printf 'Running “%s%s%s”…\n' "$O_SECONDARY_COLOR" "$OUTPUT_EXECUTABLE_NAME" "$O_RESET_COLOR"
     set -o xtrace
     /usr/bin/env time -f "$TIME_FORMAT" timeout -- "$TIMEOUT" "$OUTPUT_EXECUTABLE_NAME"
   ) || exit_code=$?

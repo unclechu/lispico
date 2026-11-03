@@ -667,10 +667,31 @@ features:
   * `(arr-set "NAME" INDEX VALUE)` — Replace an element in place. The
     value's type must match the array's element type exactly. Returns the array.
 
-  * `(arr-size "NAME")` — Return the element count as `u32`.
+  * `(arr-size ARRAY-OR-NAME)` — Returns the number of elements in an array
+    as `u32`.
 
-  * `(arr-type "NAME")` — Return the element type identifier as `u32`
-    (for example `u32`, `i32`, `f32`, or `s`).
+    The argument can be either an evaluated array value (`SYM_ARRAY`) or a
+    string containing the name of an existing array.
+
+    + `(arr-size "numbers")` — Get the size of the named array.
+    + `(arr-size numbers)` — Get the size of an evaluated array value.
+    + `(arr-size (arr-new "buffer" u32 16))` → `16`
+
+    Zero-length arrays return `0`.
+
+  * `(arr-type ARRAY-OR-NAME)` — Returns the array element type identifier
+    as `u32` (equals to one of: `u32`, `i32`, `f32`, or `s`).
+
+    The argument can be either an evaluated array value (`SYM_ARRAY`) or a
+    string containing the name of an existing array.
+
+    + `(arr-type "numbers")` — Get the element type of the named array.
+    + `(arr-type numbers)` — Get the element type of an evaluated array value.
+    + `(arr-type (arr-new "buffer" s 16))` → `s`
+
+    Both functions read array metadata without allocating memory, copying
+    array contents, or modifying the array. Invalid arguments and incorrect
+    argument counts cause evaluation failures.
 
   All array operations use existing symbol names and reject invalid names,
   missing symbols, non-array symbols, incorrect argument counts or types,
