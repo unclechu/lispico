@@ -1,7 +1,7 @@
 # Lispico
 
-A small, explicitly typed LISP-like interpreter for embedded systems and
-desktops.
+A small, explicitly typed Lisp-like programming language for desktops, designed
+for embedding in microcontrollers, game engines, and other applications.
 
 **WORK IN PROGRESS: Not all first-release features are implemented yet.**
 
