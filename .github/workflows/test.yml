@@ -25,6 +25,11 @@ jobs:
         env:
           LISPICO_EXECUTABLE: ./result/bin/lispico
 
+      - name: Run file I/O streaming tests
+        run: bash tests/run-file-io.sh
+        env:
+          LISPICO_EXECUTABLE: ./result/bin/lispico
+
       - name: Run C tests
         run: nix-shell --run './tests/run-c.sh'
 
