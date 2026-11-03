@@ -57,7 +57,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + Handle maximum evaluation recursion depth / stack exhaustion
 
   * stdlib:
-    + `(arr [VALUE-N…])` — to create a new array
     + `(var STRING [VALUE-N…])` — to assign new array from array value
     + `(arr-slice ARRAY FROM LENGTH)`
     + `(arr-take ARRAY N)`
@@ -632,7 +631,30 @@ features:
 - <a id="arrays"></a>Arrays
 
   Lispico supports fixed-size, one-dimensional, explicitly typed arrays.
-  Each array is defined as a named symbol using `(arr-new)`.
+  `(arr)` creates an anonymous array value; `(arr-new)` defines a named,
+  zero-initialized array variable. Both produce evaluated array values
+  (`SYM_ARRAY`). Arrays cannot change their length or element type.
+
+  * `(arr VALUE [VALUE…])` — Create an array value from one or more evaluated
+    elements. The element type is inferred from the first argument and must be
+    exactly the same for every element (`u32`, `i32`, `f32`, or `s`).
+    No implicit type conversions are performed.
+
+    + `(arr 1 2 3)` — An array of three `u32` values.
+    + `(arr (type i32 1) -2)` — An array of two `i32` values.
+    + `(arr "one" "two")` — An array of two strings.
+    + `(arr 1 -2)` — Evaluation failure (element type mismatch).
+    + `(arr)` — Evaluation failure (ambiguous element type).
+
+    The result is an anonymous `SYM_ARRAY` value, not a named symbol. It can be
+    passed directly to `(arr-get)`, `(arr-size)`, or `(arr-type)`, for example
+    `(arr-get (arr 10 20 30) 1)` returns `20`.
+
+    The elements cannot themselves be arrays. String elements are copied into
+    independent runtime storage, preserving their exact lengths and embedded
+    `\0` bytes. The array and its string contents are tracked until
+    `clean_evaluation()`. As with other native calls, the number of arguments
+    is limited by `EVAL_ARG_CAPACITY`.
 
   * `(arr-new "NAME" TYPE LENGTH)` — Create a new, zero-initialized array
     with `LENGTH` elements. `TYPE` must be one of `u32`, `i32`, `f32`, or `s`.

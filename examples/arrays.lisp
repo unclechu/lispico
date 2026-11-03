@@ -123,3 +123,26 @@
 ; Returned strings preserve embedded NUL bytes
 (assert (== (str-size (arr-set "words" 2 "a\0b")) 3))
 (assert (== (str-char (arr-get words 2) 1) 0))
+
+; Anonymous arrays, with the element type inferred from the first argument
+(assert (== (arr-size (arr 1 2 3)) 3))
+(assert (== (arr-type (arr 1 2 3)) u32))
+(assert (== (arr-get (arr 1 2 3) 0) 1))
+(assert (== (arr-get (arr 1 2 3) 2) 3))
+
+; Array elements are evaluated expressions
+(assert (== (arr-get (arr (+ 1 2) (* 2 3)) 1) 6))
+(assert (== (arr-get (arr (arr-get numbers 0) (arr-get numbers 1)) 1) 321))
+
+; Other supported element types
+(assert (== (arr-type (arr -1 -2 -3)) i32))
+(assert (== (arr-get (arr -1 -2 -3) 1) -2))
+(assert (== (arr-type (arr 1.0 2.5)) f32))
+(assert (== (arr-get (arr 1.0 2.5) 1) 2.5))
+(assert (== (arr-type (arr "one" "two")) s))
+(assert (== (arr-get (arr "one" "two") 1) "two"))
+
+; String array elements preserve embedded NUL bytes and empty strings
+(assert (== (str-size (arr-get (arr "a\0b" "") 0)) 3))
+(assert (== (str-char (arr-get (arr "a\0b" "") 0) 1) 0))
+(assert (== (str-size (arr-get (arr "a\0b" "") 1)) 0))

@@ -6,6 +6,7 @@
 #include "stdlib-variables.h"
 #include "stdlib-validation-utils.h"
 #include "symbol-error.h"
+#include "symbol-print.h"
 #include "storage.h"
 #include "wipe-memory.h"
 
@@ -35,6 +36,135 @@ static Symbol* get_array(
   }
 
   return symbol;
+}
+
+// (arr) — Create an anonymous array from one or more values of the same type.
+Datum std_arr(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "arr";
+
+  if (argc == 0) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) cannot infer the element type of an empty array",
+      fn_name
+    );
+    goto fail;
+  }
+
+  if (args[0].kind != SYM_VARIABLE) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects scalar elements", fn_name);
+    goto fail;
+  }
+
+  ValueType element_type = args[0].as.value.type;
+  size_t element_size = 0;
+
+  // Determine single array element size
+  switch (element_type) {
+    case TYPE_U32: element_size = sizeof(uint32_t); break;
+    case TYPE_I32: element_size = sizeof(int32_t); break;
+    case TYPE_F32: element_size = sizeof(float); break;
+    case TYPE_STRING: element_size = sizeof(String); break;
+    default:
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) unsupported array element type: %s",
+        fn_name,
+        show_ValueType(element_type)
+      );
+      goto fail;
+  }
+
+  // Validate everything before allocating runtime memory
+  for (size_t i = 0; i < argc; ++i) {
+    if (args[i].kind != SYM_VARIABLE) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) expects scalar elements", fn_name);
+      goto fail;
+    }
+    if (args[i].as.value.type != element_type) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) expects all elements to have the same type (%s vs. %s)",
+        fn_name,
+        show_ValueType(element_type),
+        show_ValueType(args[i].as.value.type)
+      );
+      goto fail;
+    }
+    if (element_type == TYPE_STRING) {
+      String string = args[i].as.value.as.string;
+      if (string.length >= SIZE_MAX || (string.length != 0 && string.data == NULL)) {
+        snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string element", fn_name);
+        goto fail;
+      }
+    }
+  }
+
+  // Verifying `(argc * element_size) <= SIZE_MAX` without overflowing
+  if (element_size > (SIZE_MAX / argc)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) array allocation size is too large", fn_name);
+    goto fail;
+  }
+
+  void *data = allocate_runtime_data(interpreter, argc * element_size);
+  if (data == NULL) goto allocation_failed;
+
+  for (size_t i = 0; i < argc; ++i) {
+    Value value = args[i].as.value;
+    switch (element_type) {
+      case TYPE_U32: ((uint32_t *)data)[i] = value.as.u32; break;
+      case TYPE_I32: ((int32_t *)data)[i] = value.as.i32; break;
+      case TYPE_F32: ((float *)data)[i] = value.as.f32; break;
+      case TYPE_STRING: {
+        // For strings making an individual copy
+        String source = value.as.string;
+
+        // +1 for the `\0` terminator
+        char *string_data = allocate_runtime_data(interpreter, source.length + 1);
+        if (string_data == NULL) goto allocation_failed;
+
+        // Cloning the string
+        if (source.length != 0) memcpy(string_data, source.data, source.length);
+        string_data[source.length] = '\0';
+
+        ((String *)data)[i] = (String) { .data = string_data, .length = source.length };
+        break;
+      }
+      default:
+        snprintf(fail_msg, sizeof(fail_msg), "(arr) unsupported array element type");
+        goto fail;
+    }
+  }
+
+  return_value = (Datum) {
+    .kind = SYM_ARRAY,
+    .as.array = {
+      .element_type = element_type,
+      .length = (uint32_t)argc, // argc is bounded by EVAL_ARG_CAPACITY.
+      .data = data,
+    },
+  };
+
+  return return_value;
+
+  allocation_failed:
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
 }
 
 // (arr-new) — Define a new, fixed-size, zero-initialized array variable.
