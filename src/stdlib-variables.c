@@ -232,8 +232,167 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
+  if (args[1].kind == SYM_ARRAY) {
+    Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+
+    if (symbol == NULL) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) variable “%s” is not defined",
+        fn_name,
+        symbol_name
+      );
+      goto fail;
+    }
+
+    if (symbol->kind != SYM_ARRAY) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) symbol “%s” is not an array, got kind: %s",
+        fn_name,
+        symbol_name,
+        show_SymbolKind(symbol->kind)
+      );
+      goto fail;
+    }
+
+    Array destination = symbol->as.array;
+    Array source = args[1].as.array;
+    size_t element_size = 0;
+
+    if (destination.element_type != source.element_type) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) array element type mismatch: expected %s, got %s",
+        fn_name,
+        show_ValueType(destination.element_type),
+        show_ValueType(source.element_type)
+      );
+      goto fail;
+    }
+
+    // The destination keeps its original capacity and element type.
+    if (source.length > destination.length) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) source array has %zu elements, destination has %zu",
+        fn_name,
+        (size_t)source.length,
+        (size_t)destination.length
+      );
+      goto fail;
+    }
+
+    if (
+      (destination.length != 0 && destination.data == NULL) ||
+      (source.length != 0 && source.data == NULL)
+    ) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) invalid source or destination array",
+        fn_name
+      );
+      goto fail;
+    }
+
+    // Determine the size of an array element for copying and zero-filling.
+    switch (destination.element_type) {
+      case TYPE_U32: element_size = sizeof(uint32_t); break;
+      case TYPE_I32: element_size = sizeof(int32_t); break;
+      case TYPE_F32: element_size = sizeof(float); break;
+      case TYPE_STRING: element_size = sizeof(String); break;
+      default:
+        snprintf(
+          fail_msg,
+          sizeof(fail_msg),
+          "(%s) unsupported array element type: %s",
+          fn_name,
+          show_ValueType(destination.element_type)
+        );
+        goto fail;
+    }
+
+    // Verify `(destination.length * element_size) <= SIZE_MAX` without
+    // overflowing. Since `source.length <= destination.length`, this also
+    // guarantees the copied prefix and cleared remainder sizes fit.
+    if (destination.length != 0 && element_size > (SIZE_MAX / (size_t)destination.length)) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) array size is too large", fn_name);
+      goto fail;
+    }
+
+    // Assigning an array to itself does not require copying or allocating.
+    if (source.data == destination.data && source.length == destination.length) {
+      return_value = (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
+      return return_value;
+    }
+
+    if (destination.element_type == TYPE_STRING) {
+      // Validate and copy each source string in one traversal. The old string
+      // buffers remain tracked until `clean_evaluation()`, just like `(arr-set)`.
+      for (uint32_t i = 0; i < source.length; ++i) {
+        String string = ((const String *)source.data)[i];
+
+        // NULL data is valid only for a zero-initialized empty string.
+        if (string.length >= SIZE_MAX || (string.length != 0 && string.data == NULL)) {
+          snprintf(
+            fail_msg,
+            sizeof(fail_msg),
+            "(%s) invalid string array element",
+            fn_name
+          );
+          goto fail;
+        }
+
+        if (string.data == NULL) {
+          ((String *)destination.data)[i] = (String) { .data = NULL, .length = 0 };
+          continue;
+        }
+
+        // +1 for the final `\0` terminator, preserving embedded NUL bytes.
+        char *string_data = allocate_runtime_data(interpreter, string.length + 1);
+        if (string_data == NULL) goto array_allocation_failed;
+
+        if (string.length != 0) memcpy(string_data, string.data, string.length);
+        string_data[string.length] = '\0';
+
+        ((String *)destination.data)[i] = (String) {
+          .data = string_data,
+          .length = string.length,
+        };
+      }
+
+      // Clear all unused string elements without allocating empty strings.
+      for (uint32_t i = source.length; i < destination.length; ++i)
+        ((String *)destination.data)[i] = (String) { .data = NULL, .length = 0 };
+    } else {
+      size_t copied_size = (size_t)source.length * element_size;
+      size_t remaining_size = (size_t)(destination.length - source.length) * element_size;
+
+      // memmove handles assigning an array from its own storage.
+      if (copied_size != 0) memmove(destination.data, source.data, copied_size);
+
+      // Numeric array tails are zero-initialized, as with arr-new.
+      if (remaining_size != 0) wipe_memory((char *)destination.data + copied_size, remaining_size);
+    }
+
+    // The destination's element type, length, and storage pointer are unchanged.
+    return_value = (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
+    return return_value;
+  }
+
   if (args[1].kind != SYM_VARIABLE) {
-    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a scalar value", fn_name);
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects a scalar or array value, got kind: %s",
+      fn_name,
+      show_SymbolKind(args[1].kind)
+    );
     goto fail;
   }
 
@@ -272,7 +431,6 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  // TODO: add support for arrays
   switch (args[1].as.value.type) {
     case TYPE_U32:
     case TYPE_I32:
@@ -310,6 +468,15 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
 
   return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = symbol->as.variable };
   return return_value;
+
+  array_allocation_failed:
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
 
   fail:
     report_evaluation_failure(interpreter, fail_msg);

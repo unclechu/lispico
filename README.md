@@ -55,7 +55,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     and supported language syntax
 
   * stdlib:
-    + `(set)` for arrays (similar behavior to strings, zero-fill unused remainder)
     + Environment variables reading functions
       + `(env-var-has STRING)`
       + `(env-var-read STRING [STRING])` - With optional default value
@@ -599,7 +598,33 @@ features:
     The new array is a separate variable, so modifying its elements with
     `(arr-set)` does not affect the source array. The new name must not already
     exist. Like other array allocations, the copy remains allocated until
-    `clean_evaluation()`. `(set)` does not support replacing whole arrays.
+    `clean_evaluation()`.
+
+  * `(set "NAME" ARRAY)` — Overwrite the elements of an existing named array
+    using an evaluated array value, without changing the destination's element
+    type, length, or storage pointer. The source array must have exactly the
+    same element type and must not be longer than the destination.
+
+    + `(arr-new "numbers" u32 4)` — Creates four zero-initialized elements.
+    + `(set "numbers" (arr 10 20))` — Writes `10`, `20`, `0`, `0`.
+    + `(set "numbers" (arr 1 2 3 4 5))` — Evaluation failure (too many elements).
+    + `(set "numbers" (arr -1))` — Evaluation failure (element type mismatch).
+
+    Numeric array elements are copied using `memmove()`, so overlapping source
+    and destination storage is handled correctly. The unused elements after
+    the copied prefix are zero-filled, as if they had just been allocated by
+    `(arr-new)`.
+
+    For string arrays, every copied string receives independent runtime
+    storage, preserving its length and embedded `\0` bytes. Unused trailing
+    elements are reset to empty strings with `NULL` data and zero length,
+    without allocating additional string buffers. Previously allocated
+    string buffers remain tracked until `clean_evaluation()`.
+
+    The function returns the destination array value (`SYM_ARRAY`). It does
+    not allocate replacement array storage and preserves the destination's
+    capacity. Passing an empty array clears every destination element, while
+    assigning an array to itself leaves it unchanged.
 
   * `(arr-new "NAME" TYPE LENGTH)` — Create a new, zero-initialized array
     with `LENGTH` elements. `TYPE` must be one of `u32`, `i32`, `f32`, or `s`.
@@ -1056,6 +1081,8 @@ features:
     + `(var "numbers" (arr 1 2 3))` — Define an array variable with type and
       length inferred from the array value (independent copy)
     + `(set "foo" (+ foo 3))` — Set a value to an already defined variable
+    + `(set "numbers" (arr 4 5))` — Overwrite the beginning of a named array
+      and clear its remaining elements without changing its capacity
 
   * If-conditions and comparisons:
 
