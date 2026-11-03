@@ -256,6 +256,8 @@ Datum std_arr_set(Interpreter *interpreter, const Datum *args, size_t argc) {
         .data = data,
         .length = source.length,
       };
+      // Return the stored copy instead of the original string.
+      value.as.string = ((String *)array.data)[index];
       break;
     }
     default:
@@ -263,8 +265,8 @@ Datum std_arr_set(Interpreter *interpreter, const Datum *args, size_t argc) {
       goto fail;
   }
 
-  // Return the modified array, analogously to (str-set).
-  return_value = (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
+  // Return the value saved into the array element.
+  return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = value };
   return return_value;
 
   fail:

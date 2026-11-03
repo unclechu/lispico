@@ -3,4 +3,4 @@
 (arr-set "strings" 0 "foo")
 (arr-set "strings" 1 "bar")
 (arr-set "strings" 2 "baz")
-; The result is: SYM_ARRAY(ARRAY(TYPE_STRING, ["foo", "bar", "baz", "", ""]))
+strings ; The result is: SYM_ARRAY(ARRAY(TYPE_STRING, ["foo", "bar", "baz", "", ""]))

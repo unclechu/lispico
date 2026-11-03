@@ -653,8 +653,8 @@ features:
     + `(arr-get "numbers" 0)` — Reads from the named array.
     + `(arr-get numbers 0)` — Reads from the evaluated array value.
     + `(arr-get (arr-new "numbers" u32 3) 0)` — Reads from a newly created array.
-    + `(arr-get (arr-set "numbers" 0 123) 0)` — Reads from the modified array
-      returned by `(arr-set)`.
+    + `(arr-set "numbers" 0 123)` → `123` (updates the named array).
+    + `(arr-get numbers 0)` → `123` (reads the updated array).
 
     `INDEX` must evaluate to `u32` and must be smaller than the array length.
 
@@ -664,8 +664,37 @@ features:
     For string arrays, zero-initialized elements are returned as empty strings,
     including elements whose internal `String::data` pointer is `NULL`.
 
-  * `(arr-set "NAME" INDEX VALUE)` — Replace an element in place. The
-    value's type must match the array's element type exactly. Returns the array.
+  * `(arr-set "NAME" INDEX VALUE)` — Replaces an element of a named array in
+    place and returns the value stored in that element (`SYM_VARIABLE`), not
+    the array (`SYM_ARRAY`).
+
+    `INDEX` must be `u32` and strictly less than the array length. `VALUE`
+    must have exactly the array's element type (`u32`, `i32`, `f32`, or `s`);
+    no implicit conversions are performed. The array's length and element
+    type remain unchanged.
+
+    + `(arr-set "numbers" 0 123)` → `123` (`u32`)
+    + `(arr-set "signed" 0 -123)` → `-123` (`i32`)
+    + `(arr-set "floats" 0 1.5)` → `1.5` (`f32`)
+    + `(arr-set "words" 0 "Hello")` → `"Hello"` (`s`)
+
+    For string arrays, `(arr-set)` allocates an independent copy of the
+    assigned string, including embedded `\0` bytes. Its return value
+    describes the stored string, not the original source string. Replacing
+    a string element doesn't immediately release the previous buffer;
+    allocations remain tracked until evaluation cleanup.
+
+    Unlike `(arr-get)`, `(arr-size)`, and `(arr-type)`, which can accept an
+    evaluated array value or a name, `(arr-set)` requires a named array.
+
+    To read the modified array afterward, use its name:
+
+    ```lisp
+    (arr-new "numbers" u32 2)
+    (assert (== (arr-set "numbers" 0 123) 123))
+    (assert (== (arr-get numbers 0) 123))
+    (assert (== (arr-size numbers) 2))
+    ```
 
   * `(arr-size ARRAY-OR-NAME)` — Returns the number of elements in an array
     as `u32`.

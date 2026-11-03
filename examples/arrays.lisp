@@ -69,8 +69,9 @@
 ; Read from the result of (arr-new)
 (assert (== (arr-get (arr-new "created" u32 2) 0) 0))
 
-; Read from the result of (arr-set)
-(assert (== (arr-get (arr-set "direct" 2 789) 2) 789))
+; (arr-set) returns the saved element, not the array
+(assert (== (arr-set "direct" 2 789) 789))
+(assert (== (arr-get direct 2) 789))
 
 ; String array values
 (arr-new "direct-strings" s 2)
@@ -90,8 +91,10 @@
 ; Directly use results returned by array functions
 (assert (== (arr-size (arr-new "created-2" i32 5)) 5))
 (assert (== (arr-type (arr-new "created-strings" s 2)) s))
-(assert (== (arr-size (arr-set "numbers-2" 0 123)) 3))
-(assert (== (arr-type (arr-set "numbers-2" 1 456)) u32))
+(assert (== (arr-set "numbers-2" 0 123) 123))
+(assert (== (arr-set "numbers-2" 1 456) 456))
+(assert (== (arr-size numbers-2) 3))
+(assert (== (arr-type numbers-2) u32))
 
 ; Empty arrays are valid
 (arr-new "empty-2" f32 0)
@@ -101,3 +104,22 @@
 ; The result types remain u32
 (assert (== (type-of (arr-size numbers-2)) u32))
 (assert (== (type-of (arr-type numbers-2)) u32))
+
+; (arr-set) returns a value of the array's element type
+(assert (== (arr-set "numbers" 1 321) 321))
+(assert (== (type-of (arr-set "numbers" 2 654)) u32))
+(assert (== (arr-get numbers 1) 321))
+(assert (== (arr-get numbers 2) 654))
+(assert (== (arr-set "signed" 0 -456) -456))
+(assert (== (type-of (arr-set "signed" 0 -789)) i32))
+(assert (== (arr-get signed 0) -789))
+(assert (== (arr-set "floats" 0 2.5) 2.5))
+(assert (== (type-of (arr-set "floats" 0 3.5)) f32))
+(assert (== (arr-get floats 0) 3.5))
+(assert (== (arr-set "words" 2 "World") "World"))
+(assert (== (type-of (arr-set "words" 2 "Lispico")) s))
+(assert (== (arr-get words 2) "Lispico"))
+
+; Returned strings preserve embedded NUL bytes
+(assert (== (str-size (arr-set "words" 2 "a\0b")) 3))
+(assert (== (str-char (arr-get words 2) 1) 0))
