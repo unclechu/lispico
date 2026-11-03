@@ -25,6 +25,7 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
   * [Deferred expressions (`defer`)](#deferred-expressions)
   * [Shebang support](#shebang-support)
   * [Sleep functions](#sleep-functions)
+  * [**TODO** for next releases](#todo)
 - [Undefined behavior](#undefined-behavior)
 - **[Usage examples](#usage-examples)**
 - [Memory management and cleanup](#memory-management-and-cleanup)
@@ -36,6 +37,7 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
 ## Features
 
 - **TODO** before removing WIP warning
+
   * Automated tests
     + Parser tests (valid/invalid syntax, comments, escaping, numeric bounds)
     + Evaluator tests for every supported operation
@@ -51,10 +53,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
 
   * Documentation: Document execution semantics, resource limits,
     and supported language syntax
-
-  * Evaluator:
-    + More informative error messages
-    + Handle maximum evaluation recursion depth / stack exhaustion
 
   * stdlib:
     + `(arr-slice ARRAY FROM LENGTH)`
@@ -123,80 +121,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
 
     + Embedded hosts may disable growth entirely to guarantee bounded
       memory consumption.
-
-- **TODO** For next releases
-
-  * Runtime manually invoked GC for runtime-allocated entities
-  * Pseudo-scoped variables vs. global ones
-  * Macroses/functions
-  * Sub-process invocation stdlib functions (spawning, capturing)
-  * File reading & writing stdlib functions
-  * Streamed parsing + evaluation
-  * REPL
-  * Linked lists (maybe cons-lists?)
-
-  * Resumable evaluation and coroutines
-
-    + Add a `(yield [VALUE])` special form that temporarily suspends program
-      evaluation and returns control to the host.
-
-    + `(yield)` suspends evaluation with `SYM_EMPTY`.
-    + `(yield VALUE)` evaluates `VALUE` and suspends evaluation with its result.
-
-    + The evaluator returns a new outcome kind, `EVAL_YIELD`, rather than
-      `EVAL_OK` or `EVAL_EXIT`.
-
-    + The host can inspect the yielded value, modify interpreter state
-      (including variables), and resume evaluation from the suspension point.
-
-    + Evaluation resumes after the `(yield)` expression without re-executing
-      previously completed expressions.
-
-    + Preserve active `(do)` sequences, `(depth)`, pending `(defer)`
-      registrations, and other evaluation state across suspension and resumption.
-
-    + Support repeated yielding and resumption, allowing bidirectional
-      communication between Lispico and its host application.
-
-    + Examples:
-
-      ```lisp
-      (var "input" 0)
-
-      (yield "Waiting for input")
-
-      ; The host modifies `input` before resuming evaluation.
-      (println input)
-
-      (yield input)
-      ```
-
-  * Evaluation inspection and external interruption
-
-    + Allow the host to register an optional callback invoked during expression
-      evaluation.
-
-    + The callback can inspect the current expression, evaluation depth,
-      symbols, variables, and other interpreter state.
-
-    + The callback can request suspension, causing the evaluator to return
-      a new outcome kind, `EVAL_INTERRUPTED`.
-
-    + The host can inspect or modify interpreter state before resuming
-      evaluation.
-
-    + Evaluation resumes from the interrupted position without losing
-      active sequences, deferred expressions, or pending control flow.
-
-    + Define whether callbacks execute before or after expression evaluation,
-      and ensure that resumption does not accidentally evaluate an expression
-      twice.
-
-    + Potential applications:
-      + Debuggers and single-step execution.
-      + Breakpoints and expression tracing.
-      + Interactive host-controlled execution.
-      + External event handling and cooperative scheduling.
 
 To keep the implementation simple, the language supports only a limited set of
 features:
@@ -1764,6 +1688,84 @@ features:
     ; Inner cleanup
     ; Outer cleanup
     ```
+
+- <a id="todo"></a>**TODO** for next releases
+
+  * Runtime manually invoked GC for runtime-allocated entities `(gc)`
+  * Pseudo-scoped variables vs. global ones
+  * Macroses/functions
+  * Sub-process invocation stdlib functions (spawning, capturing)
+  * File reading & writing stdlib functions
+  * Streamed parsing + evaluation
+  * REPL
+  * Linked lists (maybe cons-lists?)
+
+  * Evaluator:
+    + More informative error messages
+    + Handle maximum evaluation recursion depth / stack exhaustion
+
+  * Resumable evaluation and coroutines
+
+    + Add a `(yield [VALUE])` special form that temporarily suspends program
+      evaluation and returns control to the host.
+
+    + `(yield)` suspends evaluation with `SYM_EMPTY`.
+    + `(yield VALUE)` evaluates `VALUE` and suspends evaluation with its result.
+
+    + The evaluator returns a new outcome kind, `EVAL_YIELD`, rather than
+      `EVAL_OK` or `EVAL_EXIT`.
+
+    + The host can inspect the yielded value, modify interpreter state
+      (including variables), and resume evaluation from the suspension point.
+
+    + Evaluation resumes after the `(yield)` expression without re-executing
+      previously completed expressions.
+
+    + Preserve active `(do)` sequences, `(depth)`, pending `(defer)`
+      registrations, and other evaluation state across suspension and resumption.
+
+    + Support repeated yielding and resumption, allowing bidirectional
+      communication between Lispico and its host application.
+
+    + Examples:
+
+      ```lisp
+      (var "input" 0)
+
+      (yield "Waiting for input")
+
+      ; The host modifies `input` before resuming evaluation.
+      (println input)
+
+      (yield input)
+      ```
+
+  * Evaluation inspection and external interruption
+
+    + Allow the host to register an optional callback invoked during expression
+      evaluation.
+
+    + The callback can inspect the current expression, evaluation depth,
+      symbols, variables, and other interpreter state.
+
+    + The callback can request suspension, causing the evaluator to return
+      a new outcome kind, `EVAL_INTERRUPTED`.
+
+    + The host can inspect or modify interpreter state before resuming
+      evaluation.
+
+    + Evaluation resumes from the interrupted position without losing
+      active sequences, deferred expressions, or pending control flow.
+
+    + Define whether callbacks execute before or after expression evaluation,
+      and ensure that resumption does not accidentally evaluate an expression
+      twice.
+
+    + Potential applications:
+      + Debuggers and single-step execution.
+      + Breakpoints and expression tracing.
+      + Interactive host-controlled execution.
+      + External event handling and cooperative scheduling.
 
 ### Undefined behavior
 
