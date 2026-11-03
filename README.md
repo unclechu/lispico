@@ -1968,9 +1968,16 @@ nix-shell --run './build.sh && tests/measure-examples.sh'
 ```vim
 se cc=81,101 tw=100
 
+" Prevent *.h files from being detected as C++
 augroup force_c_headers
   autocmd!
   autocmd BufReadPost,BufNewFile *.h setlocal filetype=c
+augroup END
+
+" I prefer different treesitter syntax highlighting over default commonlisp one
+augroup force_custom_lisp_syntax_hl
+  autocmd!
+  autocmd BufReadPost,BufNewFile *.lisp setlocal filetype=scheme
 augroup END
 
 let g:ale_linters_explicit = 1
