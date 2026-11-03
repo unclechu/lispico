@@ -55,9 +55,11 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     and supported language syntax
 
   * stdlib:
-    + `(arr-slice ARRAY FROM LENGTH)`
-    + `(arr-take ARRAY N)`
-    + `(arr-drop ARRAY N)`
+    + `(set)` for arrays (similar behavior to strings, zero-fill unused remainder)
+    + Environment variables reading functions
+      + `(env-var-has STRING)`
+      + `(env-var-read STRING [STRING])` - With optional default value
+    + Some basic file reading and writing IO functions
 
   * Compilation parsed expressions to binary
     + Support compiling to binary and evaluating binaries (skipping parsing step)
@@ -681,10 +683,46 @@ features:
     array contents, or modifying the array. Invalid arguments and incorrect
     argument counts cause evaluation failures.
 
-  All array operations use existing symbol names and reject invalid names,
-  missing symbols, non-array symbols, incorrect argument counts or types,
+  * Array slicing
+
+    + `(arr-slice ARRAY FROM LENGTH)` — Copy `LENGTH` elements starting at the
+      zero-based index `FROM` into a new array value.
+
+      + `(arr-get (arr-slice (arr 10 20 30 40) 1 2) 0)` → `20`
+      + `(arr-size (arr-slice (arr 1 2 3) 3 0))` → `0`
+
+    * `(arr-take ARRAY N)` — Copy the first `N` elements into a new array value.
+
+      + `(arr-get (arr-take (arr 10 20 30) 2) 1)` → `20`
+      + `(arr-size (arr-take (arr 1 2 3) 0))` → `0`
+
+    * `(arr-drop ARRAY N)` — Skip the first `N` elements and copy the remaining
+      elements into a new array value.
+
+      + `(arr-get (arr-drop (arr 10 20 30) 1) 0)` → `20`
+      + `(arr-size (arr-drop (arr 1 2 3) 3))` → `0`
+
+    All three functions require an evaluated array value (`SYM_ARRAY`) as
+    their first argument. A named array can be passed by referencing its
+    symbol directly, for example `(arr-take numbers 2)`. String names are not
+    resolved by these functions.
+
+    `FROM`, `LENGTH`, and `N` must be `u32`. Out-of-bounds ranges cause
+    evaluation failures rather than being truncated. An empty result is valid
+    when the specified range lies within the array boundaries, including
+    `(arr-slice ARRAY SIZE 0)`, `(arr-take ARRAY 0)`, and
+    `(arr-drop ARRAY SIZE)`.
+
+    Results preserve the source element type, including for zero-length
+    arrays. Each result has independent runtime-managed storage. Numeric
+    elements are copied directly; string elements are copied independently,
+    including embedded `\0` bytes. Zero-initialized empty string entries
+    remain empty without allocating individual string buffers. These copies
+    remain allocated until `clean_evaluation()`.
+
+  Named array operations reject invalid names and missing or non-array
+  symbols. All array operations reject incorrect argument counts or types
   and out-of-bounds indexes. No implicit conversions are performed.
-  Arrays cannot contain other arrays (there are no multidimensional arrays).
 
   The array storage is allocated by the interpreter's tracked runtime
   allocator. The data is released during `clean_evaluation()`; the host-owned

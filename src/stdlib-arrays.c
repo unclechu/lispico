@@ -468,3 +468,200 @@ Datum std_arr_type(Interpreter *interpreter, const Datum *args, size_t argc) {
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
+
+// (arr-slice), (arr-take), (arr-drop) — Copy a range into an independent array value
+typedef enum {
+  ARR_RANGE_SLICE,
+  ARR_RANGE_TAKE,
+  ARR_RANGE_DROP,
+} ArrayRangeOperation;
+
+static Datum std_arr_range(
+  Interpreter *interpreter,
+  const Datum *args,
+  size_t argc,
+  const char *fn_name,
+  ArrayRangeOperation operation
+) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+
+  size_t expected_argc = operation == ARR_RANGE_SLICE ? 3 : 2;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, expected_argc, argc))
+    return return_value;
+
+  if (args[0].kind != SYM_ARRAY) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects an array as the first argument, got kind: %s",
+      fn_name,
+      show_SymbolKind(args[0].kind)
+    );
+    goto fail;
+  }
+
+  Array source = args[0].as.array;
+  size_t element_size = 0;
+
+  // Determine the size of one element to calculate allocation and copy offsets.
+  switch (source.element_type) {
+    case TYPE_U32: element_size = sizeof(uint32_t); break;
+    case TYPE_I32: element_size = sizeof(int32_t); break;
+    case TYPE_F32: element_size = sizeof(float); break;
+    case TYPE_STRING: element_size = sizeof(String); break;
+    default:
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) unsupported array element type: %s",
+        fn_name,
+        show_ValueType(source.element_type)
+      );
+      goto fail;
+  }
+
+  if (source.length != 0 && source.data == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid source array", fn_name);
+    goto fail;
+  }
+
+  if (args[1].kind != SYM_VARIABLE || args[1].as.value.type != TYPE_U32) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects a u32 %s",
+      fn_name,
+      (operation == ARR_RANGE_SLICE ? "starting index" : "element count")
+    );
+    goto fail;
+  }
+
+  uint32_t from = 0;
+  uint32_t length = 0;
+  uint32_t n = args[1].as.value.as.u32;
+
+  switch (operation) {
+    case ARR_RANGE_SLICE:
+      if (args[2].kind != SYM_VARIABLE || args[2].as.value.type != TYPE_U32) {
+        snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 length", fn_name);
+        goto fail;
+      }
+      from = n;
+      length = args[2].as.value.as.u32;
+      break;
+    case ARR_RANGE_TAKE:
+      length = n;
+      break;
+    case ARR_RANGE_DROP:
+      from = n;
+      // Check before subtracting to prevent unsigned underflow.
+      if (from > source.length) goto out_of_bounds;
+      length = source.length - from;
+      break;
+  }
+
+  // Validate the entire range without overflowing `from + length`.
+  // An empty result is allowed, including when FROM == source.length.
+  if (from > source.length || length > source.length - from) goto out_of_bounds;
+
+  // Verify `(source.length * element_size) <= SIZE_MAX` without overflowing.
+  // This also guarantees the copy offset and resulting allocation size fit.
+  if (source.length != 0 && element_size > (SIZE_MAX / (size_t)source.length)) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) source array allocation size is too large",
+      fn_name
+    );
+    goto fail;
+  }
+
+  size_t size = (size_t)length * element_size;
+
+  // allocate_runtime_data handles size == 0 by allocating one byte.
+  void *data = allocate_runtime_data(interpreter, size);
+  if (data == NULL) goto allocation_failed;
+
+  // Initialize the single byte allocated for a zero-length result.
+  if (size == 0) wipe_memory(data, 1);
+
+  if (source.element_type == TYPE_STRING) {
+    // Copy and validate the selected strings in one traversal.
+    for (uint32_t i = 0; i < length; ++i) {
+      String string = ((const String *)source.data)[from + i];
+
+      // NULL data is valid only for a zero-initialized empty string.
+      if (string.length >= SIZE_MAX || (string.length != 0 && string.data == NULL)) {
+        snprintf(
+          fail_msg,
+          sizeof(fail_msg),
+          "(%s) invalid string array element",
+          fn_name
+        );
+        goto fail;
+      }
+
+      if (string.data == NULL) {
+        // Preserve an empty entry without allocating an individual string.
+        ((String *)data)[i] = (String) { .data = NULL, .length = 0 };
+        continue;
+      }
+
+      // +1 for the `\0` terminator, preserving embedded NUL bytes.
+      char *string_data = allocate_runtime_data(interpreter, string.length + 1);
+      if (string_data == NULL) goto allocation_failed;
+
+      if (string.length != 0) memcpy(string_data, string.data, string.length);
+      string_data[string.length] = '\0';
+      ((String *)data)[i] = (String) { .data = string_data, .length = string.length };
+    }
+  } else if (size != 0) {
+    // Numeric elements are raw scalar values and can be copied at once.
+    const char *source_data = (const char *)source.data + ((size_t)from * element_size);
+    memcpy(data, source_data, size);
+  }
+
+  return_value = (Datum) {
+    .kind = SYM_ARRAY,
+    .as.array = { .element_type = source.element_type, .length = length, .data = data },
+  };
+
+  return return_value;
+
+  allocation_failed:
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
+
+  out_of_bounds:
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) requested range is out of bounds", fn_name);
+    goto fail;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
+// (arr-slice) — Copy LENGTH elements starting at FROM
+Datum std_arr_slice(Interpreter *interpreter, const Datum *args, size_t argc) {
+  const char fn_name[] = "arr-slice";
+  return std_arr_range(interpreter, args, argc, fn_name, ARR_RANGE_SLICE);
+}
+
+// (arr-take) — Copy the first N elements
+Datum std_arr_take(Interpreter *interpreter, const Datum *args, size_t argc) {
+  const char fn_name[] = "arr-take";
+  return std_arr_range(interpreter, args, argc, fn_name, ARR_RANGE_TAKE);
+}
+
+// (arr-drop) — Skip the first N elements and copy the remainder
+Datum std_arr_drop(Interpreter *interpreter, const Datum *args, size_t argc) {
+  const char fn_name[] = "arr-drop";
+  return std_arr_range(interpreter, args, argc, fn_name, ARR_RANGE_DROP);
+}

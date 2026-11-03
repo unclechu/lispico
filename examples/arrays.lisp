@@ -197,3 +197,45 @@
 (var "empty-destination" empty-source)
 (assert (== (arr-size empty-destination) 0))
 (assert (== (arr-type empty-destination) s))
+
+; Array ranges copy selected elements into anonymous array values
+(assert (== (arr-size (arr-slice (arr 10 20 30 40) 1 2)) 2))
+(assert (== (arr-type (arr-slice (arr 10 20 30 40) 1 2)) u32))
+(assert (== (arr-get (arr-slice (arr 10 20 30 40) 1 2) 0) 20))
+(assert (== (arr-get (arr-slice (arr 10 20 30 40) 1 2) 1) 30))
+(assert (== (arr-get (arr-take (arr -10 -20 -30) 2) 1) -20))
+(assert (== (arr-type (arr-take (arr -10 -20 -30) 2)) i32))
+(assert (== (arr-get (arr-drop (arr 1.0 2.0 3.0) 2) 0) 3.0))
+(assert (== (arr-type (arr-drop (arr 1.0 2.0 3.0) 2)) f32))
+
+; Boundary ranges can return typed zero-length arrays
+(assert (== (arr-size (arr-slice (arr 1 2 3) 3 0)) 0))
+(assert (== (arr-type (arr-slice (arr 1 2 3) 3 0)) u32))
+(assert (== (arr-size (arr-take (arr -1 -2) 0)) 0))
+(assert (== (arr-type (arr-take (arr -1 -2) 0)) i32))
+(assert (== (arr-size (arr-drop (arr 1.0 2.0) 2)) 0))
+(assert (== (arr-type (arr-drop (arr 1.0 2.0) 2)) f32))
+(assert (== (arr-size (arr-drop empty-destination 0)) 0))
+(assert (== (arr-type (arr-drop empty-destination 0)) s))
+
+; Range results own independent storage and can initialize named arrays
+(var "range-source" (arr 10 20 30 40))
+(var "range-copy" (arr-slice range-source 1 2))
+(arr-set "range-source" 1 99)
+(arr-set "range-copy" 1 77)
+(assert (== (arr-get range-source 1) 99))
+(assert (== (arr-get range-source 2) 30))
+(assert (== (arr-get range-copy 0) 20))
+(assert (== (arr-get range-copy 1) 77))
+(assert (== (arr-get (arr-take range-source 2) 1) 99))
+(assert (== (arr-get (arr-drop range-source 2) 0) 30))
+
+; String ranges preserve embedded NUL bytes and zero-initialized empty entries
+(arr-new "range-words" s 3)
+(arr-set "range-words" 0 "a\0b")
+(arr-set "range-words" 2 "last")
+(assert (== (arr-type (arr-slice range-words 0 2)) s))
+(assert (== (str-size (arr-get (arr-slice range-words 0 2) 0)) 3))
+(assert (== (str-char (arr-get (arr-take range-words 1) 0) 1) 0))
+(assert (== (str-size (arr-get (arr-drop range-words 1) 0)) 0))
+(assert (== (arr-get (arr-drop range-words 2) 0) "last"))

@@ -1,0 +1,1 @@
+[FAIL] Evaluation failed: (arr-drop) expects an array as the first argument, got kind: SYM_VARIABLE
