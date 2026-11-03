@@ -27,6 +27,7 @@ fi
 >/dev/null type mktemp
 >/dev/null type rm
 >/dev/null type cat
+>/dev/null type timeout
 
 # Terminal colors
 # Disable stdout terminal coloring for redirects
@@ -68,6 +69,8 @@ cleanup() {
 TMP_DIR="$(mktemp -d)"
 trap cleanup EXIT
 
+TIMEOUT=30s
+
 passed=0
 failed=0
 
@@ -105,9 +108,11 @@ run_test() {
 
   if [[ ${NAME##*/} == shebang.lisp ]]; then
     PATH="$LISPICO_EXECUTABLE_DIR:$PATH" \
-      "$PWD/$SOURCE" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" || actual_exit_code=$?
+      timeout -- "$TIMEOUT" "$PWD/$SOURCE" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" \
+      || actual_exit_code=$?
   else
-    "$LISPICO_EXECUTABLE" "$SOURCE" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" || actual_exit_code=$?
+    timeout -- "$TIMEOUT" \
+      "$LISPICO_EXECUTABLE" "$SOURCE" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" || actual_exit_code=$?
   fi
 
   if (( actual_exit_code != expected_exit_code )); then

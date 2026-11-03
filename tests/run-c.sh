@@ -12,6 +12,13 @@ set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 SCRIPT_DIR=$(dirname -- "${BASH_SOURCE[0]}")
 cd -- "$SCRIPT_DIR/.." # Switch to project root
 
+# Guard dependencies
+>/dev/null /usr/bin/env --version
+>/dev/null /usr/bin/env time --version
+>/dev/null /usr/bin/env timeout --version
+>/dev/null timeout --version
+>/dev/null env --version
+
 # Terminal colors
 # Disable stdout terminal coloring for redirects
 if [[ ! -t 1 && ${FORCE_COLOR:-0} != 1 && ${GITHUB_ACTIONS:-} != true ]]; then
@@ -38,6 +45,9 @@ else
   # E_PASS_COLOR=$'\033[32m'
 fi
 
+TIME_FORMAT='Real: %e s | User: %U s | System: %S s | CPU: %P | RAM: %M KiB'
+TIMEOUT=30s
+
 passed=0
 failed=0
 
@@ -51,20 +61,36 @@ run-c-test() {
 
   local MAIN_SOURCE_FILE=$1
   echo '————————————————————————————————————————————————————————————————————————'
-  printf 'Running “%s” C test…\n' "$MAIN_SOURCE_FILE"
+  printf 'Running “%s%s%s” C test…\n' "$O_SECONDARY_COLOR" "$MAIN_SOURCE_FILE" "$O_RESET_COLOR"
 
   local NAME=${MAIN_SOURCE_FILE##*/}; NAME=${NAME%.c}
-
   local OUTPUT_EXECUTABLE_NAME="./lispico-$NAME-tests"
-
+  local ENV_FILE=${MAIN_SOURCE_FILE%.c}.env
   local exit_code=0
 
   (
-    set -o xtrace
     shopt -s nullglob
+
+    if [[ -s $ENV_FILE ]]; then
+      printf 'Applying “%s%s%s” file\n' "$O_SECONDARY_COLOR" "$ENV_FILE" "$O_RESET_COLOR"
+      ENV_CONTENTS=$(<"$ENV_FILE")
+      printf '%s%s%s\n' "$O_SECONDARY_COLOR" "$ENV_CONTENTS" "$O_RESET_COLOR"
+      eval -- "$ENV_CONTENTS"
+    fi
+
+    if [[ ! -v CC ]]; then CC=cc; fi
+    if [[ ! -v CFLAGS ]]; then CFLAGS=; fi
+    if [[ ! -v LIBS ]]; then LIBS=-lm; fi
+
     # Intentional wildcard expanding:
     # shellcheck disable=SC2125
-    CFLAGS=tests/c/utils/*.c \
+    CFLAGS="$CFLAGS tests/c/utils/*.c"
+
+    set -o xtrace
+    /usr/bin/env time -f "$TIME_FORMAT" env \
+      CC="$CC" \
+      CFLAGS="$CFLAGS" \
+      LIBS="$LIBS" \
       MAIN_SOURCE_FILE="$MAIN_SOURCE_FILE" \
       OUTPUT_EXECUTABLE_NAME="$OUTPUT_EXECUTABLE_NAME" \
       ./build.sh
@@ -76,7 +102,10 @@ run-c-test() {
     return 0
   fi
 
-  (set -o xtrace; "$OUTPUT_EXECUTABLE_NAME") || exit_code=$?
+  (
+    set -o xtrace
+    /usr/bin/env time -f "$TIME_FORMAT" timeout -- "$TIMEOUT" "$OUTPUT_EXECUTABLE_NAME"
+  ) || exit_code=$?
   if (( exit_code != 0 )); then
     >&2 printf '%s[FAIL]%s C test “%s” did not pass\n' \
       "$E_FAIL_COLOR" "$E_RESET_COLOR" "$MAIN_SOURCE_FILE"

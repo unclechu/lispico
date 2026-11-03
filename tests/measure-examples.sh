@@ -19,7 +19,11 @@ if [[ ! -x "$LISPICO_EXECUTABLE" ]]; then
   >&2 printf "“%s” is not an executable (did you run “./build.sh” first?)\n" "$LISPICO_EXECUTABLE"
   exit 1
 fi
+>/dev/null /usr/bin/env --version
 >/dev/null /usr/bin/env time --version
+>/dev/null /usr/bin/env timeout --version
+>/dev/null timeout --version
+>/dev/null env --version
 >/dev/null type size
 >/dev/null type mktemp
 >/dev/null type rm
@@ -54,6 +58,8 @@ cleanup() {
 TMP_FILE="$(mktemp)"
 trap cleanup EXIT
 
+TIMEOUT=30s
+
 passed=0
 failed=0
 
@@ -74,8 +80,8 @@ measure-example() {
   local elapsed=0
   local peak_ram=0
 
-  /usr/bin/env time -q -f '%e %M' -o "$TMP_FILE" "$LISPICO_EXECUTABLE" "$SOURCE" \
-    &>/dev/null || exit_code=$?
+  /usr/bin/env time -q -f '%e %M' -o "$TMP_FILE" timeout -- "$TIMEOUT" \
+    "$LISPICO_EXECUTABLE" "$SOURCE" &>/dev/null || exit_code=$?
 
   read -r elapsed peak_ram < "$TMP_FILE"
 

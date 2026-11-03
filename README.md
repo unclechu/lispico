@@ -27,6 +27,7 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
 - [Undefined behavior](#undefined-behavior)
 - **[Usage examples](#usage-examples)**
 - [Memory management and cleanup](#memory-management-and-cleanup)
+- [Interpreter instances and thread safety](#interpreter-instances-and-thread-safety)
 - [Testing](#testing)
 - [Local Vim configuration example](#local-vim-configuration-example)
 - [License](#license)
@@ -1787,6 +1788,50 @@ both the array elements and their referenced string data.
 
 Numeric results are stored directly in the value structure and do not require
 additional allocations or deep copying.
+
+### Interpreter instances and thread safety
+
+Lispico supports multiple independent interpreter instances through the
+`Interpreter` structure. Each instance maintains its own parser, evaluator,
+symbol table, runtime allocations, and control-flow state.
+
+Interpreter instances can be used concurrently by separate threads, subject
+to the following requirements:
+
+* Each instance must have its own non-overlapping writable storage buffers.
+* The host must keep those buffers valid for the lifetime of the instance.
+* Parsing, evaluation, symbol modification, and cleanup of the **same**
+  interpreter instance must not happen concurrently.
+* Different interpreter instances do not require a shared interpreter-level
+  mutex.
+* Host-provided callbacks and native functions must synchronize access to
+  any shared mutable application state.
+* Shared external resources, such as standard output, may require additional
+  synchronization if interleaved operations are undesirable.
+* The host must not change process-wide settings, such as the C locale,
+  concurrently with interpreter operations that depend on them.
+
+Interpreter-owned runtime allocations are tracked and cleaned up separately
+for each instance. Cleaning up one interpreter does not release another
+interpreter's storage or allocations.
+
+#### Concurrency testing
+
+Two C tests cover interpreter isolation:
+
+* `tests/c/interpreter-isolation.c` verifies independent state and cleanup
+  across multiple interpreter instances.
+* `tests/c/interpreter-multi-thread.c` exercises concurrent parsing,
+  evaluation, allocation, control flow, failures, and cleanup using eight
+  pthreads and 3,000 iterations per thread.
+
+The multithreaded test is built with GCC ThreadSanitizer using
+`-fsanitize=thread` to detect data races in exercised code paths.
+
+Passing these tests provides evidence of thread safety but does not guarantee
+the absence of all concurrency bugs. The host remains responsible for
+synchronization of shared resources and for ensuring that each interpreter
+instance is accessed safely.
 
 ## Testing
 
