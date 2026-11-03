@@ -10,6 +10,7 @@
 #include "src/parse.h"
 #include "src/stdlib-print.h"
 #include "src/stdlib-sleep.h"
+#include "src/stdlib-env-var.h"
 #include "src/storage.h"
 
 typedef struct {
@@ -33,6 +34,7 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   const char *symbol_name;
   POPULATE_STDLIB_PRINT();
   POPULATE_STDLIB_SLEEP();
+  POPULATE_STDLIB_ENV_VAR();
   return;
 
   symbol_define_fail:

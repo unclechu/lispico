@@ -10,6 +10,9 @@
 #
 # Allow unicode quotes:
 # shellcheck disable=SC1111
+#
+# Set directory to project root:
+# shellcheck source-path=SCRIPTDIR/../..
 
 set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 
@@ -120,6 +123,10 @@ handle-example() {
       "$O_PASS_COLOR" "$source" "$O_RESET_COLOR"
   fi
 }
+
+cat tests/examples.env
+source tests/examples.env
+echo
 
 # By default do it for all examples.
 # Use `missing` argument to kill all examples that already have expectations

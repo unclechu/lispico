@@ -1,0 +1,1 @@
+[FAIL] Evaluation failed: (env-var-read) environment variable “LISPICO_TEST_ENV_UNSET” is not set

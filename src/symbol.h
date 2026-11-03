@@ -23,8 +23,11 @@ typedef enum {
   TYPE_STRING,
 } ValueType;
 
-// Note that `\0` is not expected in the `data` string.
-// These strings are not terminated, use `length`.
+// The `data` (unless it is `NULL` when `length` is `0`) is supposed to be
+// NUL-terminated. `length` does not include the termination symbol.
+// `data` can contain NUL `\0` bytes inside as part of the string by design.
+// But there is also `\0` at `[length]` index. For compatibility with C
+// functions.
 typedef struct {
   const char *data;
   size_t length;

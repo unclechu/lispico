@@ -24,6 +24,7 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
   * [Leaving sequences (`leave`)](#leaving-sequences)
   * [Deferred expressions (`defer`)](#deferred-expressions)
   * [Shebang support](#shebang-support)
+  * [Environment variables](#environment-variables)
   * [Sleep functions](#sleep-functions)
   * [**TODO** for next releases](#todo)
 - [Undefined behavior](#undefined-behavior)
@@ -55,9 +56,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     and supported language syntax
 
   * stdlib:
-    + Environment variables reading functions
-      + `(env-var-has STRING)`
-      + `(env-var-read STRING [STRING])` - With optional default value
     + Some basic file reading and writing IO functions
 
   * Compilation parsed expressions to binary
@@ -1305,6 +1303,39 @@ features:
   source file is executable and `lispico` is available through `PATH`.
 
   Shebang lines count toward source line numbering for parser errors.
+
+- <a id="environment-variables"></a>Environment variables
+
+  These two functions are provided by the optional desktop module
+  `src/stdlib-env-var.{c,h}`. A host application enables them by including
+  `src/stdlib-env-var.h` and calling `POPULATE_STDLIB_ENV_VAR()` when
+  populating native functions (as `interpreter.c` does).
+
+  * `(env-var-has STRING)` — Return a `u32` boolean indicating whether an
+    environment variable exists. A variable set to an empty string counts as
+    set, so this returns `true` even when its value is `""`.
+
+  * `(env-var-read STRING [STRING])` — Read an environment variable as a string.
+    The second argument is an optional default string.
+
+    + If the variable exists and is nonempty, return its value.
+    + If it exists but is empty, return `""` when no default is provided, or
+      return the default when one is provided.
+    + If it does not exist, return the default when provided; otherwise fail
+      evaluation.
+    + This matches Bash `${NAME:-default}` behavior, without modifying the
+      process environment (unlike `${NAME:=default}`).
+    + The name must be a nonempty string without `=` or embedded NUL bytes.
+      The default, when provided, must be a string, including when it is not
+      needed. Returned strings are copied into interpreter-owned storage.
+
+  Example:
+
+  ```lisp
+  (env-var-has "HOME")
+  (var "home" (env-var-read "HOME" "/"))
+  (var "editor" (env-var-read "EDITOR" "vi"))
+  ```
 
 - <a id="sleep-functions"></a>Sleep functions
 

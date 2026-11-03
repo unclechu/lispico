@@ -6,6 +6,9 @@
 # shellcheck disable=SC1111
 # Do not assume environment variables presence:
 # shellcheck enable=check-unassigned-uppercase
+#
+# Set directory to project root:
+# shellcheck source-path=SCRIPTDIR/..
 
 set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 
@@ -93,6 +96,10 @@ measure-example() {
     (( failed += 1 ))
   fi
 }
+
+cat tests/examples.env
+source tests/examples.env
+echo
 
 echo 'Lispico benchmark'
 printf 'Executable: “%s”\n\n' "$LISPICO_EXECUTABLE"
