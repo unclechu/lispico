@@ -1,7 +1,7 @@
 #pragma once
 
 // Supress the warning: ISO C forbids an empty translation unit [-Wpedantic]
-// This module is intended to contain only macroses.
+// This module is intended to contain only macros.
 typedef int stdlib_macros_not_empty;
 
 // Context dependencies:

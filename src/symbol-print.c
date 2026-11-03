@@ -37,6 +37,8 @@ const char* show_ValueType(ValueType type) {
 static void show_String_to_pointer(char *dest, String string) {
   dest[0] = '"';
   // +1 to shift quotation mark
+  // The check correctly handles `String::value == NULL` for non-initialized
+  // strings in an array (they have `String::length == 0`).
   if (string.length > 0) memcpy(dest + 1, string.data, sizeof(char) * string.length);
   dest[string.length + 1] = '"';
   dest[string.length + 2] = '\0';

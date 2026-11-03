@@ -5,6 +5,8 @@
 
 bool populate_stdlib(Interpreter *interpreter, char (*error_message)[ERR_MSG_SIZE]);
 
+// For this to work you need to include all the associated `stdlib-*.h` header
+// files that provide these macros.
 #define POPULATE_STDLIB() \
   /* Assertions */ \
   POPULATE_STDLIB_ASSERTIONS(); \
@@ -23,6 +25,9 @@ bool populate_stdlib(Interpreter *interpreter, char (*error_message)[ERR_MSG_SIZ
   \
   /* Strings */ \
   POPULATE_STDLIB_STRINGS(); \
+  \
+  /* Strings */ \
+  POPULATE_STDLIB_ARRAYS(); \
   \
   /* Arithmetics */ \
   POPULATE_STDLIB_ARITHMETICS(); \

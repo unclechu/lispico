@@ -19,6 +19,7 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
   * [Primitive data types](#primitive-data-types)
   * [Basic arithmetics](#basic-arithmetics)
   * [Strings](#strings)
+  * [Arrays](#arrays)
   * [Control flow and sequences](#control-flow-and-sequences)
   * [Leaving sequences (`leave`)](#leaving-sequences)
   * [Deferred expressions (`defer`)](#deferred-expressions)
@@ -52,7 +53,7 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     and supported language syntax
 
   * Evaluator:
-    + Runtime allocation for arrays (`(arr-*)`)
+    + Replace `(str-copy)` with `(str-slice)`
     + More informative error messages
     + Handle maximum evaluation recursion depth / stack exhaustion
 
@@ -634,14 +635,44 @@ features:
       + `(type i32 "4294967295")` → Evaluation failure (out of range)
       + `(type u32 "12xyz")` → Evaluation failure (invalid numeric string)
 
-- Arrays
+- <a id="arrays"></a>Arrays
 
-  * `(arr-new "foo" u32 16)` where 16 is an array size and `foo` is the variable name
-  * `(arr-get "foo" 0)` to get an array element by index 0
-  * `(arr-set "foo" 0 123)` to set an array element by index 0 to `123` value
-  * `(arr-size "foo")` to get `foo` array size (e.g. `16` of `u32` type)
-  * `(arr-type "foo")` to get the type of array element
-    (e.g. `(assert (== (arr-type "foo") u32) "“foo” array item type must be u32")`)
+  Lispico supports fixed-size, one-dimensional, explicitly typed arrays.
+  Each array is defined as a named symbol using `(arr-new)`.
+
+  * `(arr-new "NAME" TYPE LENGTH)` — Create a new, zero-initialized array
+    with `LENGTH` elements. `TYPE` must be one of `u32`, `i32`, `f32`, or `s`.
+    `LENGTH` must be `u32`, may be zero, and never changes.
+  * `(arr-get "NAME" INDEX)` — Read one element at the zero-based `u32`
+    index, returning a scalar value with the array's element type.
+  * `(arr-set "NAME" INDEX VALUE)` — Replace an element in place. The
+    value's type must match the array's element type exactly. Returns the array.
+  * `(arr-size "NAME")` — Return the element count as `u32`.
+  * `(arr-type "NAME")` — Return the element type identifier as `u32`
+    (for example `u32`, `i32`, `f32`, or `s`).
+
+  All array operations use existing symbol names and reject invalid names,
+  missing symbols, non-array symbols, incorrect argument counts or types,
+  and out-of-bounds indexes. No implicit conversions are performed.
+  Arrays cannot contain other arrays (there are no multidimensional arrays).
+
+  The array storage is allocated by the interpreter's tracked runtime
+  allocator. The data is released during `clean_evaluation()`; the host-owned
+  allocation tracking table is not freed.
+
+  String array elements are initially empty strings. Assigning a string copies
+  its bytes, including embedded `\0` bytes, into independent runtime storage.
+  Overwriting an element does not immediately free its previous string buffer,
+  because existing evaluated values may still reference it. Repeated writes
+  therefore consume runtime allocation entries until cleanup.
+
+  ```lisp
+  (arr-new "foo" u32 16)
+  (arr-set "foo" 0 123)
+  (assert (== (arr-get "foo" 0) 123))
+  (assert (== (arr-size "foo") 16))
+  (assert (== (arr-type "foo") u32))
+  ```
 
 - There are no user-defined functions (at least for now)
 

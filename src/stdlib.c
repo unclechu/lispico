@@ -9,6 +9,7 @@
 #include "stdlib-trigonometry.h"
 #include "stdlib-comparisons.h"
 #include "stdlib-strings.h"
+#include "stdlib-arrays.h"
 #include "stdlib-variables.h"
 #include "stdlib-types.h"
 #include "stdlib-jumps.h"
