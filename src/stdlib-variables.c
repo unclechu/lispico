@@ -39,12 +39,120 @@ Datum std_var(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
+  if (args[1].kind == SYM_ARRAY) {
+    // Array variables own independent storage, just like string variables.
+    // Copy the array value before defining its name so allocation failures
+    // cannot leave a partially initialized symbol in the table.
+    Array source = args[1].as.array;
+    size_t element_size = 0;
+
+    // Determine the size of one array element
+    switch (source.element_type) {
+      case TYPE_U32: element_size = sizeof(uint32_t); break;
+      case TYPE_I32: element_size = sizeof(int32_t); break;
+      case TYPE_F32: element_size = sizeof(float); break;
+      case TYPE_STRING: element_size = sizeof(String); break;
+      default:
+        snprintf(
+          fail_msg,
+          sizeof(fail_msg),
+          "(%s) unsupported array element type: %s",
+          fn_name,
+          show_ValueType(source.element_type)
+        );
+        goto fail;
+    }
+
+    if (source.length != 0 && source.data == NULL) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid source array", fn_name);
+      goto fail;
+    }
+
+    // Verify `(source.length * element_size) <= SIZE_MAX` without overflowing.
+    // Zero-length array values are valid and retain their element type.
+    if (source.length != 0 && element_size > (SIZE_MAX / (size_t)source.length)) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) array allocation size is too large", fn_name);
+      goto fail;
+    }
+
+    // Avoid allocating the copy if the requested symbol name already exists.
+    if (symbol_lookup(interpreter, symbol_name) != NULL) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) symbol “%s” is already defined",
+        fn_name,
+        symbol_name
+      );
+      goto fail;
+    }
+
+    size_t size = (size_t)source.length * element_size;
+
+    // allocate_runtime_data handles size == 0 by allocating one byte.
+    void *data = allocate_runtime_data(interpreter, size);
+    if (data == NULL) goto array_allocation_failed;
+
+    // Also initialize the one allocated byte for empty arrays.
+    wipe_memory(data, size == 0 ? 1 : size);
+
+    if (source.element_type == TYPE_STRING) {
+      for (uint32_t i = 0; i < source.length; ++i) {
+        String string = ((const String *)source.data)[i];
+
+        // Validate the string before attempting to copy it.
+        // NULL data is only valid for zero-length strings.
+        if (string.length >= SIZE_MAX || (string.length != 0 && string.data == NULL)) {
+          snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string array element", fn_name);
+          goto fail;
+        }
+
+        // Preserve the zero-initialized empty-string representation.
+        // It has no string buffer to copy, so no allocation is necessary.
+        if (string.data == NULL) continue;
+
+        // +1 for the `\0` terminator, preserving embedded NUL bytes.
+        char *string_data = allocate_runtime_data(interpreter, string.length + 1);
+        if (string_data == NULL) goto array_allocation_failed;
+
+        // Clone each string into independent runtime storage.
+        if (string.length != 0) memcpy(string_data, string.data, string.length);
+        string_data[string.length] = '\0';
+
+        ((String *)data)[i] = (String) { .data = string_data, .length = string.length };
+      }
+    } else if (size != 0) {
+      // Numeric arrays contain only raw scalar values.
+      memcpy(data, source.data, size);
+    }
+
+    Symbol *symbol = symbol_define(interpreter, symbol_name, SYM_ARRAY);
+    if (symbol == NULL) {
+      extract_error_message_from_symbol_define_error(interpreter, &fail_msg, symbol_name);
+      goto fail;
+    }
+
+    symbol->as.array = (Array) {
+      .element_type = source.element_type,
+      .length = source.length,
+      .data = data,
+    };
+
+    return_value = (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
+    return return_value;
+  }
+
   if (args[1].kind != SYM_VARIABLE) {
-    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a scalar value", fn_name);
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects a scalar or array value, got kind: %s",
+      fn_name,
+      show_SymbolKind(args[1].kind)
+    );
     goto fail;
   }
 
-  // TODO: Add support for arrays
   switch (args[1].as.value.type) {
     case TYPE_U32:
     case TYPE_I32:
@@ -94,6 +202,15 @@ Datum std_var(Interpreter *interpreter, const Datum *args, size_t argc) {
 
   return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = value };
   return return_value;
+
+  array_allocation_failed:
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
 
   fail:
     report_evaluation_failure(interpreter, fail_msg);

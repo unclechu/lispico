@@ -57,7 +57,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + Handle maximum evaluation recursion depth / stack exhaustion
 
   * stdlib:
-    + `(var STRING [VALUE-N…])` — to assign new array from array value
     + `(arr-slice ARRAY FROM LENGTH)`
     + `(arr-take ARRAY N)`
     + `(arr-drop ARRAY N)`
@@ -632,7 +631,8 @@ features:
 
   Lispico supports fixed-size, one-dimensional, explicitly typed arrays.
   `(arr)` creates an anonymous array value; `(arr-new)` defines a named,
-  zero-initialized array variable. Both produce evaluated array values
+  zero-initialized array variable, and `(var)` can initialize a named array
+  from an existing array value. All three produce evaluated array values
   (`SYM_ARRAY`). Arrays cannot change their length or element type.
 
   * `(arr VALUE [VALUE…])` — Create an array value from one or more evaluated
@@ -655,6 +655,25 @@ features:
     `\0` bytes. The array and its string contents are tracked until
     `clean_evaluation()`. As with other native calls, the number of arguments
     is limited by `EVAL_ARG_CAPACITY`.
+
+  * `(var "NAME" ARRAY)` — Define a new named array, inferring its element
+    type and length from an evaluated array value. This allocates independent
+    writable array storage and copies all elements without changing their type.
+
+    + `(var "numbers" (arr 10 20 30))` — Creates a named array of three `u32` values.
+    + `(var "words" (arr "Hello" "World"))` — Creates a named array of two strings.
+    + `(var "copy" numbers)` — Independently copies the existing `numbers` array.
+
+    String array elements are copied into independent runtime storage,
+    preserving their lengths and embedded `\0` bytes. Zero-initialized empty
+    string elements (`NULL` data, zero length) remain empty without allocating
+    individual string buffers. Zero-length array values can also be copied;
+    the new variable retains the source element type and length of zero.
+
+    The new array is a separate variable, so modifying its elements with
+    `(arr-set)` does not affect the source array. The new name must not already
+    exist. Like other array allocations, the copy remains allocated until
+    `clean_evaluation()`. `(set)` does not support replacing whole arrays.
 
   * `(arr-new "NAME" TYPE LENGTH)` — Create a new, zero-initialized array
     with `LENGTH` elements. `TYPE` must be one of `u32`, `i32`, `f32`, or `s`.
@@ -1072,6 +1091,8 @@ features:
     + `(var "foo" 123)` — Define a variable (`u32` type; can be defined only once)
     + `(var "foo" (type i32 123))` — Define a variable with `i32` type
       (variable type is infered from the default value type)
+    + `(var "numbers" (arr 1 2 3))` — Define an array variable with type and
+      length inferred from the array value (independent copy)
     + `(set "foo" (+ foo 3))` — Set a value to an already defined variable
 
   * If-conditions and comparisons:
