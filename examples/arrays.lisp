@@ -54,3 +54,26 @@
 
 ; The array remains a distinct kind, not a scalar variable
 (assert (== (kind-of "numbers") arr-kind))
+
+; Read array elements directly from evaluated array values
+(arr-new "direct" u32 3)
+(arr-set "direct" 0 123)
+(arr-set "direct" 1 456)
+
+; Array name and array value are both accepted
+(assert (== (arr-get "direct" 0) 123))
+(assert (== (arr-get direct 0) 123))
+(assert (== (arr-get direct 1) 456))
+(assert (== (arr-get direct 2) 0))
+
+; Read from the result of (arr-new)
+(assert (== (arr-get (arr-new "created" u32 2) 0) 0))
+
+; Read from the result of (arr-set)
+(assert (== (arr-get (arr-set "direct" 2 789) 2) 789))
+
+; String array values
+(arr-new "direct-strings" s 2)
+(arr-set "direct-strings" 0 "Hello")
+(assert (== (arr-get direct-strings 0) "Hello"))
+(assert (== (arr-get direct-strings 1) ""))

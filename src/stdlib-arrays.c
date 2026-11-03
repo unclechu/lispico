@@ -130,15 +130,22 @@ Datum std_arr_get(Interpreter *interpreter, const Datum *args, size_t argc) {
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
 
-  Symbol *symbol = get_array(interpreter, &args[0], fn_name, &fail_msg);
-  if (symbol == NULL) goto fail;
+  Array array;
+  if (args[0].kind == SYM_ARRAY) {
+    // Read directly from an evaluated array value.
+    array = args[0].as.array;
+  } else {
+    // Otherwise, resolve the array by its variable name.
+    Symbol *symbol = get_array(interpreter, &args[0], fn_name, &fail_msg);
+    if (symbol == NULL) goto fail;
+    array = symbol->as.array;
+  }
 
   if (args[1].kind != SYM_VARIABLE || args[1].as.value.type != TYPE_U32) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 index", fn_name);
     goto fail;
   }
 
-  Array array = symbol->as.array;
   uint32_t index = args[1].as.value.as.u32;
   if (index >= array.length || array.data == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) array index is out of bounds", fn_name);

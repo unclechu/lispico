@@ -643,11 +643,32 @@ features:
   * `(arr-new "NAME" TYPE LENGTH)` — Create a new, zero-initialized array
     with `LENGTH` elements. `TYPE` must be one of `u32`, `i32`, `f32`, or `s`.
     `LENGTH` must be `u32`, may be zero, and never changes.
-  * `(arr-get "NAME" INDEX)` — Read one element at the zero-based `u32`
-    index, returning a scalar value with the array's element type.
+
+  + `(arr-get ARRAY-OR-NAME INDEX)` —
+    Reads an element from an array at the specified zero-based index.
+
+    The first argument can be either an evaluated array value (`SYM_ARRAY`)
+    or a string containing the name of an existing array variable.
+
+    + `(arr-get "numbers" 0)` — Reads from the named array.
+    + `(arr-get numbers 0)` — Reads from the evaluated array value.
+    + `(arr-get (arr-new "numbers" u32 3) 0)` — Reads from a newly created array.
+    + `(arr-get (arr-set "numbers" 0 123) 0)` — Reads from the modified array
+      returned by `(arr-set)`.
+
+    `INDEX` must evaluate to `u32` and must be smaller than the array length.
+
+    The result is a value of the array's element type. The operation does not
+    allocate memory, modify the array, or copy its underlying storage.
+
+    For string arrays, zero-initialized elements are returned as empty strings,
+    including elements whose internal `String::data` pointer is `NULL`.
+
   * `(arr-set "NAME" INDEX VALUE)` — Replace an element in place. The
     value's type must match the array's element type exactly. Returns the array.
+
   * `(arr-size "NAME")` — Return the element count as `u32`.
+
   * `(arr-type "NAME")` — Return the element type identifier as `u32`
     (for example `u32`, `i32`, `f32`, or `s`).
 
