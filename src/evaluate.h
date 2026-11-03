@@ -62,3 +62,8 @@ void clean_evaluation(Interpreter *interpreter);
 // Memory is tracked by the evaluator and freed by `clean_evaluation`.
 // The caller must not free the returned pointer.
 void *allocate_runtime_data(Interpreter *interpreter, size_t size);
+
+// Transfer a malloc/realloc-allocated buffer to the evaluator for cleanup.
+// `size` is the allocated capacity in bytes, not necessarily the value length.
+// The caller retains ownership if registration fails.
+bool adopt_runtime_data(Interpreter *interpreter, void *data, size_t size);

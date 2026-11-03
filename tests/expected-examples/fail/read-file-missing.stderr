@@ -1,0 +1,1 @@
+[FAIL] Evaluation failed: (read-file) unable to open “tests/fixtures/lispico-file-io-definitely-missing.txt” for reading: No such file or directory

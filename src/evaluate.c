@@ -920,3 +920,18 @@ void* allocate_runtime_data(Interpreter *interpreter, size_t size) {
   interpreter->runtime_allocation_count++;
   return data;
 }
+
+// Adopt an existing allocation without copying it. This allows native
+// functions to grow a temporary buffer and return it as runtime-owned data.
+bool adopt_runtime_data(Interpreter *interpreter, void *data, size_t size) {
+  if (
+    data == NULL || size == 0 ||
+    interpreter->storage.runtime_allocations == NULL ||
+    interpreter->runtime_allocation_count >= interpreter->storage.runtime_allocation_capacity
+  ) return false;
+
+  interpreter->storage.runtime_allocations[interpreter->runtime_allocation_count] =
+    (EvalRuntimeAllocation) { .data = data, .size = size };
+  interpreter->runtime_allocation_count++;
+  return true;
+}

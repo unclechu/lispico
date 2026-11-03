@@ -13,6 +13,8 @@ Lispico is intended for dynamically parsing and evaluating DSL-like programs
 on embedded platforms such as the Raspberry Pi Pico, as part of firmware
 written in C. That’s also where the name comes from: LISP-like + Pico.
 
+See [examples](examples), they are also used as regression tests.
+
 ## Table of contents
 
 - [Features](#features)
@@ -24,6 +26,7 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
   * [Leaving sequences (`leave`)](#leaving-sequences)
   * [Deferred expressions (`defer`)](#deferred-expressions)
   * [Shebang support](#shebang-support)
+  * [File I/O](#file-io)
   * [Environment variables](#environment-variables)
   * [Sleep functions](#sleep-functions)
   * [**TODO** for next releases](#todo)
@@ -56,7 +59,8 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     and supported language syntax
 
   * stdlib:
-    + Some basic file reading and writing IO functions
+    + Optional size-limit for `(read-file)`
+    + Check for file existing
 
   * Compilation parsed expressions to binary
     + Support compiling to binary and evaluating binaries (skipping parsing step)
@@ -1304,6 +1308,54 @@ features:
 
   Shebang lines count toward source line numbering for parser errors.
 
+- <a id="file-io"></a>File I/O
+
+  These functions are implemented in the optional desktop module
+  `src/stdlib-file-io.{c,h}`. To enable them in a host application, include
+  `src/stdlib-file-io.h` and call `POPULATE_STDLIB_FILE_IO()` when registering
+  native functions. The desktop `interpreter.c` registers both automatically.
+
+  * `(read-file FILENAME)` — Read an entire file or stream and return its
+    contents as a Lispico string.
+
+    + Opens the filename in binary mode, preserving arbitrary bytes (including
+      embedded NULs). The final `String.length` is the exact byte count.
+    + Uses the size of a regular file as an initial allocation hint. For pipes,
+      `/dev/stdin`, and other streams without a usable size, it starts with a
+      small buffer and grows it geometrically until EOF.
+    + The resulting buffer is transferred directly to the evaluator's runtime
+      allocation tracker, without copying the complete file a second time.
+    + An empty file produces an empty string. Reading a stream such as
+      `/dev/stdin` continues until EOF; it may block while waiting for input.
+    + Open, read, allocation, and close errors cause evaluation failure.
+
+  * `(write-file FILENAME CONTENT)` — Write a string to a file or stream.
+
+    + Opens the filename in binary mode, **creating or truncating** the file.
+      Existing contents are lost when opening succeeds.
+    + Writes bytes in chunks of at most 4096 bytes, preserving embedded NULs
+      and writing exactly `String.length` bytes.
+    + Checks short writes and `fclose()` errors, including buffered output
+      failures. A failure may leave a partially written file behind.
+    + Supports `/dev/stdout`, `/dev/stderr`, and other writable device files.
+    + Returns an empty evaluation result (`SYM_EMPTY`) on success, like the
+      printing functions.
+
+  Both functions require a nonempty, NUL-terminated string filename without
+  embedded NUL bytes. File I/O is not sandboxed: filesystem permissions and
+  accessible paths are determined by the host process.
+
+  Examples:
+
+  ```lisp
+  (var "contents" (read-file "notes.txt"))
+  (write-file "backup.txt" contents)
+  (write-file "/dev/stdout" "Hello from Lispico!\n")
+  ```
+
+  To read piped input, supply a source file to the interpreter so stdin remains
+  available to the script, then use `(read-file "/dev/stdin")` inside it.
+
 - <a id="environment-variables"></a>Environment variables
 
   These two functions are provided by the optional desktop module
@@ -1999,6 +2051,9 @@ Memory is managed in three categories:
 
 - **Evaluation memory:** Runtime allocations, such as dynamically created strings
   and arrays. These are wiped and freed by `clean_evaluation()`.
+  Native modules can register a previously allocated buffer with
+  `adopt_runtime_data(interpreter, data, allocated_size)`; ownership passes to
+  the evaluator only when it returns `true`.
 - **Symbols:** Global variables, labels, and native function registrations.
   The symbol table is wiped by `clean_symbols()`.
 - **Expressions:** Parsed expressions and their associated allocations,
@@ -2095,6 +2150,7 @@ $ nix-shell
 $ ./build.sh
 
 $ tests/run-examples.sh
+$ tests/run-file-io.sh
 $ tests/run-c.sh
 ```
 

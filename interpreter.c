@@ -11,6 +11,7 @@
 #include "src/stdlib-print.h"
 #include "src/stdlib-sleep.h"
 #include "src/stdlib-env-var.h"
+#include "src/stdlib-file-io.h"
 #include "src/storage.h"
 
 typedef struct {
@@ -35,6 +36,7 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   POPULATE_STDLIB_PRINT();
   POPULATE_STDLIB_SLEEP();
   POPULATE_STDLIB_ENV_VAR();
+  POPULATE_STDLIB_FILE_IO();
   return;
 
   symbol_define_fail:
