@@ -56,7 +56,7 @@ int main(void) {
   assert(interpreter.symbol_count <= interpreter.storage.symbol_capacity);
 
   // Check the host-provided runtime allocation capacity.
-  source = "(str-copy (str \"a\" \"b\"))";
+  source = "(str (str \"a\" \"b\"))";
   assert(parse_source(&interpreter, source, strlen(source), &error));
 
   outcome = evaluate(&interpreter, NULL, NULL);
@@ -64,7 +64,7 @@ int main(void) {
   assert(interpreter.runtime_allocation_count == 2);
 
   // The third simultaneous runtime allocation must fail.
-  source = "(str-copy (str-copy (str \"a\" \"b\")))";
+  source = "(str (str (str \"a\" \"b\")))";
   assert(parse_source(&interpreter, source, strlen(source), &error));
 
   outcome = evaluate(&interpreter, NULL, NULL);

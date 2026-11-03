@@ -93,7 +93,7 @@ static void *run_worker(void *argument) {
       "(var \"value\" %" PRIu32 ") "
       "(var \"fraction\" 1.5) "
       "(set \"fraction\" (* fraction 2.0)) "
-      "(var \"message\" (str-copy \"abcdef\" 3)) "
+      "(var \"message\" (str-take \"abcdef\" 3)) "
       "(str-set \"message\" 2 (str-char \"!\")) "
       "(str-new \"scratch\" 6) "
       "(str-set \"scratch\" \"XY\") "
@@ -133,7 +133,7 @@ static void *run_worker(void *argument) {
 
     // Failures and subsequent recovery must also remain instance-local.
     if (iteration % 23u == 0) {
-      const char *bad = "(str-copy \"abc\" 4)";
+      const char *bad = "(str-take \"abc\" 4)";
       assert(parse_source(&interpreter, bad, strlen(bad), &error));
       EvalOutcome failure = evaluate(&interpreter, NULL, NULL);
       assert(failure.kind == EVAL_FAIL);

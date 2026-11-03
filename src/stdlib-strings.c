@@ -514,16 +514,26 @@ Datum std_str_new(Interpreter *interpreter, const Datum *args, size_t argc) {
     return return_value;
 }
 
-// (str-copy) — Create an independent copy of a string with optional length limit
-Datum std_str_copy(Interpreter *interpreter, const Datum *args, size_t argc) {
+// (str-slice), (str-take), (str-drop) — Copy a range of bytes into an independent string
+typedef enum {
+  STR_RANGE_SLICE,
+  STR_RANGE_TAKE,
+  STR_RANGE_DROP,
+} StringRangeOperation;
+
+static Datum std_str_range(
+  Interpreter *interpreter,
+  const Datum *args,
+  size_t argc,
+  const char *fn_name,
+  StringRangeOperation operation
+) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
-  const char fn_name[] = "str-copy";
 
-  if (argc != 1 && argc != 2) {
-    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects 1 or 2 arguments", fn_name);
-    goto fail;
-  }
+  size_t expected_argc = operation == STR_RANGE_SLICE ? 3 : 2;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, expected_argc, argc))
+    return return_value;
 
   if (args[0].kind != SYM_VARIABLE || args[0].as.value.type != TYPE_STRING) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a string as the first argument", fn_name);
@@ -531,41 +541,55 @@ Datum std_str_copy(Interpreter *interpreter, const Datum *args, size_t argc) {
   }
 
   String source = args[0].as.value.as.string;
-
   if (source.length != 0 && source.data == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid source string", fn_name);
     goto fail;
   }
 
-  // By default, copy the entire string, including embedded `\0` bytes.
-  size_t length = source.length;
-
-  if (argc == 2) {
-    if (args[1].kind != SYM_VARIABLE || args[1].as.value.type != TYPE_U32) {
-      snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 length", fn_name);
-      goto fail;
-    }
-
-    length = args[1].as.value.as.u32;
-
-    if (length > source.length) {
-      snprintf(
-        fail_msg,
-        sizeof(fail_msg),
-        "(%s) requested length exceeds source string length",
-        fn_name
-      );
-      goto fail;
-    }
+  if (args[1].kind != SYM_VARIABLE || args[1].as.value.type != TYPE_U32) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects a u32 %s",
+      fn_name,
+      operation == STR_RANGE_SLICE ? "starting index" : "byte count"
+    );
+    goto fail;
   }
 
-  // Reserve one additional byte for a convenience `\0` terminator.
-  if (length == SIZE_MAX) {
+  size_t from = 0;
+  size_t length = 0;
+  size_t n = args[1].as.value.as.u32;
+
+  switch (operation) {
+    case STR_RANGE_SLICE:
+      if (args[2].kind != SYM_VARIABLE || args[2].as.value.type != TYPE_U32) {
+        snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 length", fn_name);
+        goto fail;
+      }
+      from = n;
+      length = args[2].as.value.as.u32;
+      break;
+    case STR_RANGE_TAKE:
+      length = n;
+      break;
+    case STR_RANGE_DROP:
+      from = n;
+      // Check before subtracting to prevent unsigned underflow.
+      if (from > source.length) goto out_of_bounds;
+      length = source.length - from;
+      break;
+  }
+
+  // Validate the entire range without overflowing `from + length`.
+  if (from > source.length || length > source.length - from) goto out_of_bounds;
+
+  if (length >= SIZE_MAX) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) resulting string is too large", fn_name);
     goto fail;
   }
 
-  // +1 for the final string `\0` terminator
+  // +1 for the final string `\0` terminator.
   char *data = allocate_runtime_data(interpreter, length + 1);
   if (data == NULL) {
     snprintf(
@@ -577,8 +601,9 @@ Datum std_str_copy(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  // Copy exactly `length` bytes, regardless of embedded `\0` bytes.
-  if (length != 0) memcpy(data, source.data, length);
+  // Copy exactly `length` bytes, including potentially present `\0` bytes at
+  // any place within the string length.
+  if (length != 0) memcpy(data, source.data + from, length);
   data[length] = '\0';
 
   return_value = (Datum) {
@@ -591,8 +616,27 @@ Datum std_str_copy(Interpreter *interpreter, const Datum *args, size_t argc) {
 
   return return_value;
 
+  out_of_bounds:
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) requested range is out of bounds", fn_name);
+    goto fail;
+
   fail:
     report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
+}
+
+// (str-slice) — Copy LENGTH bytes starting at FROM
+Datum std_str_slice(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_str_range(interpreter, args, argc, "str-slice", STR_RANGE_SLICE);
+}
+
+// (str-take) — Copy the first N bytes
+Datum std_str_take(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_str_range(interpreter, args, argc, "str-take", STR_RANGE_TAKE);
+}
+
+// (str-drop) — Skip the first N bytes and copy the remainder
+Datum std_str_drop(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_str_range(interpreter, args, argc, "str-drop", STR_RANGE_DROP);
 }

@@ -57,10 +57,6 @@ written in C. That’s also where the name comes from: LISP-like + Pico.
     + Handle maximum evaluation recursion depth / stack exhaustion
 
   * stdlib:
-    + Remove `(str-copy)` (replaced with the following functions)
-    + `(str-slice STRING FROM LENGTH)`
-    + `(str-take STRING N)`
-    + `(str-drop STRING N)`
     + `(arr [VALUE-N…])` — to create a new array
     + `(var STRING [VALUE-N…])` — to assign new array from array value
     + `(arr-slice ARRAY FROM LENGTH)`
@@ -537,65 +533,53 @@ features:
       a specified amount of zero-initialized space rather than copying
       an existing string's contents.
 
-    + `(str-copy STRING [LENGTH])` —
-      Creates an independent copy of a string with an optional byte length
-      limit (allocates).
+    + String slicing
 
-      + `(str-copy "Hello")` → `"Hello"`
-      + `(str-copy "Hello" 3)` → `"Hel"`
-      + `(str-copy "Hello" 0)` → `""`
-      + `(str-copy "Hello" 5)` → `"Hello"`
-      + `(str-copy "Hello" 6)` → Evaluation failure (out of bounds)
-      + `(str-copy "abc\0def" 5)` → `"abc\0d"`
+      + `(str-slice STRING FROM LENGTH)` —
+        Creates an independent string containing exactly `LENGTH` bytes starting
+        at zero-based byte index `FROM` (allocates).
 
-      The first argument can be any evaluated string expression, including
-      literals, variables, concatenations, and string conversions.
+        + `(str-slice "Hello world" 6 5)` → `"world"`
+        + `(str-slice "Hello" 1 3)` → `"ell"`
+        + `(str-slice "Hello" 5 0)` → `""`
+        + `(str-slice "Hello" 4 2)` → Evaluation failure (out of bounds)
 
-      `LENGTH` is optional and must evaluate to `u32` when provided.
+      + `(str-take STRING N)` —
+        Creates an independent string containing exactly the first `N` bytes
+        of `STRING` (allocates).
 
-      When omitted, the entire source string is copied, including any
-      embedded `\0` bytes.
+        + `(str-take "Hello" 3)` → `"Hel"`
+        + `(str-take "Hello" 0)` → `""`
+        + `(str-take "Hello" 6)` → Evaluation failure (out of bounds)
 
-      When provided, exactly `LENGTH` bytes are copied from the beginning
-      of the source string. `LENGTH` must not exceed `String::length`.
-      A length of `0` is allowed and produces an empty string.
+      + `(str-drop STRING N)` —
+        Creates an independent string containing all bytes after the first
+        `N` bytes of `STRING` (allocates).
 
-      The resulting `String::length` equals the number of copied bytes,
-      which may be smaller than the original string length.
+        + `(str-drop "Hello" 2)` → `"llo"`
+        + `(str-drop "Hello" 5)` → `""`
+        + `(str-drop "Hello" 6)` → Evaluation failure (out of bounds)
 
-      Embedded `\0` bytes are treated as ordinary bytes and do not stop
-      copying. All lengths refer to bytes, not Unicode characters.
+      All three functions accept any evaluated string expression, including
+      literals, variables, concatenations, conversions, and strings returned by
+      `(arr-get)`.
 
-      The resulting string has its own independent memory allocation.
-      Modifying the original string does not affect the copy, and modifying
-      the copy does not affect the original.
+      All indices and lengths must evaluate to `u32`. Bounds checking is strict:
+      requests outside `String::length` cause evaluation failures rather than
+      clamping or silently truncating the result.
 
-      One additional `\0` byte is allocated after the copied data as a
-      convenience terminator. This byte is not included in `String::length`.
+      A zero-length slice is valid, including at the end of a string.
 
-      All allocations are tracked by the evaluator and released during
-      `clean_evaluation()`.
+      All lengths and offsets are measured in bytes, not Unicode characters.
+      Embedded `\0` bytes are treated as ordinary bytes and copied normally.
 
-      Invalid argument types, incorrect argument counts, out-of-bounds
-      lengths, and allocation failures cause evaluation failures.
+      Each function allocates independent runtime-managed storage for the
+      resulting string, including an additional convenience `\0` terminator
+      outside its `String::length`. The original string is not modified.
 
-      `(str-copy)` is useful for creating shorter strings from existing
-      fixed-length buffers, including after `(str-set)` introduces trailing
-      `\0` bytes.
-
-      Example:
-
-      ```lisp
-      (var "message" "Hello world")
-      (str-set "message" "Hi")
-
-      ; Keep only the meaningful bytes before the first NUL.
-      (var "short" (str-copy message (str-len message)))
-
-      (assert (== (str-size message) 11))
-      (assert (== (str-size short) 2))
-      (assert (== short "Hi"))
-      ```
+      Incorrect argument counts or types, invalid ranges, and allocation
+      failures cause evaluation failures. The runtime allocations are released
+      during `clean_evaluation()`.
 
     + `(str [STRING-N…])` —
       Creates a new string with all string arguments concatenated together
