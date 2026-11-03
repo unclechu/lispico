@@ -8,3 +8,8 @@ simple-lisp-c-interpreter
 simple-lisp-interpreter
 lispico
 lispico-*-tests
+
+# Archives
+*.zip
+*.tar
+*.gz
