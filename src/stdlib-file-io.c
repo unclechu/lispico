@@ -11,6 +11,7 @@
 #include "stdlib-file-io.h"
 #include "stdlib-validation-utils.h"
 #include "symbol-print.h"
+#include "symbol-error.h"
 #include "evaluate.h"
 #include "wipe-memory.h"
 
@@ -59,19 +60,152 @@ static bool validate_file_name(
   return true;
 }
 
-// (read-file) — Read a complete file or stream as a binary-safe string.
+// For when `MAX_BYTES` argument is set
+typedef enum {
+  // Reached EOF, the file is fully consumed
+  READ_FILE_STATUS_OK = 0,
+
+  // File was truncated early (there is more data that was not consumed beyond the result)
+  READ_FILE_STATUS_TRUNCATED = 1,
+} ReadFileStatus;
+
+#define READ_FILE_STATUS_VAR_NAME "read-file-status"
+
+typedef struct {
+  const char *var_name;
+  const uint32_t status_code;
+} ReadFileStatusConstant;
+
+static const ReadFileStatusConstant read_file_status_constants[] = {
+  { .var_name = "read-file-status-ok", .status_code = READ_FILE_STATUS_OK },
+  { .var_name = "read-file-status-truncated", .status_code = READ_FILE_STATUS_TRUNCATED },
+};
+
+#define READ_FILE_STATUS_CONSTANTS_AMOUNT \
+  (sizeof(read_file_status_constants) / sizeof(read_file_status_constants[0]))
+
+// Provide status constants-ish variables (if they are not set yet)
+// and report the result of a successful bounded (read-file) operation.
+//
+// Status variables are initialized lazily, only when MAX_BYTES is provided.
+// Unlimited reads do not create or update these variables.
+//
+// - `read-file-status-ok`        — u32, READ_FILE_STATUS_OK
+// - `read-file-status-truncated` — u32, READ_FILE_STATUS_TRUNCATED
+// - `read-file-status`           — u32, status of the last successful bounded read
+static bool report_read_file_status(
+  Interpreter *interpreter,
+  ReadFileStatus reported_status,
+  char (*fail_msg)[ERR_MSG_SIZE]
+) {
+  const char fn_name[] = "read-file";
+
+  // Set constants if they are not already set
+  for (size_t i = 0; i < READ_FILE_STATUS_CONSTANTS_AMOUNT; ++i) {
+    const char *var_name = read_file_status_constants[i].var_name;
+    const uint32_t status_code = read_file_status_constants[i].status_code;
+    Symbol *symbol = symbol_lookup(interpreter, var_name);
+    if (symbol == NULL) {
+      symbol = symbol_define(interpreter, var_name, SYM_VARIABLE);
+      if (symbol == NULL) {
+        extract_error_message_from_symbol_define_error(interpreter, fail_msg, var_name);
+        return false;
+      } else {
+        symbol->as.variable = (Value) { .type = TYPE_U32, .as.u32 = status_code };
+      }
+    }
+  }
+
+  Symbol *symbol = symbol_lookup(interpreter, READ_FILE_STATUS_VAR_NAME);
+  if (symbol != NULL) {
+    if (symbol->kind != SYM_VARIABLE) {
+      snprintf(
+        *fail_msg,
+        sizeof(*fail_msg),
+        "(%s) expects a u32 variable for “%s” symbol, got kind: %s",
+        fn_name,
+        READ_FILE_STATUS_VAR_NAME,
+        show_SymbolKind(symbol->kind)
+      );
+      return false;
+    }
+    if (symbol->as.variable.type != TYPE_U32) {
+      snprintf(
+        *fail_msg,
+        sizeof(*fail_msg),
+        "(%s) expects a u32 variable for “%s” symbol, got type: %s",
+        fn_name,
+        READ_FILE_STATUS_VAR_NAME,
+        show_ValueType(symbol->as.variable.type)
+      );
+      return false;
+    }
+  } else {
+    symbol = symbol_define(interpreter, READ_FILE_STATUS_VAR_NAME, SYM_VARIABLE);
+    if (symbol == NULL) {
+      extract_error_message_from_symbol_define_error(
+        interpreter,
+        fail_msg,
+        READ_FILE_STATUS_VAR_NAME
+      );
+      return false;
+    }
+  }
+
+  symbol->as.variable = (Value) { .type = TYPE_U32, .as.u32 = reported_status };
+  return true;
+}
+
+// (read-file) — Read a file or a bounded prefix as a binary-safe string.
 Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "read-file";
   FILE *file = NULL;
   bool borrowed_stream = false;
+  bool data_adopted = false;
   char *data = NULL;
   size_t capacity = 0;
   size_t length = 0;
+  bool has_max_bytes = argc == 2;
+  size_t max_bytes = 0;
+  ReadFileStatus read_status = READ_FILE_STATUS_OK;
 
-  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
+  if (argc < 1 || argc > 2) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects 1 or 2 arguments, got %zu",
+      fn_name,
+      argc
+    );
+    goto fail;
+  }
   if (!validate_file_name(&args[0], fn_name, &fail_msg)) goto fail;
+
+  if (has_max_bytes) {
+    if (args[1].kind != SYM_VARIABLE) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) expects a u32 MAX_BYTES, got kind: %s",
+        fn_name,
+        show_SymbolKind(args[1].kind)
+      );
+      goto fail;
+    }
+    if (args[1].as.value.type != TYPE_U32) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) expects a u32 MAX_BYTES, got type: %s",
+        fn_name,
+        show_ValueType(args[1].as.value.type)
+      );
+      goto fail;
+    }
+    max_bytes = (size_t)args[1].as.value.as.u32;
+  }
 
   const char *filename = args[0].as.value.as.string.data;
   // Use the existing stdin stream, even on hosts without a `/dev/stdin` node.
@@ -97,25 +231,62 @@ Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
   // Always reserve an extra byte for a trailing `\0`. Start with a small
   // buffer for pipes, terminals, `/dev/stdin`, and other unseekable streams.
   capacity = FILE_IO_CHUNK_SIZE + 1;
+  if (has_max_bytes && max_bytes < FILE_IO_CHUNK_SIZE) capacity = max_bytes + 1;
 
   // For a regular file, use its current size as an initial allocation hint.
   // The file may grow or shrink while being read, so the streaming loop below
   // remains authoritative. `fstat()` does not consume bytes or seek the stream.
   struct stat metadata;
   if (fstat(fileno(file), &metadata) == 0 && S_ISREG(metadata.st_mode)) {
-    if (metadata.st_size < 0 || (uintmax_t)metadata.st_size >= SIZE_MAX) {
+    if (metadata.st_size < 0) {
       snprintf(fail_msg, sizeof(fail_msg), "(%s) file size is too large", fn_name);
       goto fail;
     }
 
-    size_t wanted_capacity = (size_t)metadata.st_size + 1;
-    if (wanted_capacity > capacity) capacity = wanted_capacity;
+    uintmax_t hinted_bytes = (uintmax_t)metadata.st_size;
+    // The size hint must never override the caller's requested read limit.
+    if (has_max_bytes && hinted_bytes > max_bytes) hinted_bytes = max_bytes;
+    if (hinted_bytes >= SIZE_MAX) {
+      if (!has_max_bytes) {
+        snprintf(fail_msg, sizeof(fail_msg), "(%s) file size is too large", fn_name);
+        goto fail;
+      }
+      // A bounded read still works without an unusably large size hint.
+    } else {
+      size_t wanted_capacity = (size_t)hinted_bytes + 1;
+      if (wanted_capacity > capacity) capacity = wanted_capacity;
+    }
   }
 
   data = malloc(capacity);
   if (data == NULL) goto allocation_failed;
 
   for (;;) {
+    // An exact boundary does not imply truncation: probe once for EOF.
+    // Borrowed stdin needs the extra byte pushed back so another read-file
+    // call can consume the complete remaining stream.
+    if (has_max_bytes && length == max_bytes) {
+      int next_byte = fgetc(file);
+      if (next_byte == EOF) {
+        if (ferror(file)) goto read_failed;
+        break;
+      }
+
+      if (borrowed_stream && ungetc(next_byte, file) == EOF) {
+        snprintf(
+          fail_msg,
+          sizeof(fail_msg),
+          "(%s) unable to restore the lookahead byte in “%s”",
+          fn_name,
+          filename
+        );
+        goto fail;
+      }
+
+      read_status = READ_FILE_STATUS_TRUNCATED;
+      break;
+    }
+
     // The last byte is reserved for the terminator, not file contents.
     // Check for EOF before growing a full buffer. A regular file whose size
     // matched the initial hint should not needlessly double its allocation.
@@ -126,12 +297,19 @@ Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
         break;
       }
 
+      // Verify that doubling the capacity fits in size_t before multiplying.
+      // Otherwise an overflow could cause realloc() to allocate too few bytes.
       if (capacity > SIZE_MAX / 2) {
         snprintf(fail_msg, sizeof(fail_msg), "(%s) file contents are too large", fn_name);
         goto fail;
       }
 
       size_t new_capacity = capacity * 2;
+      // Never grow beyond the space needed for MAX_BYTES plus '\0'.
+      // Check `max_bytes < SIZE_MAX` before adding the terminator byte,
+      // since MAX_BYTES may be equal to SIZE_MAX on a 32-bit host.
+      if (has_max_bytes && max_bytes < SIZE_MAX && new_capacity > max_bytes + 1)
+        new_capacity = max_bytes + 1;
       char *grown = realloc(data, new_capacity);
       if (grown == NULL) goto allocation_failed;
 
@@ -144,6 +322,8 @@ Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
     }
 
     size_t available = capacity - length - 1;
+    if (has_max_bytes && available > max_bytes - length)
+      available = max_bytes - length;
     size_t chunk_size = available > FILE_IO_CHUNK_SIZE ? FILE_IO_CHUNK_SIZE : available;
     size_t read_count = fread(data + length, 1, chunk_size, file);
     length += read_count;
@@ -193,6 +373,11 @@ Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
     );
     goto fail;
   }
+  data_adopted = true;
+
+  // Report only bounded reads; unlimited reads leave the status unchanged.
+  // The buffer is already tracked if lazy status registration should fail.
+  if (has_max_bytes && !report_read_file_status(interpreter, read_status, &fail_msg)) goto fail;
 
   return_value = (Datum) {
     .kind = SYM_VARIABLE,
@@ -226,7 +411,7 @@ Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
 
   fail:
     if (file != NULL && !borrowed_stream) fclose(file);
-    if (data != NULL) {
+    if (data != NULL && !data_adopted) {
       // The evaluator owns the buffer only after `adopt_runtime_data` succeeds.
       wipe_memory(data, capacity);
       free(data);

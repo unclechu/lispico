@@ -59,8 +59,11 @@ See [examples](examples), they are also used as regression tests.
     and supported language syntax
 
   * stdlib:
-    + Optional size-limit for `(read-file)`
     + Check for file existing
+    + `(set)`
+      + Allow to override string variables with `(set)` (changing length)
+      + Allow `(set)` to change variable type
+    + Allow to resize allocated string variable
 
   * Compilation parsed expressions to binary
     + Support compiling to binary and evaluating binaries (skipping parsing step)
@@ -1315,18 +1318,38 @@ features:
   `src/stdlib-file-io.h` and call `POPULATE_STDLIB_FILE_IO()` when registering
   native functions. The desktop `interpreter.c` registers both automatically.
 
-  * `(read-file FILENAME)` — Read an entire file or stream and return its
-    contents as a Lispico string.
+  * `(read-file FILENAME [MAX_BYTES])` — Read a file or stream and return its
+    contents as a Lispico string, optionally limited to `MAX_BYTES` bytes
+    (`u32`).
 
     + Opens the filename in binary mode, preserving arbitrary bytes (including
       embedded NULs). The final `String.length` is the exact byte count.
     + Uses the size of a regular file as an initial allocation hint. For pipes,
       `/dev/stdin`, and other streams without a usable size, it starts with a
       small buffer and grows it geometrically until EOF.
-    + The resulting buffer is transferred directly to the evaluator's runtime
+    + Without `MAX_BYTES`, the entire input is consumed, as before, and no
+      status variables are created or updated.
+    + With `MAX_BYTES`, the result contains at most that many bytes (excluding
+      the trailing NUL terminator). Reading stops at the limit, even for pipes
+      and `/dev/stdin`. A limit of `0` is valid and returns an empty string.
+    + A bounded read checks one byte beyond its limit to distinguish an exact
+      EOF from truncation. For `/dev/stdin`, this byte is pushed back so a later
+      read can consume it. The lookahead may block if the stream is still open
+      and has not supplied another byte or EOF.
+    + After every **successful bounded read**, these `u32` variables exist:
+      - `read-file-status-ok` = `0`: EOF reached; input fully consumed.
+      - `read-file-status-truncated` = `1`: input had more bytes than the limit.
+      - `read-file-status`: status of the last successful bounded read.
+      They are initialized lazily on the first bounded read. A failed read
+      does not update the status. Note that `read-file-status-*` variables are
+      written only when they are not defined (user can override their values,
+      write them before first bounded `(read-file)` call, basically free to
+      break it, they won’t be restored to the correct values in this case).
+    + The resulting buffer is transferred directly to the evaluator’s runtime
       allocation tracker, without copying the complete file a second time.
     + An empty file produces an empty string. Reading a stream such as
-      `/dev/stdin` continues until EOF; it may block while waiting for input.
+      `/dev/stdin` without a limit continues until EOF; it may block while
+      waiting for input.
     + Open, read, allocation, and close errors cause evaluation failure.
 
   * `(write-file FILENAME CONTENT)` — Write a string to a file or stream.
@@ -1349,6 +1372,9 @@ features:
 
   ```lisp
   (var "contents" (read-file "notes.txt"))
+  (var "prefix" (read-file "notes.txt" 1024))
+  (if (== read-file-status read-file-status-truncated)
+    (println "Only the first 1024 bytes were read"))
   (write-file "backup.txt" contents)
   (write-file "/dev/stdout" "Hello from Lispico!\n")
   ```

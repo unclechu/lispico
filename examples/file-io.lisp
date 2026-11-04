@@ -18,3 +18,35 @@
 (assert
   (> (str-size (read-file "README.md")) (* 1024 10))
   "README.md must be more than 10 KiB")
+
+; Unlimited reads do not initialize bounded-read status variables
+(assert (== (kind-of "read-file-status") empty-kind))
+(read-file "/dev/null")
+(assert (== (kind-of "read-file-status") empty-kind))
+
+; Constants-ish are not set either before first bounded-read call
+(assert (== (kind-of "read-file-status-ok") empty-kind))
+(assert (== (kind-of "read-file-status-truncated") empty-kind))
+
+; Bounded reads return a prefix and initialize status variables lazily
+(assert (== (read-file "tests/fixtures/read-file-boundaries.txt" 4) "0123"))
+(assert (== read-file-status read-file-status-truncated))
+(assert (== read-file-status-ok 0))
+(assert (== read-file-status-truncated 1))
+
+; A limit equal to the file length is a complete read, not truncation
+(assert (== (read-file "tests/fixtures/read-file-boundaries.txt" 11) "0123456789\n"))
+(assert (== read-file-status read-file-status-ok))
+(assert (== (read-file "tests/fixtures/read-file-boundaries.txt" 20) "0123456789\n"))
+(assert (== read-file-status read-file-status-ok))
+
+; Even the zero-byte limit distinguishes nonempty and empty inputs
+(assert (== (read-file "tests/fixtures/read-file-boundaries.txt" 0) ""))
+(assert (== read-file-status read-file-status-truncated))
+(assert (== (read-file "/dev/null" 0) ""))
+(assert (== read-file-status read-file-status-ok))
+
+; An unlimited read does not overwrite the previous bounded read status
+(read-file "tests/fixtures/read-file-boundaries.txt" 0)
+(read-file "/dev/null")
+(assert (== read-file-status read-file-status-truncated))

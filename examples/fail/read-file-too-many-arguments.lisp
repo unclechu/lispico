@@ -1,1 +1,1 @@
-(read-file "/dev/null" "unused") ; Only one argument is accepted
+(read-file "/dev/null" 12 true) ; Only one optional MAX_BYTES argument is accepted
