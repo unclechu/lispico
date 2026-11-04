@@ -87,6 +87,136 @@ Datum std_file_exists(Interpreter *interpreter, const Datum *args, size_t argc) 
     return return_value;
 }
 
+// Types of existing filesystem objects, including the targets of symbolic links
+typedef enum {
+  FILE_TYPE_OTHER = 0,
+  FILE_TYPE_DOES_NOT_EXIST = 1,
+  FILE_TYPE_FILE = 2,
+  FILE_TYPE_DIR = 3,
+  FILE_TYPE_SYMLINK_DEAD = 4,
+  FILE_TYPE_SYMLINK_FILE = 5,
+  FILE_TYPE_SYMLINK_DIR = 6,
+  FILE_TYPE_SYMLINK_OTHER = 7,
+} FileType;
+
+typedef struct {
+  const char *var_name;
+  const uint32_t type_code;
+} FileTypeConstant;
+
+static const FileTypeConstant file_type_constants[] = {
+  { .var_name = "file-type-other", .type_code = FILE_TYPE_OTHER },
+  { .var_name = "file-type-does-not-exist", .type_code = FILE_TYPE_DOES_NOT_EXIST },
+  { .var_name = "file-type-file", .type_code = FILE_TYPE_FILE },
+  { .var_name = "file-type-dir", .type_code = FILE_TYPE_DIR },
+  { .var_name = "file-type-symlink-dead", .type_code = FILE_TYPE_SYMLINK_DEAD },
+  { .var_name = "file-type-symlink-file", .type_code = FILE_TYPE_SYMLINK_FILE },
+  { .var_name = "file-type-symlink-dir", .type_code = FILE_TYPE_SYMLINK_DIR },
+  { .var_name = "file-type-symlink-other", .type_code = FILE_TYPE_SYMLINK_OTHER },
+};
+
+#define FILE_TYPE_CONSTANTS_AMOUNT \
+  (sizeof(file_type_constants) / sizeof(file_type_constants[0]))
+
+// Provide file type constants-ish variables if they are not defined yet.
+// They are created lazily only after a successful (file-type) lookup.
+// Existing user-defined symbols are left untouched, as with read-file statuses.
+static bool provide_file_type_constants(Interpreter *interpreter, char (*fail_msg)[ERR_MSG_SIZE]) {
+  for (size_t i = 0; i < FILE_TYPE_CONSTANTS_AMOUNT; ++i) {
+    const char *var_name = file_type_constants[i].var_name;
+    const uint32_t type_code = file_type_constants[i].type_code;
+    Symbol *symbol = symbol_lookup(interpreter, var_name);
+    if (symbol == NULL) {
+      symbol = symbol_define(interpreter, var_name, SYM_VARIABLE);
+      if (symbol == NULL) {
+        extract_error_message_from_symbol_define_error(interpreter, fail_msg, var_name);
+        return false;
+      }
+      symbol->as.variable = (Value) { .type = TYPE_U32, .as.u32 = type_code };
+    }
+  }
+
+  return true;
+}
+
+// (file-type) — Identify a filesystem object, preserving symbolic link information.
+Datum std_file_type(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "file-type";
+  FileType file_type = FILE_TYPE_OTHER;
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
+  if (!validate_file_name(&args[0], fn_name, &fail_msg)) goto fail;
+
+  const char *filename = args[0].as.value.as.string.data;
+  struct stat metadata;
+
+  // `lstat()` inspects the path itself instead of following symbolic links.
+  // Missing paths are ordinary results, but unexpected filesystem errors fail.
+  if (lstat(filename, &metadata) != 0) {
+    if (errno == ENOENT || errno == ENOTDIR) {
+      file_type = FILE_TYPE_DOES_NOT_EXIST;
+    } else {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) unable to inspect “%s”: %s",
+        fn_name,
+        filename,
+        strerror(errno)
+      );
+      goto fail;
+    }
+  } else if (S_ISLNK(metadata.st_mode)) {
+    // Follow the symbolic link only after identifying it with `lstat()`.
+    // A missing target is a dead link; lack of access is an evaluation failure.
+    if (stat(filename, &metadata) != 0) {
+      if (errno == ENOENT || errno == ENOTDIR) {
+        file_type = FILE_TYPE_SYMLINK_DEAD;
+      } else {
+        snprintf(
+          fail_msg,
+          sizeof(fail_msg),
+          "(%s) unable to follow symbolic link “%s”: %s",
+          fn_name,
+          filename,
+          strerror(errno)
+        );
+        goto fail;
+      }
+    } else if (S_ISREG(metadata.st_mode)) {
+      file_type = FILE_TYPE_SYMLINK_FILE;
+    } else if (S_ISDIR(metadata.st_mode)) {
+      file_type = FILE_TYPE_SYMLINK_DIR;
+    } else {
+      // Symbolic links to devices, sockets, FIFOs, and other special objects.
+      file_type = FILE_TYPE_SYMLINK_OTHER;
+    }
+  } else if (S_ISREG(metadata.st_mode)) {
+    file_type = FILE_TYPE_FILE;
+  } else if (S_ISDIR(metadata.st_mode)) {
+    file_type = FILE_TYPE_DIR;
+  } else {
+    // Existing devices, sockets, FIFOs, and other non-file/non-directory objects.
+    file_type = FILE_TYPE_OTHER;
+  }
+
+  if (!provide_file_type_constants(interpreter, &fail_msg)) goto fail;
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = { .type = TYPE_U32, .as.u32 = (uint32_t)file_type },
+  };
+
+  return return_value;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // For when `MAX_BYTES` argument is set
 typedef enum {
   // Reached EOF, the file is fully consumed

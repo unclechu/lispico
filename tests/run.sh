@@ -59,12 +59,12 @@ else
   (( failed += 1 ))
 fi
 
-echo '=== Running file I/O streaming tests ==================================='
+echo '=== Running file I/O tests ============================================='
 if (set -o xtrace; tests/run-file-io.sh); then
-  printf '%s[PASS]%s File I/O streaming tests passed\n' "$O_PASS_COLOR" "$O_RESET_COLOR"
+  printf '%s[PASS]%s File I/O tests passed\n' "$O_PASS_COLOR" "$O_RESET_COLOR"
   (( passed += 1 ))
 else
-  >&2 printf '%s[FAIL]%s File I/O streaming tests failed\n' "$E_FAIL_COLOR" "$E_RESET_COLOR"
+  >&2 printf '%s[FAIL]%s File I/O tests failed\n' "$E_FAIL_COLOR" "$E_RESET_COLOR"
   (( failed += 1 ))
 fi
 

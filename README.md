@@ -1327,6 +1327,27 @@ features:
     + Uses `stat()`: this is an existence check, not a check that the path is
       a regular file or can be opened for reading or writing.
 
+  * `(file-type FILENAME)` — Return a `u32` identifying a filesystem object,
+    retaining whether the path is a symbolic link.
+
+    + Uses `lstat()` to inspect the path itself. For symbolic links, uses
+      `stat()` to classify the target. No file contents are read.
+    + On the first successful call, lazily defines these `u32` variables:
+      - `file-type-other` = `0`: Device, FIFO, socket, or another special object.
+      - `file-type-does-not-exist` = `1`: Path does not exist.
+      - `file-type-file` = `2`: Regular file.
+      - `file-type-dir` = `3`: Directory.
+      - `file-type-symlink-dead` = `4`: Symlink with a missing target.
+      - `file-type-symlink-file` = `5`: Symlink to a regular file.
+      - `file-type-symlink-dir` = `6`: Symlink to a directory.
+      - `file-type-symlink-other` = `7`: Symlink to a special object.
+    + Existing variables with those names are not overwritten. Like the
+      read-file status constants, they are constant-ish, not immutable.
+    + Missing paths (`ENOENT` or `ENOTDIR`) return `file-type-does-not-exist`.
+      For symbolic links, a missing target returns `file-type-symlink-dead`.
+      Permission errors, symbolic link loops, and unexpected filesystem errors
+      cause evaluation failure rather than returning an inaccurate file type.
+
   * `(read-file FILENAME [MAX_BYTES])` — Read a file or stream and return its
     contents as a Lispico string, optionally limited to `MAX_BYTES` bytes
     (`u32`).
@@ -1381,6 +1402,7 @@ features:
 
   ```lisp
   (assert (file-exists "notes.txt"))
+  (assert (== (file-type "notes.txt") file-type-file))
   (var "contents" (read-file "notes.txt"))
   (var "prefix" (read-file "notes.txt" 1024))
   (if (== read-file-status read-file-status-truncated)

@@ -57,3 +57,20 @@
 (assert (== (file-exists "tests/fixtures") true)) ; Existing directories count as paths
 (assert (== (file-exists "tests/fixtures/nonexistent-lispico-file.txt") false))
 (assert (== (type-of (file-exists "README.md")) u32))
+
+; File types are returned as u32 values, with constants created on first use
+(assert (== (kind-of "file-type-file") empty-kind))
+(assert (== (file-type "README.md") file-type-file))
+(assert (== file-type-other 0))
+(assert (== file-type-does-not-exist 1))
+(assert (== file-type-file 2))
+(assert (== file-type-dir 3))
+(assert (== file-type-symlink-dead 4))
+(assert (== file-type-symlink-file 5))
+(assert (== file-type-symlink-dir 6))
+(assert (== file-type-symlink-other 7))
+(assert (== (file-type "examples") file-type-dir))
+(assert (== (file-type "tests/fixtures/nonexistent-lispico-file.txt") file-type-does-not-exist))
+(assert (== (file-type "README.md/not-a-directory") file-type-does-not-exist))
+(assert (== (file-type "/dev/null") file-type-other))
+(assert (== (type-of (file-type "README.md")) u32))

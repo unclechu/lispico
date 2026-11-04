@@ -29,6 +29,7 @@ fi
 >/dev/null type cmp
 >/dev/null type head
 >/dev/null type tail
+>/dev/null type ln
 
 cleanup() {
   rm -rfv -- "$TMP_DIR"
@@ -100,4 +101,44 @@ if [[ $capture != SYM_EMPTY || -s "$TMP_DIR/bounded.stderr" ]]; then
   exit 1
 fi
 
-echo '[PASS] File I/O streaming tests passed'
+# Build temporary symbolic links to test the classifications returned by (file-type).
+# Relative targets verify that stat() resolves links relative to their directory.
+(
+  set -o xtrace
+  ln -s input "$TMP_DIR/link-to-file"
+  ln -s . "$TMP_DIR/link-to-dir"
+  ln -s missing-target "$TMP_DIR/link-dead"
+  ln -s /dev/null "$TMP_DIR/link-to-device"
+)
+
+(set -o xtrace; timeout -- "$TIMEOUT" \
+  "$LISPICO_EXECUTABLE" tests/file-io/file-type.lisp \
+  "$TMP_DIR/input" "$TMP_DIR" \
+  "$TMP_DIR/link-to-file" "$TMP_DIR/link-to-dir" \
+  "$TMP_DIR/link-dead" "$TMP_DIR/link-to-device" \
+  "$TMP_DIR/missing-target" \
+  >"$TMP_DIR/type.stdout" 2>"$TMP_DIR/type.stderr")
+
+capture=$(<"$TMP_DIR/type.stdout")
+if [[ $capture != SYM_EMPTY || -s "$TMP_DIR/type.stderr" ]]; then
+  >&2 echo '[FAIL] File type classification test produced unexpected output'
+  >&2 cat -- "$TMP_DIR/type.stderr"
+  exit 1
+fi
+
+# Following a symbolic link loop must fail, not return the dead-link type.
+(set -o xtrace; ln -s link-loop "$TMP_DIR/link-loop")
+if (set -o xtrace; timeout -- "$TIMEOUT" \
+  "$LISPICO_EXECUTABLE" tests/file-io/file-type-error.lisp "$TMP_DIR/link-loop" \
+  >"$TMP_DIR/type-loop.stdout" 2>"$TMP_DIR/type-loop.stderr"); then
+  >&2 echo '[FAIL] File type symbolic link loop should fail evaluation'
+  exit 1
+fi
+capture=$(<"$TMP_DIR/type-loop.stderr")
+if [[ $capture != *'(file-type) unable to follow symbolic link'* ]]; then
+  >&2 echo '[FAIL] File type symbolic link loop produced an unexpected error'
+  >&2 cat -- "$TMP_DIR/type-loop.stderr"
+  exit 1
+fi
+
+echo '[PASS] File I/O streaming and file type tests passed'
