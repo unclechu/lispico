@@ -59,7 +59,6 @@ See [examples](examples), they are also used as regression tests.
     and supported language syntax
 
   * stdlib:
-    + Check for file existing
     + `(set)`
       + Allow to override string variables with `(set)` (changing length)
       + Allow `(set)` to change variable type
@@ -1316,7 +1315,17 @@ features:
   These functions are implemented in the optional desktop module
   `src/stdlib-file-io.{c,h}`. To enable them in a host application, include
   `src/stdlib-file-io.h` and call `POPULATE_STDLIB_FILE_IO()` when registering
-  native functions. The desktop `interpreter.c` registers both automatically.
+  native functions. The desktop `interpreter.c` registers all these
+  automatically.
+
+  * `(file-exists FILENAME)` — Return a `u32` boolean indicating whether a
+    filesystem path exists.
+
+    + Returns `true` for existing files and directories, and for symbolic links
+      whose targets exist. Returns `false` for missing paths, dangling symbolic
+      links, and paths that cannot be accessed or resolved.
+    + Uses `stat()`: this is an existence check, not a check that the path is
+      a regular file or can be opened for reading or writing.
 
   * `(read-file FILENAME [MAX_BYTES])` — Read a file or stream and return its
     contents as a Lispico string, optionally limited to `MAX_BYTES` bytes
@@ -1364,13 +1373,14 @@ features:
     + Returns an empty evaluation result (`SYM_EMPTY`) on success, like the
       printing functions.
 
-  Both functions require a nonempty, NUL-terminated string filename without
+  All these functions require a nonempty, NUL-terminated string filename without
   embedded NUL bytes. File I/O is not sandboxed: filesystem permissions and
   accessible paths are determined by the host process.
 
   Examples:
 
   ```lisp
+  (assert (file-exists "notes.txt"))
   (var "contents" (read-file "notes.txt"))
   (var "prefix" (read-file "notes.txt" 1024))
   (if (== read-file-status read-file-status-truncated)

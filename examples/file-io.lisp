@@ -50,3 +50,10 @@
 (read-file "tests/fixtures/read-file-boundaries.txt" 0)
 (read-file "/dev/null")
 (assert (== read-file-status read-file-status-truncated))
+
+; Check filesystem path existence without attempting to open a file
+(assert (== (file-exists "README.md") true))
+(assert (== (file-exists "tests/fixtures/file-io-input.txt") true))
+(assert (== (file-exists "tests/fixtures") true)) ; Existing directories count as paths
+(assert (== (file-exists "tests/fixtures/nonexistent-lispico-file.txt") false))
+(assert (== (type-of (file-exists "README.md")) u32))

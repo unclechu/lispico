@@ -60,6 +60,33 @@ static bool validate_file_name(
   return true;
 }
 
+// (file-exists) — Check whether a filesystem path exists (including directories).
+Datum std_file_exists(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "file-exists";
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
+  if (!validate_file_name(&args[0], fn_name, &fail_msg)) goto fail;
+
+  // stat() follows symbolic links and succeeds for files and directories.
+  // A failure, including a missing or inaccessible path, is reported as false.
+  struct stat metadata;
+  bool exists = stat(args[0].as.value.as.string.data, &metadata) == 0;
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = { .type = TYPE_U32, .as.u32 = exists ? 1 : 0 },
+  };
+
+  return return_value;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // For when `MAX_BYTES` argument is set
 typedef enum {
   // Reached EOF, the file is fully consumed
