@@ -483,3 +483,183 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
+
+// (override) — Completely replace any existing symbol with a new scalar or array variable
+Datum std_override(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "override";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
+    goto fail;
+  }
+
+  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  if (symbol == NULL) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) symbol “%s” is not defined",
+      fn_name,
+      symbol_name
+    );
+    goto fail;
+  }
+
+  if (args[1].kind == SYM_ARRAY) {
+    Array source = args[1].as.array;
+    size_t element_size = 0;
+
+    // Determine the size of one array element, exactly as with `(var)`.
+    switch (source.element_type) {
+      case TYPE_U32: element_size = sizeof(uint32_t); break;
+      case TYPE_I32: element_size = sizeof(int32_t); break;
+      case TYPE_F32: element_size = sizeof(float); break;
+      case TYPE_STRING: element_size = sizeof(String); break;
+      default:
+        snprintf(
+          fail_msg,
+          sizeof(fail_msg),
+          "(%s) unsupported array element type: %s",
+          fn_name,
+          show_ValueType(source.element_type)
+        );
+        goto fail;
+    }
+
+    if (source.length != 0 && source.data == NULL) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid source array", fn_name);
+      goto fail;
+    }
+
+    // Verify `(source.length * element_size) <= SIZE_MAX` without overflowing.
+    // Zero-length array values are valid and retain their element type.
+    if (source.length != 0 && element_size > (SIZE_MAX / (size_t)source.length)) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) array allocation size is too large", fn_name);
+      goto fail;
+    }
+
+    size_t size = (size_t)source.length * element_size;
+
+    // Allocate and copy the replacement before touching the existing symbol.
+    // Source and destination may refer to the same array, so allocating first
+    // also makes `(override "NAME" NAME)` safe.
+    void *data = allocate_runtime_data(interpreter, size);
+    if (data == NULL) goto allocation_failed;
+
+    // `allocate_runtime_data` allocates one byte for an empty array.
+    wipe_memory(data, size == 0 ? 1 : size);
+
+    if (source.element_type == TYPE_STRING) {
+      for (uint32_t i = 0; i < source.length; ++i) {
+        String string = ((const String *)source.data)[i];
+
+        // NULL data is valid only for a zero-initialized empty string.
+        if (string.length >= SIZE_MAX || (string.length != 0 && string.data == NULL)) {
+          snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string array element", fn_name);
+          goto fail;
+        }
+
+        if (string.data == NULL) continue;
+
+        // Preserve embedded NUL bytes, and reserve +1 for the terminator.
+        char *string_data = allocate_runtime_data(interpreter, string.length + 1);
+        if (string_data == NULL) goto allocation_failed;
+
+        if (string.length != 0) memcpy(string_data, string.data, string.length);
+        string_data[string.length] = '\0';
+
+        ((String *)data)[i] = (String) { .data = string_data, .length = string.length };
+      }
+    } else if (size != 0) {
+      // Numeric arrays contain raw scalar values.
+      memcpy(data, source.data, size);
+    }
+
+    // Commit the complete replacement. Old buffers remain runtime-tracked
+    // until evaluation cleanup, so any evaluated aliases stay valid.
+    symbol->kind = SYM_ARRAY;
+    symbol->as.array = (Array) {
+      .element_type = source.element_type,
+      .length = source.length,
+      .data = data,
+    };
+
+    return_value = (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
+    return return_value;
+  }
+
+  if (args[1].kind != SYM_VARIABLE) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects a scalar or array value, got kind: %s",
+      fn_name,
+      show_SymbolKind(args[1].kind)
+    );
+    goto fail;
+  }
+
+  switch (args[1].as.value.type) {
+    case TYPE_U32:
+    case TYPE_I32:
+    case TYPE_F32:
+    case TYPE_STRING:
+      break;
+    default:
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) unsupported value type: %s",
+        fn_name,
+        show_ValueType(args[1].as.value.type)
+      );
+      goto fail;
+  }
+
+  Value value = args[1].as.value;
+
+  if (value.type == TYPE_STRING) {
+    String string = value.as.string;
+
+    if (string.length >= SIZE_MAX || (string.length != 0 && string.data == NULL)) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string value", fn_name);
+      goto fail;
+    }
+
+    // Strings own independent writable storage and are NUL-terminated.
+    // Copy before replacing the symbol so self-assignment stays safe.
+    char *data = allocate_runtime_data(interpreter, string.length + 1);
+    if (data == NULL) goto allocation_failed;
+
+    if (string.length != 0) memcpy(data, string.data, string.length);
+    data[string.length] = '\0';
+    value.as.string.data = data;
+  }
+
+  // The existing symbol may be a variable, array, label, or native function.
+  // Its previous kind and storage do not restrict the new value.
+  symbol->as.variable = value;
+  symbol->kind = SYM_VARIABLE;
+
+  return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = value };
+  return return_value;
+
+  allocation_failed:
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}

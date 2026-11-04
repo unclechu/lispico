@@ -20,6 +20,7 @@ See [examples](examples), they are also used as regression tests.
 - [Features](#features)
   * [Primitive data types](#primitive-data-types)
   * [Basic arithmetics](#basic-arithmetics)
+  * [Variables](#variables)
   * [Strings](#strings)
   * [Arrays](#arrays)
   * [Control flow and sequences](#control-flow-and-sequences)
@@ -59,10 +60,7 @@ See [examples](examples), they are also used as regression tests.
     and supported language syntax
 
   * stdlib:
-    + `(set)`
-      + Allow to override string variables with `(set)` (changing length)
-      + Allow `(set)` to change variable type
-    + Allow to resize allocated string variable
+    + `(str-resize STRING LENGTH)` — Resize an existing string variable, preserving contents
 
   * Compilation parsed expressions to binary
     + Support compiling to binary and evaluating binaries (skipping parsing step)
@@ -398,6 +396,12 @@ features:
 
       `(set "NAME" STRING)` uses the same in-place replacement behavior as
       `(str-set "NAME" STRING)`.
+
+    + `(override "NAME" STRING)` —
+      Completely replaces an existing symbol with a new string variable,
+      including its type and byte length. Like `(var)`, it allocates an
+      independent NUL-terminated string buffer rather than modifying the
+      previous contents in place.
 
     + `(str-new "NAME" LENGTH)` —
       Defines a new zero-initialized string variable with a fixed byte length
@@ -1078,7 +1082,8 @@ features:
     + `(== i32-min -2_147_483_648)` → `true`
     + `(< f32-min 0.0)` → `true`
 
-  * Variables
+  * <a id="variables"></a>Variables
+
     + `(var "foo" 123)` — Define a variable (`u32` type; can be defined only once)
     + `(var "foo" (type i32 123))` — Define a variable with `i32` type
       (variable type is infered from the default value type)
@@ -1087,6 +1092,21 @@ features:
     + `(set "foo" (+ foo 3))` — Set a value to an already defined variable
     + `(set "numbers" (arr 4 5))` — Overwrite the beginning of a named array
       and clear its remaining elements without changing its capacity
+    + `(override "foo" "Hi")` — Replace an existing symbol with a new value,
+      allowing its type, array element type, and length to change
+
+    `(override "NAME" VALUE)` accepts the same scalar and array values as
+    `(var)`, but requires the symbol name to exist already. It can replace any
+    existing symbol, including arrays, labels, and native functions. This may
+    deliberately make an existing function no longer callable.
+
+    Strings and arrays are independently copied before the symbol is replaced,
+    so self-assignment works and an allocation failure leaves the original
+    symbol unchanged. Existing runtime allocations remain tracked until
+    evaluation cleanup. `(override)` returns the replacement value.
+
+    Unlike `(override)`, `(set)` preserves the destination's existing type and
+    storage size, including its fixed string length or array length.
 
   * If-conditions and comparisons:
 
