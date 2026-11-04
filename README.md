@@ -59,9 +59,6 @@ See [examples](examples), they are also used as regression tests.
   * Documentation: Document execution semantics, resource limits,
     and supported language syntax
 
-  * stdlib:
-    + `(str-resize STRING LENGTH)` — Resize an existing string variable, preserving contents
-
   * Compilation parsed expressions to binary
     + Support compiling to binary and evaluating binaries (skipping parsing step)
     + Binary format: Validate loaded binaries
@@ -404,8 +401,8 @@ features:
       previous contents in place.
 
     + `(str-new "NAME" LENGTH)` —
-      Defines a new zero-initialized string variable with a fixed byte length
-      (allocates).
+      Defines a new zero-initialized string variable with a specified initial
+      byte length (allocates).
 
       + `(str-new "buffer" 10)` → Creates a string containing 10 `\0` bytes
       + `(str-new "empty" 0)` → Creates an empty string
@@ -426,9 +423,9 @@ features:
       Its memory is tracked by the evaluator and released during
       `clean_evaluation()`.
 
-      The string length remains fixed. Subsequent `(str-set)` or `(set)`
-      operations can modify its contents in place but cannot increase
-      or decrease its `String::length`.
+      Subsequent `(str-set)` or `(set)` operations preserve the string length.
+      Use `(str-resize)` to change the length while preserving the existing
+      contents, or `(override)` to replace the string value completely.
 
       `(str-new)` returns the newly created string value, similarly to
       `(var)`.
@@ -463,6 +460,38 @@ features:
       `(str-new)` differs from `(var "NAME" STRING)` because it allocates
       a specified amount of zero-initialized space rather than copying
       an existing string's contents.
+
+    + `(str-resize "NAME" LENGTH)` —
+      Changes the byte length of an existing string variable while preserving
+      its contents (allocates when the length changes).
+
+      `NAME` must evaluate to the name of an existing string variable.
+      `LENGTH` must evaluate to `u32`; zero is allowed.
+
+      If the new length is smaller, only the first `LENGTH` bytes are kept.
+      If it is larger, all old bytes are kept and the added bytes are filled
+      with `\0`. Embedded NUL bytes are preserved as ordinary string bytes.
+      The new buffer always has a trailing `\0` terminator outside its length.
+
+      Resizing to the current length does nothing and requires no allocation.
+      Otherwise, a new runtime-managed buffer is allocated and initialized
+      before the variable is updated. An allocation failure leaves the original
+      value and length unchanged. The previous buffer remains tracked until
+      evaluation cleanup.
+
+      `(str-resize)` returns the modified string variable, like `(str-set)`.
+
+      Examples:
+
+      ```lisp
+      (var "message" "Hello")
+      (str-resize "message" 8)
+      (assert (== message "Hello\0\0\0"))
+      (str-resize "message" 2)
+      (assert (== message "He"))
+      (str-resize "message" 0)
+      (assert (== message ""))
+      ```
 
     + String slicing
 

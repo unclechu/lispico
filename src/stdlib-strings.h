@@ -10,6 +10,7 @@ ADD_STDLIB_FN_TYPE_DEF(std_str_char);
 ADD_STDLIB_FN_TYPE_DEF(std_str_get);
 ADD_STDLIB_FN_TYPE_DEF(std_str_set);
 ADD_STDLIB_FN_TYPE_DEF(std_str_new);
+ADD_STDLIB_FN_TYPE_DEF(std_str_resize);
 ADD_STDLIB_FN_TYPE_DEF(std_str_slice);
 ADD_STDLIB_FN_TYPE_DEF(std_str_take);
 ADD_STDLIB_FN_TYPE_DEF(std_str_drop);
@@ -22,6 +23,7 @@ ADD_STDLIB_FN_TYPE_DEF(std_str_drop);
   ADD_FN_SYMBOL("str-get", std_str_get); \
   ADD_FN_SYMBOL("str-set", std_str_set); \
   ADD_FN_SYMBOL("str-new", std_str_new); \
+  ADD_FN_SYMBOL("str-resize", std_str_resize); \
   ADD_FN_SYMBOL("str-slice", std_str_slice); \
   ADD_FN_SYMBOL("str-take", std_str_take); \
   ADD_FN_SYMBOL("str-drop", std_str_drop);

@@ -4,6 +4,7 @@
 #include "stdlib-variables.h"
 #include "stdlib-validation-utils.h"
 #include "symbol-error.h"
+#include "symbol-print.h"
 #include "evaluate.h"
 #include "wipe-memory.h"
 
@@ -506,6 +507,132 @@ Datum std_str_new(Interpreter *interpreter, const Datum *args, size_t argc) {
     .as.value = symbol->as.variable,
   };
 
+  return return_value;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
+// (str-resize) — Resize a named string variable, preserving its existing byte prefix
+Datum std_str_resize(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "str-resize";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
+    goto fail;
+  }
+
+  if (args[1].kind != SYM_VARIABLE) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects a u32 length, got kind: %s",
+      fn_name,
+      show_SymbolKind(args[1].kind)
+    );
+    goto fail;
+  }
+  if (args[1].as.value.type != TYPE_U32) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects a u32 length, got type: %s",
+      fn_name,
+      show_ValueType(args[1].as.value.type)
+    );
+    goto fail;
+  }
+
+  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  if (symbol == NULL) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) variable “%s” is not defined",
+      fn_name,
+      symbol_name
+    );
+    goto fail;
+  }
+  if (symbol->kind != SYM_VARIABLE) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects a string variable “%s”, got kind: %s",
+      fn_name,
+      symbol_name,
+      show_SymbolKind(symbol->kind)
+    );
+    goto fail;
+  }
+  if (symbol->as.variable.type != TYPE_STRING) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) expects a string variable “%s”, got type: %s",
+      fn_name,
+      symbol_name,
+      show_ValueType(symbol->as.variable.type)
+    );
+    goto fail;
+  }
+
+  String source = symbol->as.variable.as.string;
+  size_t length = (size_t)args[1].as.value.as.u32;
+
+  // String variables own NUL-terminated buffers, even when their length is zero.
+  if (source.data == NULL || source.length >= SIZE_MAX) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string variable", fn_name);
+    goto fail;
+  }
+
+  // Reserve one byte beyond `String::length` for the terminator without overflowing.
+  if (length >= SIZE_MAX) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) resulting string is too large", fn_name);
+    goto fail;
+  }
+
+  // An unchanged length does not require copying or allocating a new buffer.
+  if (length == source.length) {
+    return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = symbol->as.variable };
+    return return_value;
+  }
+
+  // Preserve only the bytes that fit into the new string. Use explicit lengths
+  // rather than `strlen()` so embedded NUL bytes remain part of the string.
+  size_t copy_length = source.length < length ? source.length : length;
+
+  // Allocate a new buffer before changing the variable. On allocation failure,
+  // its original data and length must stay unchanged.
+  char *data = allocate_runtime_data(interpreter, length + 1);
+  if (data == NULL) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
+  }
+
+  if (copy_length != 0) memcpy(data, source.data, copy_length);
+
+  // Zero-fill the added bytes and the final terminator in one operation.
+  // On shrinking, this writes only the terminator immediately after the prefix.
+  memset(data + copy_length, '\0', length - copy_length + 1);
+
+  // The previous buffer remains tracked until evaluation cleanup, so other
+  // already-evaluated values referring to it remain valid.
+  symbol->as.variable.as.string = (String) { .data = data, .length = length };
+
+  return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = symbol->as.variable };
   return return_value;
 
   fail:
