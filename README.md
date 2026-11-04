@@ -2047,10 +2047,11 @@ LISP
 SYM_VARIABLE(TYPE_F32(126.000000))
 ```
 
-Or try all examples:
+Or try all examples (note that test environment variables required for some
+examples):
 
 ```sh
-(set -eu; find examples/ -maxdepth 1 -type f -name '*.lisp' | while read -r f; do (set -x; ./lispico "$f") done)
+(set -eu; . tests/examples.env; find examples/ -maxdepth 1 -type f -name '*.lisp' | while read -r f; do (set -x; ./lispico "$f") done)
 ```
 
 You can also just build `lispico` derivation (or add it to your NixOS config):
