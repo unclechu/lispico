@@ -6,7 +6,7 @@
 // *** Symbols ***
 
 // Must be a power of two (for bitwise-modulo optimizations to work — &)
-#define SYMBOL_CAPACITY 256u
+#define SYMBOL_CAPACITY 512u
 // Maximum Symbol name length (including \0 terminator).
 #define SYMBOL_NAME_SIZE 32u
 
@@ -22,7 +22,7 @@ static_assert(
 #define EXPR_CAPACITY 2048u
 
 // Maximum amount of allocated expression entries (e.g. strings or arrays)
-#define EXPR_ALLOCATION_CAPACITY 256u
+#define EXPR_ALLOCATION_CAPACITY 512u
 
 // Maximum limit for a string literal in an expression
 #define EXPR_TEXT_SIZE 256u
@@ -33,7 +33,7 @@ static_assert(
 #define EVAL_ARG_CAPACITY 16u
 
 // Maximum amount of dynamically allocated runtime entities
-#define EVAL_RUNTIME_ALLOCATION_CAPACITY 256u
+#define EVAL_RUNTIME_ALLOCATION_CAPACITY 512u
 
 // Maximum number of simultaneously registered deferred expressions
 #define EVAL_DEFER_CAPACITY 256u
