@@ -14,6 +14,9 @@ bool populate_stdlib(Interpreter *interpreter, char (*error_message)[ERR_MSG_SIZ
   /* Evaluation control */ \
   POPULATE_STDLIB_EVAL_CONTROL(); \
   \
+  /* Manual runtime garbage collection */ \
+  POPULATE_STDLIB_GC(); \
+  \
   /* Sequences */ \
   POPULATE_STDLIB_SEQUENCES(); \
   \

@@ -1946,7 +1946,6 @@ features:
 
 - <a id="todo"></a>**TODO** for next releases
 
-  * Runtime manually invoked GC for runtime-allocated entities `(gc)`
   * Pseudo-scoped variables vs. global ones
   * Macroses/functions
   * Sub-process invocation stdlib functions (spawning, capturing)
@@ -2148,32 +2147,110 @@ SYM_EMPTY
 ## Memory management and cleanup
 
 Lispico uses **evaluation-lifetime memory allocation**. Dynamically allocated
-strings and arrays remain allocated for the duration of an evaluation, even
-when they are no longer referenced by variables or expression results.
+strings and arrays are tracked by the evaluator and remain allocated until
+evaluation cleanup, unless explicitly reclaimed with `(gc)`.
 
-There is no garbage collection or automatic deallocation of individual runtime
-values. This is intentional, to keep memory management simple and predictable,
-particularly on embedded platforms.
+There is no automatic garbage collection. Runtime values may be reclaimed
+manually, keeping memory management predictable on embedded platforms.
+
+### Manual garbage collection
+
+- `(gc)` — Manually reclaim unreachable runtime allocations and return a `u32`
+  count of freed `EvalRuntimeAllocation` entries. Accepts no arguments.
+
+The collector uses a simple **mark-and-sweep** algorithm:
+
+1. Mark all runtime allocations reachable from live values.
+2. Traverse the runtime allocation table and wipe and free unmarked allocations.
+3. Replace each freed entry with the last entry in the table, keeping the table
+   packed without shifting the remaining entries.
+4. Clear the marks on surviving allocations during sweeping, preparing them
+   for the next `(gc)` call.
+
+The following values are considered GC roots:
+
+- **Symbols:** All currently defined scalar and array variables in the
+  interpreter's symbol table.
+- **Evaluation result:** The most recent value stored in
+  `Interpreter::eval_outcome.result`.
+- **Temporary evaluator values:** Values registered through active
+  `EvalGCRootFrame` instances, including native-function arguments, sequence
+  results, and values preserved during deferred evaluation.
+
+For scalar strings, the collector marks their runtime-allocated data buffers.
+
+For arrays, the collector marks the array's backing storage. String arrays
+additionally require marking each string element's independently allocated
+data buffer. Zero-initialized string elements with NULL data pointers do not
+reference any runtime allocations.
+
+The return value counts **freed runtime allocations**, not Lispico variables
+or array elements. For example, a string array containing two independently
+allocated strings may occupy three runtime allocations: one for the array
+storage and two for the string buffers.
+
+A GC call does not modify existing symbols, resize variables, or free parser
+allocations. Only unreachable runtime allocations are reclaimed.
+
+Example:
+
+```lisp
+(var "message" "Hello")
+(override "message" "Hi")
+
+(assert (== (gc) 1)) ; The previous string buffer is no longer referenced
+(assert (== message "Hi"))
+(assert (== (gc) 0)) ; The remaining allocations are still reachable
+```
+
+Since the evaluator retains its most recent evaluation result, an otherwise
+unused temporary value may survive one collection and become collectible on
+a subsequent call.
+
+Calling `(gc)` is optional. Programs that never invoke it retain their runtime
+allocations until evaluation cleanup.
+
+The collector does not automatically discover arbitrary pointers held by host
+applications or custom native functions. Such pointers do not count as GC roots
+unless their values are also reachable through Lispico symbols or explicitly
+registered evaluator root frames.
+
+Host applications and custom native functions must therefore avoid retaining
+unprotected runtime pointers across `(gc)` calls.
+
+### Evaluation cleanup
 
 Memory is managed in three categories:
 
-- **Evaluation memory:** Runtime allocations, such as dynamically created strings
-  and arrays. These are wiped and freed by `clean_evaluation()`.
+- **Evaluation memory:** Runtime allocations, such as dynamically created
+  strings and arrays. These are tracked by the evaluator and can be reclaimed
+  with `(gc)` when unreachable. All remaining runtime allocations are wiped
+  and freed by `clean_evaluation()`.
+
   Native modules can register a previously allocated buffer with
-  `adopt_runtime_data(interpreter, data, allocated_size)`; ownership passes to
-  the evaluator only when it returns `true`.
+  `adopt_runtime_data(interpreter, data, allocated_size)`; ownership passes
+  to the evaluator only when it returns `true`. Adopted allocations participate
+  in garbage collection just like allocations created by
+  `allocate_runtime_data()`.
+
 - **Symbols:** Global variables, labels, and native function registrations.
   The symbol table is wiped by `clean_symbols()`.
+
 - **Expressions:** Parsed expressions and their associated allocations,
-  including string literals. These are wiped and freed by `clean_expressions()`.
+  including string literals. These are wiped and freed by
+  `clean_expressions()`. Expression allocations are not managed by `(gc)`.
 
 After evaluating a program, call:
 
 ```c
-clean_evaluation();
-clean_symbols();
-clean_expressions();
+clean_evaluation(interpreter);
+clean_symbols(interpreter);
+clean_expressions(interpreter);
 ```
+
+Manual garbage collection does not replace these cleanup operations.
+In particular, `(gc)` does not free reachable allocations or reset the symbol
+table and parsed expressions.
 
 **Important:** The `EvalOutcome` returned by `evaluate()` may contain pointers
 to memory managed by the evaluator or the parsed expressions. These pointers
@@ -2182,9 +2259,11 @@ become invalid after the corresponding cleanup functions are called.
 If the resulting value needs to survive cleanup, make an independent copy of
 its data **before** cleanup. Copying the `EvalOutcome`, `Datum`, `String`, or
 `Array` structures alone is not sufficient for strings and arrays, because
-their underlying data is referenced through pointers. Strings must be copied
-using their explicit lengths, and arrays containing strings require copying
-both the array elements and their referenced string data.
+their underlying data is referenced through pointers.
+
+Strings must be copied using their explicit lengths, and arrays containing
+strings require copying both the array elements and their referenced string
+data.
 
 Numeric results are stored directly in the value structure and do not require
 additional allocations or deep copying.

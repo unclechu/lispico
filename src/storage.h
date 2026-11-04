@@ -13,7 +13,24 @@
 typedef struct {
   void *data;
   size_t size;
+  bool marked;
 } EvalRuntimeAllocation;
+
+// Temporary evaluated values that must remain reachable while a native call
+// or deferred expression is executing. Frames live on the evaluator’s C stack.
+typedef struct EvalGCRootFrame {
+  // A sequence of GC-protected Datum values (or a single value when `count == 1`)
+  const Datum *values;
+
+  // Number of consecutive `Datum` values to inspect, starting at `values`.
+  // Use `1` for a single `Datum`, or the array length for multiple values.
+  // N-th value (starting from 0) in the sequence is addressed as `values[N]`.
+  // Last value in a non-empty sequence is addressed as `values[count - 1]`.
+  size_t count;
+
+  // Previous active GC root frame in the evaluator’s stack
+  struct EvalGCRootFrame *previous;
+} EvalGCRootFrame;
 
 // Storage supplied and owned by the host application.
 typedef struct {
@@ -44,6 +61,9 @@ typedef struct Interpreter {
   uint32_t symbol_count;
   uint32_t runtime_allocation_count;
   uint32_t deferred_expression_count;
+
+  // Active evaluator stack roots for manually invoked garbage collection.
+  EvalGCRootFrame *gc_roots;
 
   // Most recent symbol definition error.
   symbol_define_error_t symbol_define_error;

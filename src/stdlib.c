@@ -16,6 +16,7 @@
 #include "stdlib-sequences.h"
 #include "stdlib-eval-control.h"
 #include "stdlib-assertions.h"
+#include "stdlib-gc.h"
 
 #include "symbol-error.h"
 

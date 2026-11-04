@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 #include "evaluate.h"
 #include "symbol-error.h"
@@ -105,6 +106,26 @@ static bool evaluate_expression(
   Datum *result
 );
 
+// Register a GC root frame in the current C scope.
+// The frame must remain alive until it is explicitly removed.
+// `root_name` declares a local GC root frame that remains alive in this C
+// scope. The frame makes `root_values` accessible to the collector and protects
+// their referenced runtime allocations until the frame is popped.
+#define PUSH_GC_ROOT(interpreter, root_name, root_values, root_count) \
+  EvalGCRootFrame root_name = { \
+    .values = (root_values), \
+    .count = (root_count), \
+    .previous = (interpreter)->gc_roots, \
+  }; \
+  (interpreter)->gc_roots = &(root_name)
+
+// Release an EvalGCRootFrame from GC protection.
+// The frame must be the current top of the GC root stack (LIFO order).
+#define POP_GC_ROOT(interpreter, root_name) { \
+  assert((interpreter)->gc_roots == &(root_name)); \
+  (interpreter)->gc_roots = (root_name).previous; \
+}
+
 // Execute deferred expressions in reverse registration order.
 // Preserve the original evaluation result and pending control flow.
 static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_start) {
@@ -114,6 +135,9 @@ static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_st
   // Preserve current sequence state first
   EvalOutcome saved_outcome = interpreter->eval_outcome;
   Datum saved_result = interpreter->eval_outcome.result;
+  // Deferred expressions may invoke (gc) while the original evaluation
+  // result is temporarily removed from `eval_outcome`.
+  PUSH_GC_ROOT(interpreter, saved_eval_outcome_result, &saved_result, 1);
   uint32_t saved_jump_index = interpreter->pending_jump_index;
   uint32_t saved_resume_index = interpreter->resume_target_index;
   uint32_t saved_leave_count = interpreter->pending_leave_count;
@@ -206,6 +230,7 @@ static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_st
     interpreter->pending_leave_count = 0;
   }
 
+  POP_GC_ROOT(interpreter, saved_eval_outcome_result);
   return !deferred_failure;
 }
 
@@ -220,6 +245,10 @@ static bool evaluate_sequence(
   uint32_t current_expression_index = first_expression_index;
   uint32_t defer_start = interpreter->deferred_expression_count;
   bool ok = true;
+
+  // A sequence keeps its last result while evaluating later expressions.
+  // Nested calls may replace eval_outcome.result before that value is used.
+  PUSH_GC_ROOT(interpreter, sequence_gc_roots, result, 1);
 
   *result = (Datum) { .kind = SYM_EMPTY };
 
@@ -317,7 +346,9 @@ static bool evaluate_sequence(
   finish:
     // Deferred expressions run before the enclosing `(do)` decreases
     // `current_sequence_depth`.
-    if (!run_deferred_expressions(interpreter, defer_start)) return false;
+    bool deferred_ok = run_deferred_expressions(interpreter, defer_start);
+    POP_GC_ROOT(interpreter, sequence_gc_roots);
+    if (!deferred_ok) return false;
     return ok;
 }
 
@@ -662,23 +693,29 @@ static bool evaluate_expression(
 
       // Evaluate all arguments before calling the function.
       Datum args[EVAL_ARG_CAPACITY] = {0};
+
+      // Earlier evaluated arguments may hold runtime values while a later
+      // argument invokes (gc). Keep the entire zero-initialized array rooted.
+      PUSH_GC_ROOT(interpreter, args_gc_roots, args, EVAL_ARG_CAPACITY);
+
+      bool native_call_ok = false;
       size_t argc = 0;
       uint32_t arg_index = fn->next;
 
       while (arg_index != EXPR_NONE) {
         if (arg_index >= interpreter->expression_count) {
           report_evaluation_failure(interpreter, "Invalid argument expression index");
-          return false;
+          goto native_call_finish;
         } else if (argc >= EVAL_ARG_CAPACITY) {
           report_evaluation_failure(interpreter, "Too many function arguments");
-          return false;
+          goto native_call_finish;
         }
 
         uint32_t next_index = interpreter->storage.expressions[arg_index].next;
 
         // Evaluate child expressions recursively
         if (!evaluate_expression(interpreter, arg_index, &args[argc])) {
-          return false;
+          goto native_call_finish;
         }
 
         ++argc;
@@ -711,10 +748,14 @@ static bool evaluate_expression(
       // Stop current evaluation when a jump, exit, or failure is requested.
       // In case of a jump this helps to avoid growing recursion.
       // Native functions report failures through the evaluation state.
-      return (
+      native_call_ok = (
         interpreter->eval_outcome.kind == EVAL_OK &&
         interpreter->pending_jump_index == EXPR_NONE
       );
+
+      native_call_finish:
+        POP_GC_ROOT(interpreter, args_gc_roots);
+        return native_call_ok;
     }
 
     // Resolving variable reference by name
@@ -861,6 +902,8 @@ EvalOutcome evaluate(
 }
 
 void clean_evaluation(Interpreter *interpreter) {
+  interpreter->gc_roots = NULL;
+
   // (label) & (goto)
   interpreter->pending_jump_index = EXPR_NONE;
   interpreter->resume_target_index = EXPR_NONE;
@@ -912,9 +955,12 @@ void* allocate_runtime_data(Interpreter *interpreter, size_t size) {
   void *data = malloc(allocated_size);
   if (data == NULL) return NULL;
 
-  interpreter->storage.runtime_allocations[interpreter->runtime_allocation_count] = (EvalRuntimeAllocation) {
+  interpreter->storage.runtime_allocations[
+    interpreter->runtime_allocation_count
+  ] = (EvalRuntimeAllocation) {
     .data = data,
     .size = allocated_size,
+    .marked = false,
   };
 
   interpreter->runtime_allocation_count++;
@@ -931,7 +977,7 @@ bool adopt_runtime_data(Interpreter *interpreter, void *data, size_t size) {
   ) return false;
 
   interpreter->storage.runtime_allocations[interpreter->runtime_allocation_count] =
-    (EvalRuntimeAllocation) { .data = data, .size = size };
+    (EvalRuntimeAllocation) { .data = data, .size = size, .marked = false };
   interpreter->runtime_allocation_count++;
   return true;
 }
