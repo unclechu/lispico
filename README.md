@@ -56,6 +56,11 @@ See [examples](examples), they are also used as regression tests.
       + Verify symbols and control-flow state are reset between evaluations.
       + Verify returned strings are copied before cleanup when needed.
 
+  * Dynamic function name (support strings as function names — `((str "print" "ln") "foo")`)
+  * `(exit)` support omitting resulting value (defaulting to `SYS_EMPTY`)
+  * Using Lispico as a dynamic library option
+  * `empty` alias/variable for `SYS_EMPTY`
+
   * Documentation: Document execution semantics, resource limits,
     and supported language syntax
 
@@ -1953,6 +1958,7 @@ features:
   * Streamed parsing + evaluation
   * REPL
   * Linked lists (maybe cons-lists?)
+  * Untyped arrays (including nested arrays)
 
   * Evaluator:
     + More informative error messages
