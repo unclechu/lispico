@@ -90,7 +90,16 @@ measure-example() {
 
   printf '%-45s %12s %14s %10d\n' "$NAME" "${elapsed} s" "${peak_ram} KiB" "$exit_code"
 
-  if (( exit_code == 0 )); then
+  # Read the expected exit code, defaulting to zero.
+  local example_name="${SOURCE##*/}"; example_name="${example_name%.lisp}"
+  local expected_file="tests/expected-examples/${example_name}.exitcode"
+  local expected_exit_code=0
+
+  if [[ -f "$expected_file" ]]; then
+    expected_exit_code=$(< "$expected_file")
+  fi
+
+  if (( exit_code == expected_exit_code )); then
     (( passed += 1 ))
   else
     (( failed += 1 ))
