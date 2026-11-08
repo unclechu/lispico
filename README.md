@@ -56,8 +56,6 @@ See [examples](examples), they are also used as regression tests.
       + Verify symbols and control-flow state are reset between evaluations.
       + Verify returned strings are copied before cleanup when needed.
 
-  * `(exit)` support omitting resulting value (defaulting to `SYS_EMPTY`)
-  * `empty` alias/variable for `SYS_EMPTY`
   * `(freeze "NAME")` to force a variable to become immutable/constant
   * `(show VALUE)` to render any value into string representation using `show_` functions
     (useful for debugging)
@@ -415,7 +413,7 @@ features:
       byte length (allocates).
 
       + `(str-new "buffer" 10)` → Creates a string containing 10 `\0` bytes
-      + `(str-new "empty" 0)` → Creates an empty string
+      + `(str-new "empty-string" 0)` → Creates an empty string
       + `(str-new "buffer" 10)` again → Evaluation failure (already defined)
       + `(str-new "other" -1)` → Evaluation failure (length must be `u32`)
 
@@ -1275,6 +1273,22 @@ features:
 
     + `(exit 0 123)` where `0` is exit status code and `123` is returned value
       (defaulting to `u32` type)
+    + `(exit 0)` — Exit successfully with `SYM_EMPTY` as the result.
+    + `(exit 1 empty)` — Exit with status `1` and an explicitly empty result.
+
+    The exit status must be a `u32` or `i32` value in the C `int` range.
+    The second argument is optional, and can be any resulting datum, including
+    `empty`.
+
+  * Empty result literal
+
+    + `empty` evaluates to `SYM_EMPTY`, the absence of a value.
+      For example, `empty` as the last program expression returns `SYM_EMPTY`.
+    + `(type-of empty)` returns `void` (the type identifier), but `empty` is
+      **not** a scalar `Value` of type `TYPE_VOID`.
+    + `empty` is a reserved literal, not an entry in the symbol table. It
+      always evaluates to `SYM_EMPTY`; `(kind-of "empty")` is `empty-kind`.
+      Variables and arrays cannot be named `empty`.
 
   * <a id="control-flow-and-sequences"></a>Expression sequences
 

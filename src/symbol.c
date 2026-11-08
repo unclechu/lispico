@@ -71,7 +71,7 @@ Symbol* symbol_lookup(Interpreter *interpreter, const char *name) {
 
   - `interpreter->symbol_define_error == INCORRECT_INPUT` —
     Either `Symbol` name is wrong (empty or exceeds limit)
-    or `Symbol` kind is `SYM_EMPTY`
+    or reserved (`empty`), or `Symbol` kind is `SYM_EMPTY`
   - `interpreter->symbol_define_error == ALREADY_DEFINED` —
     A `Symbol` with this name is already defined
   - `interpreter->symbol_define_error == TABLE_IS_FULL` —
@@ -103,9 +103,9 @@ Symbol* symbol_define(Interpreter *interpreter, const char *name, SymbolKind kin
 
   size_t len = strlen(name);
 
-  // If `Symbol` name is empty, or exceeds `Symbol` name size limit,
-  // or provided `kind` is `SYM_EMPTY` then abort operation as an error.
-  if (len == 0 || len >= SYMBOL_NAME_SIZE || kind == SYM_EMPTY) {
+  // `empty` is a reserved literal, not a name that can be defined.
+  // Otherwise, reject empty, oversized, and SYM_EMPTY symbol definitions.
+  if (len == 0 || len >= SYMBOL_NAME_SIZE || kind == SYM_EMPTY || strcmp(name, "empty") == 0) {
     interpreter->symbol_define_error = INCORRECT_INPUT;
     return NULL;
   }

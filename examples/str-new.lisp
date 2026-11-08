@@ -1,8 +1,8 @@
 ; Create an empty string variable
-(str-new "empty" 0)
-(assert (== (str-size empty) 0))
-(assert (== empty ""))
-(assert (== (type-of empty) s))
+(str-new "empty-string" 0)
+(assert (== (str-size empty-string) 0))
+(assert (== empty-string ""))
+(assert (== (type-of empty-string) s))
 
 ; Create a fixed-size zero-initialized string
 (str-new "buffer" 5)
@@ -43,9 +43,9 @@
 (assert (== (str-size computed) 5))
 
 ; Zero-length strings can be updated with empty strings
-(str-set "empty" "")
-(str-set "empty" 0 "")
-(assert (== (str-size empty) 0))
+(str-set "empty-string" "")
+(str-set "empty-string" 0 "")
+(assert (== (str-size empty-string) 0))
 
 ; The function returns the newly created string
 (assert (== (type-of (str-new "returned" 3)) s))
@@ -54,5 +54,5 @@
 ; NUL-terminated length vs. fixed string size
 (assert (== (str-len buffer) 2))
 (assert (== (str-size buffer) 5))
-(assert (== (str-len empty) 0))
+(assert (== (str-len empty-string) 0))
 (assert (== (str-len message) 14))

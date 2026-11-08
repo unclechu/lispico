@@ -6,13 +6,16 @@
 #include "wipe-memory.h"
 #include "evaluate.h"
 
-// (exit) — Stop program evaluation and return the provided result
+// (exit) — Stop program evaluation with an optional result (default: SYM_EMPTY)
 Datum std_exit(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "exit";
 
-  if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
+  if (argc != 1 && argc != 2) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects 1 or 2 arguments", fn_name);
+    goto fail;
+  }
 
   if (args[0].kind != SYM_VARIABLE) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) exit code must be a numeric value", fn_name);
@@ -36,7 +39,7 @@ Datum std_exit(Interpreter *interpreter, const Datum *args, size_t argc) {
       goto fail;
   }
 
-  return_value = args[1];
+  if (argc == 2) return_value = args[1];
   report_evaluation_exit(interpreter, exit_code, return_value);
   return return_value;
 

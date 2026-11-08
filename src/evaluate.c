@@ -813,6 +813,14 @@ static bool evaluate_expression(
       }
 
       const char *symbol_name = allocation->data;
+
+      // `empty` always denotes the absence of a result. It cannot be an
+      // ordinary symbol: SYM_EMPTY also marks vacant symbol-table slots.
+      if (strcmp(symbol_name, "empty") == 0) {
+        *result = (Datum) { .kind = SYM_EMPTY };
+        return true;
+      }
+
       const Symbol *symbol = symbol_lookup(interpreter, symbol_name);
 
       if (symbol == NULL) {
