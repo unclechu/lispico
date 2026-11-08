@@ -57,8 +57,6 @@ See [examples](examples), they are also used as regression tests.
       + Verify returned strings are copied before cleanup when needed.
 
   * `(freeze "NAME")` to force a variable to become immutable/constant
-  * `(show VALUE)` to render any value into string representation using `show_` functions
-    (useful for debugging)
 
   * Dynamic function name (support strings as function names — `((str "print" "ln") "foo")`)
 
@@ -294,7 +292,7 @@ features:
       zero-based and must be strictly less than `String::length`.
 
       Bytes are returned as unsigned values in the range `0` to `255`,
-      regardless of whether C's `char` type is signed.
+      regardless of whether C’s `char` type is signed.
 
       The function reads individual bytes, not Unicode characters. A UTF-8
       character encoded using multiple bytes requires an explicit index,
@@ -322,7 +320,7 @@ features:
       The named symbol must exist and contain a string variable.
 
       The second argument must evaluate to `u32`. Indexes are zero-based
-      and must be strictly less than the string variable's byte length.
+      and must be strictly less than the string variable’s byte length.
 
       Bytes are returned as unsigned values from `0` to `255`.
       Embedded `\0` bytes are readable and return `0`.
@@ -363,7 +361,7 @@ features:
         is preserved, and no zero-filling is performed.
 
         Empty replacement strings are allowed, including at an index equal
-        to the destination string's length.
+        to the destination string’s length.
 
       + `(str-set "NAME" STRING)` —
         Overwrites the contents of a named string variable from the beginning,
@@ -467,7 +465,7 @@ features:
 
       `(str-new)` differs from `(var "NAME" STRING)` because it allocates
       a specified amount of zero-initialized space rather than copying
-      an existing string's contents.
+      an existing string’s contents.
 
     + `(str-resize "NAME" LENGTH)` —
       Changes the byte length of an existing string variable while preserving
@@ -646,7 +644,7 @@ features:
     `clean_evaluation()`.
 
   * `(set "NAME" ARRAY)` — Overwrite the elements of an existing named array
-    using an evaluated array value, without changing the destination's element
+    using an evaluated array value, without changing the destination’s element
     type, length, or storage pointer. The source array must have exactly the
     same element type and must not be longer than the destination.
 
@@ -667,7 +665,7 @@ features:
     string buffers remain tracked until `clean_evaluation()`.
 
     The function returns the destination array value (`SYM_ARRAY`). It does
-    not allocate replacement array storage and preserves the destination's
+    not allocate replacement array storage and preserves the destination’s
     capacity. Passing an empty array clears every destination element, while
     assigning an array to itself leaves it unchanged.
 
@@ -689,7 +687,7 @@ features:
 
     `INDEX` must evaluate to `u32` and must be smaller than the array length.
 
-    The result is a value of the array's element type. The operation does not
+    The result is a value of the array’s element type. The operation does not
     allocate memory, modify the array, or copy its underlying storage.
 
     For string arrays, zero-initialized elements are returned as empty strings,
@@ -700,8 +698,8 @@ features:
     the array (`SYM_ARRAY`).
 
     `INDEX` must be `u32` and strictly less than the array length. `VALUE`
-    must have exactly the array's element type (`u32`, `i32`, `f32`, or `s`);
-    no implicit conversions are performed. The array's length and element
+    must have exactly the array’s element type (`u32`, `i32`, `f32`, or `s`);
+    no implicit conversions are performed. The array’s length and element
     type remain unchanged.
 
     + `(arr-set "numbers" 0 123)` → `123` (`u32`)
@@ -712,7 +710,7 @@ features:
     For string arrays, `(arr-set)` allocates an independent copy of the
     assigned string, including embedded `\0` bytes. Its return value
     describes the stored string, not the original source string. Replacing
-    a string element doesn't immediately release the previous buffer;
+    a string element doesn’t immediately release the previous buffer;
     allocations remain tracked until evaluation cleanup.
 
     Unlike `(arr-get)`, `(arr-size)`, and `(arr-type)`, which can accept an
@@ -794,7 +792,7 @@ features:
   symbols. All array operations reject incorrect argument counts or types
   and out-of-bounds indexes. No implicit conversions are performed.
 
-  The array storage is allocated by the interpreter's tracked runtime
+  The array storage is allocated by the interpreter’s tracked runtime
   allocator. The data is released during `clean_evaluation()`; the host-owned
   allocation tracking table is not freed.
 
@@ -1173,7 +1171,7 @@ features:
     symbol unchanged. Existing runtime allocations remain tracked until
     evaluation cleanup. `(override)` returns the replacement value.
 
-    Unlike `(override)`, `(set)` preserves the destination's existing type and
+    Unlike `(override)`, `(set)` preserves the destination’s existing type and
     storage size, including its fixed string length or array length.
 
   * If-conditions and comparisons:
@@ -1378,6 +1376,24 @@ features:
       + `(arr-new "foo" u32 16) (kind-of "foo")` → equals to `arr-kind`
         (you can check that a variable is an array of `u32`:
         `(assert (and (== (kind-of "foo") arr-kind) (== (arr-type "foo") u32)) "Must be an array of u32")`)
+
+  * Debug value representation
+
+    + `(show VALUE)` — Return a string containing the same debug representation
+      used by the executable’s final-result printer, without writing to stdout.
+
+      + `(show empty)` → `"SYM_EMPTY"`
+      + `(show 123)` → `"SYM_VARIABLE(TYPE_U32(123))"`
+      + `(show "hello")` → `"SYM_VARIABLE(TYPE_STRING(\"hello\"))"`
+      + `(show (arr 1 2))` → `"SYM_ARRAY(ARRAY(TYPE_U32, [1, 2]))"`
+
+      String contents are escaped using the existing `show_` renderers,
+      including embedded NUL bytes. Labels are shown as `SYM_LABEL(INDEX)`,
+      where `INDEX` is an internal expression index that may change when
+      the source changes.
+
+      The resulting string belongs to Lispico’s managed runtime allocations;
+      it can be stored in a variable and later collected by `(gc)` when unused.
 
 - Special forms
 
@@ -2120,7 +2136,7 @@ has an independently configurable capacity.
 The symbol table uses open addressing and requires a power-of-two capacity.
 
 The interpreter tracks used entries independently of the configured
-capacities. Exceeding a table's capacity causes the corresponding parsing,
+capacities. Exceeding a table’s capacity causes the corresponding parsing,
 registration, or evaluation operation to fail.
 
 #### Ownership and cleanup
@@ -2132,7 +2148,7 @@ registration, or evaluation operation to fail.
 * Memory allocated by Lispico for expression data and runtime string values
   remains owned by Lispico and is wiped and freed during the corresponding
   cleanup operation.
-* The host must keep all configured table buffers valid for the interpreter's
+* The host must keep all configured table buffers valid for the interpreter’s
   lifetime.
 * Host-provided table buffers must not overlap.
 * Configuration currently occurs once, before interpreter initialization.
@@ -2226,7 +2242,7 @@ The collector uses a simple **mark-and-sweep** algorithm:
 The following values are considered GC roots:
 
 - **Symbols:** All currently defined scalar and array variables in the
-  interpreter's symbol table.
+  interpreter’s symbol table.
 - **Evaluation result:** The most recent value stored in
   `Interpreter::eval_outcome.result`.
 - **Temporary evaluator values:** Values registered through active
@@ -2235,8 +2251,8 @@ The following values are considered GC roots:
 
 For scalar strings, the collector marks their runtime-allocated data buffers.
 
-For arrays, the collector marks the array's backing storage. String arrays
-additionally require marking each string element's independently allocated
+For arrays, the collector marks the array’s backing storage. String arrays
+additionally require marking each string element’s independently allocated
 data buffer. Zero-initialized string elements with NULL data pointers do not
 reference any runtime allocations.
 
@@ -2348,7 +2364,7 @@ to the following requirements:
 
 Interpreter-owned runtime allocations are tracked and cleaned up separately
 for each instance. Cleaning up one interpreter does not release another
-interpreter's storage or allocations.
+interpreter’s storage or allocations.
 
 #### Concurrency testing
 

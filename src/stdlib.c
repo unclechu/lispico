@@ -17,6 +17,7 @@
 #include "stdlib-eval-control.h"
 #include "stdlib-assertions.h"
 #include "stdlib-gc.h"
+#include "stdlib-show.h"
 
 #include "symbol-error.h"
 
