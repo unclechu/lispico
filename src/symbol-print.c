@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include <limits.h>
 
 #include "symbol-print.h"
 
@@ -30,34 +31,79 @@ const char* show_ValueType(ValueType type) {
   }
 }
 
-// `show_String` into a specified pointer.
+// Render a quoted String, escaping embedded NULs and other special bytes.
 //
-// Requires a buffer of at least (string.length + 3) chars.
-// Writes '\0' terminator at the end and wraps the string into double quotes.
-static void show_String_to_pointer(char *dest, String string) {
-  dest[0] = '"';
-  // +1 to shift quotation mark
-  // The check correctly handles `String::value == NULL` for non-initialized
-  // strings in an array (they have `String::length == 0`).
-  if (string.length > 0) memcpy(dest + 1, string.data, sizeof(char) * string.length);
-  dest[string.length + 1] = '"';
-  dest[string.length + 2] = '\0';
+// When `dest` is `NULL`, calculate the required length (excluding the terminator).
+// Otherwise, `dest` must have room for that length plus the `\0` terminator.
+// Preserves UTF-8 bytes while escaping ASCII control characters.
+static bool show_String_to_pointer(char *dest, String string, size_t *length) {
+  if (string.length != 0 && string.data == NULL) return false;
+
+  static const char hex[] = "0123456789ABCDEF";
+  size_t pos = 1; // Opening quotation mark
+  if (dest != NULL) dest[0] = '"';
+
+  for (size_t i = 0; i < string.length; ++i) {
+    unsigned char byte = (unsigned char)string.data[i];
+    char escaped[4];
+    size_t escaped_length = 1;
+
+    switch (byte) {
+      // Render some special chars as common C-escapes (e.g. `\0` for the NUL).
+      case '\0': escaped[0] = '\\'; escaped[1] = '0'; escaped_length = 2; break;
+      case '\n': escaped[0] = '\\'; escaped[1] = 'n'; escaped_length = 2; break;
+      case '\r': escaped[0] = '\\'; escaped[1] = 'r'; escaped_length = 2; break;
+      case '\t': escaped[0] = '\\'; escaped[1] = 't'; escaped_length = 2; break;
+      case '"': escaped[0] = '\\'; escaped[1] = '"'; escaped_length = 2; break;
+      case '\\': escaped[0] = '\\'; escaped[1] = '\\'; escaped_length = 2; break;
+      default:
+        // If it is a special character < 0x20
+        // (accounting for DEL 0x7F special character)
+        // then encode it as `\xFF` form where FF is ASCII hex position.
+        if (byte < 0x20 || byte == 0x7F) {
+          escaped[0] = '\\';
+          escaped[1] = 'x';
+          escaped[2] = hex[byte >> 4];
+          escaped[3] = hex[byte & 0x0F];
+          escaped_length = 4;
+        } else {
+          // Regular ASCII character
+          escaped[0] = (char)byte;
+        }
+        break;
+    }
+
+    // Leave space for the closing quotation mark and the terminator.
+    if (pos > SIZE_MAX - escaped_length - 2) return false;
+    if (dest != NULL) memcpy(dest + pos, escaped, escaped_length);
+    pos += escaped_length;
+  }
+
+  if (dest != NULL) {
+    dest[pos] = '"';
+    dest[pos + 1] = '\0';
+  }
+
+  *length = pos + 1;
+  return true;
 }
 
 // Make a printable string representation of a `String`.
 //
-// Will wrap the string into quotation marks.
-// Note that `\0` is not expected in the `String` value.
+// Wraps the string into quotation marks and escapes nonprintable bytes.
 // Will return `NULL` in case of failure (e.g. `malloc`).
 //
 // WARNING! Caller must free the allocated resulting string!
 char* show_String(String string) {
-  // Plus two quotation marks and one '\0' terminator.
-  size_t shown_string_length = string.length + 3;
-  size_t shown_string_size = sizeof(char) * shown_string_length;
-  char *shown_string = malloc(shown_string_size);
+  size_t shown_string_length;
+  if (!show_String_to_pointer(NULL, string, &shown_string_length)) return NULL;
+  if (shown_string_length >= SIZE_MAX) return NULL;
+  char *shown_string = malloc(shown_string_length + 1);
   if (shown_string == NULL) return NULL; // Likely OOM
-  show_String_to_pointer(shown_string, string);
+  if (!show_String_to_pointer(shown_string, string, &shown_string_length)) {
+    free(shown_string);
+    return NULL;
+  }
   return shown_string;
 }
 
@@ -86,8 +132,13 @@ static int show_Value_to_pointer(char *dest, size_t capacity, Value value, bool 
       String string = value.as.string;
       size_t type_length = include_type ? strlen(shown_type) : 0;
 
-      // +2 for quotation marks, +2 for parentheses if `include_type`
-      size_t length = type_length + string.length + 2 + (include_type ? 2 : 0);
+      size_t string_length;
+      if (!show_String_to_pointer(NULL, string, &string_length)) return -1;
+
+      // +2 for the parentheses when including the value type.
+      size_t overhead = type_length + (include_type ? 2 : 0);
+      if (string_length > (size_t)INT_MAX - overhead) return -1;
+      size_t length = overhead + string_length;
 
       if (dest != NULL) {
         if (capacity <= length) return -1;
@@ -97,8 +148,8 @@ static int show_Value_to_pointer(char *dest, size_t capacity, Value value, bool 
           pos += type_length;
           dest[pos++] = '(';
         }
-        show_String_to_pointer(dest + pos, string);
-        pos += string.length + 2; // Account for quotation marks from `show_String_to_pointer`
+        if (!show_String_to_pointer(dest + pos, string, &string_length)) return -1;
+        pos += string_length;
         if (include_type) dest[pos++] = ')'; // Overwrites `\0` from `show_String_to_pointer`
         dest[pos] = '\0';
       }
@@ -150,7 +201,7 @@ static bool write_Array_item_to_Value(const Array *array, uint32_t index, Value 
 
 // Make a printable string representation of an `Array` value.
 //
-// Note that `\0` is not expected in the `String` values.
+// String elements are escaped, including embedded NUL bytes.
 // Will return `NULL` in case of failure (e.g. `malloc` or `snprintf` error).
 //
 // WARNING! Caller must free the allocated resulting string!
@@ -170,12 +221,16 @@ char* show_Array(Array array) {
     if (!write_Array_item_to_Value(&array, i, &element)) return NULL;
     int part_length = show_Value_to_pointer(NULL, 0, element, false);
     if (part_length < 0) return NULL;
+    if (i != 0) {
+      if (length > SIZE_MAX - 2) return NULL;
+      length += 2; // Comma and space between elements.
+    }
+    if ((size_t)part_length > SIZE_MAX - length) return NULL;
     length += (size_t)part_length;
-    // Comma and space between elements.
-    if (i != 0) length += 2;
   }
 
   // Allocate resulting string, +1 for '\0'.
+  if (length == SIZE_MAX) return NULL;
   const size_t size = sizeof(char) * (length + 1);
   char *shown = malloc(size);
   if (shown == NULL) return NULL; // Likely OOM
