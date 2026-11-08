@@ -56,13 +56,15 @@ See [examples](examples), they are also used as regression tests.
       + Verify symbols and control-flow state are reset between evaluations.
       + Verify returned strings are copied before cleanup when needed.
 
-  * Dynamic function name (support strings as function names — `((str "print" "ln") "foo")`)
   * `(exit)` support omitting resulting value (defaulting to `SYS_EMPTY`)
-  * Using Lispico as a dynamic library option
   * `empty` alias/variable for `SYS_EMPTY`
   * `(freeze "NAME")` to force a variable to become immutable/constant
   * `(show VALUE)` to render any value into string representation using `show_` functions
     (useful for debugging)
+
+  * Dynamic function name (support strings as function names — `((str "print" "ln") "foo")`)
+
+  * Using Lispico as a dynamic library option
 
   * Documentation: Document execution semantics, resource limits,
     and supported language syntax
@@ -826,6 +828,37 @@ features:
   ```
 
   `foo` label is not defined/registered yet when `(goto)` is called.
+
+  Labels inside `(if)` branches are also reachable after their branch has
+  executed at least once. A `(goto)` to such a label enters that branch
+  directly, without re-evaluating the `(if)` condition, and skips expressions
+  preceding the label in any enclosing `(do)` blocks. For example, even after
+  `enabled` changes to `false`, the following jump can reach `again`:
+
+  ```lisp
+  (var "enabled" true)
+  (var "counter" 0)
+  (if enabled
+    (do
+      (label "again")
+      (set "counter" (+ counter 1))
+      (if (== counter 2) (exit 0 counter))))
+  (set "enabled" false)
+  (goto again)
+  ```
+
+  Labels are not general-purpose entry points into arbitrary function
+  arguments or `(if)` conditions:
+
+  ```lisp
+  (println (do (label "foo") "hello"))
+  (goto foo) ; Evaluation failure: destination is not reachable
+  ```
+
+  ```lisp
+  (if (do (label "foo") true) (println "hello"))
+  (goto foo) ; Evaluation failure: destination is not reachable
+  ```
 
 - Supported instructions
 

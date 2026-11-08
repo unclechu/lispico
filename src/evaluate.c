@@ -50,11 +50,62 @@ static void report_failure_interface(
   snprintf(ctx->fail_msg, sizeof(ctx->fail_msg), "%s%s", err_msg_prefix, err_msg);
 }
 
+// Check whether an expression provides a resumable path to a label.
+// Only `(do)` sequences and the branches of `(if)` can be entered by `(goto)`.
+// In particular, an `(if)` condition and ordinary function arguments are not
+// execution paths that can be resumed at an arbitrary nested expression.
+static bool contains_jump_target(
+  Interpreter *interpreter,
+  uint32_t expression_index,
+  uint32_t target_index
+) {
+  if (expression_index == EXPR_NONE || expression_index >= interpreter->expression_count) {
+    return false;
+  }
+  if (expression_index == target_index) return true;
+
+  const Expression *expr = &interpreter->storage.expressions[expression_index];
+  if (expr->kind != EXPR_LIST) return false;
+
+  uint32_t fn_index = expr->first_child;
+  if (fn_index == EXPR_NONE || fn_index >= interpreter->expression_count) return false;
+
+  const Expression *fn = &interpreter->storage.expressions[fn_index];
+  if (fn->kind != EXPR_NAME) return false;
+
+  const ExpressionAllocation *allocation = get_expression_allocation(interpreter, fn->data);
+  if (allocation == NULL || allocation->data == NULL) return false;
+
+  // Look into (do)-sequences
+  if (strcmp(allocation->data, "do") == 0) {
+    uint32_t index = fn->next;
+    while (index != EXPR_NONE) {
+      if (index >= interpreter->expression_count) return false;
+      if (contains_jump_target(interpreter, index, target_index)) return true;
+      index = interpreter->storage.expressions[index].next;
+    }
+  }
+  // Look into (if)-branches
+  else if (strcmp(allocation->data, "if") == 0) {
+    // Only the true and false branches are jump destinations, not the condition.
+    uint32_t condition_index = fn->next;
+    if (condition_index == EXPR_NONE || condition_index >= interpreter->expression_count) {
+      return false;
+    }
+    uint32_t true_index = interpreter->storage.expressions[condition_index].next;
+    if (true_index == EXPR_NONE || true_index >= interpreter->expression_count) return false;
+    uint32_t false_index = interpreter->storage.expressions[true_index].next;
+    return (
+      contains_jump_target(interpreter, true_index, target_index) ||
+      contains_jump_target(interpreter, false_index, target_index)
+    );
+  }
+
+  return false;
+}
+
 // Find the expression to start executing in a sequence to reach a jump target.
-//
-// If the target belongs directly to the sequence, return its index.
-// If the target is inside a nested `(do)`, return the containing `(do)` expression.
-// Returns `EXPR_NONE` when the target cannot be reached through this sequence.
+// For nested targets, return the enclosing `(do)` or `(if)` expression.
 static uint32_t find_sequence_jump_entry(
   Interpreter *interpreter,
   uint32_t first_expression_index,
@@ -63,38 +114,9 @@ static uint32_t find_sequence_jump_entry(
   uint32_t index = first_expression_index;
 
   while (index != EXPR_NONE) {
-    // Incorrect index
     if (index >= interpreter->expression_count) return EXPR_NONE;
-
-    // The target `(label)` is found
-    if (index == target_index) return index;
-
-    const Expression *expr = &interpreter->storage.expressions[index];
-
-    if (expr->kind == EXPR_LIST) {
-      uint32_t fn_index = expr->first_child;
-
-      if (fn_index != EXPR_NONE && fn_index < interpreter->expression_count) {
-        const Expression *fn = &interpreter->storage.expressions[fn_index];
-
-        if (fn->kind == EXPR_NAME) {
-          const ExpressionAllocation *allocation = get_expression_allocation(interpreter, fn->data);
-
-          if (
-            allocation != NULL &&
-            allocation->data != NULL &&
-            strcmp(allocation->data, "do") == 0
-          ) {
-            // Search nested `(do)` expressions, without evaluating anything.
-            uint32_t nested_entry = find_sequence_jump_entry(interpreter, fn->next, target_index);
-            // Target jump label is found, return the index of the `(do)` sequence containing it
-            if (nested_entry != EXPR_NONE) return index;
-          }
-        }
-      }
-    }
-
-    index = expr->next;
+    if (contains_jump_target(interpreter, index, target_index)) return index;
+    index = interpreter->storage.expressions[index].next;
   }
 
   return EXPR_NONE;
@@ -235,7 +257,7 @@ static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_st
 }
 
 // Evaluate top-level or `(do)` expressions sequence.
-// Also supports jumping into inactive nested `(do)` sequences.
+// Also supports jumping into inactive nested `(do)` sequences and `(if)` branches.
 static bool evaluate_sequence(
   Interpreter *interpreter,
   uint32_t first_expression_index,
@@ -300,7 +322,7 @@ static bool evaluate_sequence(
         interpreter->pending_jump_index != EXPR_NONE
       ) {
         // Check whether this sequence can handle the requested jump,
-        // either directly or through one of its nested (do) expressions.
+        // either directly or through nested (do) and (if) expressions.
         uint32_t jump_entry = find_sequence_jump_entry(
           interpreter,
           first_expression_index,
@@ -309,7 +331,7 @@ static bool evaluate_sequence(
 
         if (jump_entry != EXPR_NONE) {
           // A direct jump needs no nested re-entry.
-          // Otherwise remember the final target while entering nested (do)s.
+          // Otherwise remember the target while entering nested (do)s/(if)s.
           interpreter->resume_target_index =
             jump_entry == interpreter->pending_jump_index
               ? EXPR_NONE
@@ -363,6 +385,12 @@ static bool evaluate_expression(
   ) {
     report_evaluation_failure(interpreter, "Invalid expression index");
     return false;
+  }
+
+  // A label used directly as an `(if)` branch is not visited by a `(do)`
+  // sequence loop, so it must also be able to complete jump re-entry here.
+  if (current_expression_index == interpreter->resume_target_index) {
+    interpreter->resume_target_index = EXPR_NONE;
   }
 
   const Expression *expr = &interpreter->storage.expressions[current_expression_index];
@@ -542,6 +570,18 @@ static bool evaluate_expression(
           ) {
             report_evaluation_failure(interpreter, "(if) expects 2 or 3 arguments");
             return false;
+          }
+        }
+
+        // A goto entering an `(if)` branch is a transfer to that branch's
+        // label, not a fresh conditional evaluation. Follow the path to the
+        // label even if the condition has changed since the label was defined.
+        if (interpreter->resume_target_index != EXPR_NONE) {
+          if (contains_jump_target(interpreter, true_index, interpreter->resume_target_index)) {
+            return evaluate_expression(interpreter, true_index, result);
+          }
+          if (contains_jump_target(interpreter, false_index, interpreter->resume_target_index)) {
+            return evaluate_expression(interpreter, false_index, result);
           }
         }
 
