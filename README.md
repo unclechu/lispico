@@ -60,6 +60,9 @@ See [examples](examples), they are also used as regression tests.
   * `(exit)` support omitting resulting value (defaulting to `SYS_EMPTY`)
   * Using Lispico as a dynamic library option
   * `empty` alias/variable for `SYS_EMPTY`
+  * `(freeze "NAME")` to force a variable to become immutable/constant
+  * `(show VALUE)` to render any value into string representation using `show_` functions
+    (useful for debugging)
 
   * Documentation: Document execution semantics, resource limits,
     and supported language syntax
