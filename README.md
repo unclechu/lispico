@@ -56,8 +56,6 @@ See [examples](examples), they are also used as regression tests.
       + Verify symbols and control-flow state are reset between evaluations.
       + Verify returned strings are copied before cleanup when needed.
 
-  * Dynamic function name (support strings as function names — `((str "print" "ln") "foo")`)
-
   * Using Lispico as a dynamic library option
 
   * Documentation: Document execution semantics, resource limits,
@@ -1411,7 +1409,27 @@ features:
       The resulting string belongs to Lispico’s managed runtime allocations;
       it can be stored in a variable and later collected by `(gc)` when unused.
 
-- Special forms
+- Dynamic native function invocation
+
+  `(call FUNCTION-NAME ARG…)` evaluates `FUNCTION-NAME` to a string,
+  looks up the named function in the symbol table, and invokes it with
+  the remaining evaluated arguments. The function’s result becomes the
+  result of `(call)`:
+
+  ```lisp
+  (call "str-size" "hello") ; Returns 5
+  (call (str "print" "ln") "Hello!") ; Prints Hello!
+  (var "fn" "println")
+  (call fn "Hello again!")
+  ```
+
+  The name must refer to an existing native function (`SYM_NATIVE_FUNCTION`).
+  All arguments are evaluated eagerly, so `(call)` **cannot invoke the
+  evaluator’s [special forms](#special-forms)** such as `(if)` or `(do)`.
+  An undefined name or a symbol that is not a native function causes an
+  evaluation failure.
+
+- <a id="special-forms"></a>Special forms
 
   Most stdlib functions live in a shared variable namespace, but there are a few
   special evaluator forms (exceptions to this rule):

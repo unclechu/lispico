@@ -18,6 +18,7 @@
 #include "stdlib-assertions.h"
 #include "stdlib-gc.h"
 #include "stdlib-show.h"
+#include "stdlib-call.h"
 
 #include "symbol-error.h"
 

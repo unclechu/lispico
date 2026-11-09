@@ -14,6 +14,9 @@ bool populate_stdlib(Interpreter *interpreter, char (*error_message)[ERR_MSG_SIZ
   /* Evaluation control */ \
   POPULATE_STDLIB_EVAL_CONTROL(); \
   \
+  /* Dynamic native function invocation */ \
+  POPULATE_STDLIB_CALL(); \
+  \
   /* Manual runtime garbage collection */ \
   POPULATE_STDLIB_GC(); \
   \
