@@ -56,8 +56,6 @@ See [examples](examples), they are also used as regression tests.
       + Verify symbols and control-flow state are reset between evaluations.
       + Verify returned strings are copied before cleanup when needed.
 
-  * `(freeze "NAME")` to force a variable to become immutable/constant
-
   * Dynamic function name (support strings as function names — `((str "print" "ln") "foo")`)
 
   * Using Lispico as a dynamic library option
@@ -1150,7 +1148,8 @@ features:
 
   * <a id="variables"></a>Variables
 
-    + `(var "foo" 123)` — Define a variable (`u32` type; can be defined only once)
+    + `(var "foo" 123)` — Define a variable
+      (`u32` type; can be defined only once)
     + `(var "foo" (type i32 123))` — Define a variable with `i32` type
       (variable type is infered from the default value type)
     + `(var "numbers" (arr 1 2 3))` — Define an array variable with type and
@@ -1160,6 +1159,19 @@ features:
       and clear its remaining elements without changing its capacity
     + `(override "foo" "Hi")` — Replace an existing symbol with a new value,
       allowing its type, array element type, and length to change
+    + `(freeze "foo")` — Make an existing symbol immutable until the evaluation
+      ends
+
+    `(freeze "NAME")` accepts the name of any existing symbol, including
+    scalar variables, arrays, labels, and native functions. Calling it more
+    than once for the same symbol is allowed. Frozen values remain readable,
+    but `(set)`, `(override)`, `(str-set)`, `(str-resize)`, and `(arr-set)`
+    fail if they attempt to modify one. `(var)` cannot redefine a symbol,
+    frozen or otherwise. `(label)` may re-evaluate a frozen label only when
+    the label already points to that exact expression; moving it fails.
+
+    The user may freeze standard-library symbols as well. No symbols are
+    frozen by default, and a fresh evaluation starts with unfrozen symbols.
 
     `(override "NAME" VALUE)` accepts the same scalar and array values as
     `(var)`, but requires the symbol name to exist already. It can replace any

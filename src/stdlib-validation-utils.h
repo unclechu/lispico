@@ -15,6 +15,13 @@ bool validate_argc(
   size_t argc
 );
 
+// Write a failure message if a symbol is frozen. The caller reports it.
+bool validate_symbol_mutable(
+  const Symbol *symbol,
+  const char *fn_name,
+  char (*fail_msg)[ERR_MSG_SIZE]
+);
+
 void report_unexpected_value_type(
   Interpreter *interpreter,
   const char *fn_name,

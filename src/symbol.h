@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -75,6 +76,10 @@ typedef Datum (*NativeFunction)(Interpreter *interpreter, const Datum *args, siz
 typedef struct {
   char name[SYMBOL_NAME_SIZE];
   SymbolKind kind;
+
+  // Once frozen, neither the symbol nor the storage it owns may be modified
+  // during this evaluation. A new evaluation starts with a clean symbol table.
+  bool frozen;
 
   union {
     // `kind == SYM_VARIABLE`

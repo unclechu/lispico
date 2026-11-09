@@ -25,6 +25,36 @@ bool get_variable_name(const Datum *datum, char (*name)[SYMBOL_NAME_SIZE]) {
   return true;
 }
 
+// (freeze "NAME") — Make any existing symbol immutable for this evaluation.
+Datum std_freeze(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "freeze";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid symbol name", fn_name);
+    goto fail;
+  }
+
+  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  if (symbol == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) symbol “%s” is not defined", fn_name, symbol_name);
+    goto fail;
+  }
+
+  // Freezing an already frozen symbol is harmless.
+  symbol->frozen = true;
+  return return_value;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // (var) — Define a new variable, inferring its type from the initial value
 Datum std_var(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
@@ -246,6 +276,8 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
       goto fail;
     }
 
+    if (!validate_symbol_mutable(symbol, fn_name, &fail_msg)) goto fail;
+
     if (symbol->kind != SYM_ARRAY) {
       snprintf(
         fail_msg,
@@ -409,6 +441,8 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
+  if (!validate_symbol_mutable(symbol, fn_name, &fail_msg)) goto fail;
+
   if (symbol->kind != SYM_VARIABLE) {
     snprintf(
       fail_msg,
@@ -509,6 +543,8 @@ Datum std_override(Interpreter *interpreter, const Datum *args, size_t argc) {
     );
     goto fail;
   }
+
+  if (!validate_symbol_mutable(symbol, fn_name, &fail_msg)) goto fail;
 
   if (args[1].kind == SYM_ARRAY) {
     Array source = args[1].as.array;

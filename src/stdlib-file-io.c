@@ -275,6 +275,7 @@ static bool report_read_file_status(
 
   Symbol *symbol = symbol_lookup(interpreter, READ_FILE_STATUS_VAR_NAME);
   if (symbol != NULL) {
+    if (!validate_symbol_mutable(symbol, fn_name, fail_msg)) return false;
     if (symbol->kind != SYM_VARIABLE) {
       snprintf(
         *fail_msg,

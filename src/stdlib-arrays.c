@@ -336,6 +336,7 @@ Datum std_arr_set(Interpreter *interpreter, const Datum *args, size_t argc) {
 
   Symbol *symbol = get_array(interpreter, &args[0], fn_name, &fail_msg);
   if (symbol == NULL) goto fail;
+  if (!validate_symbol_mutable(symbol, fn_name, &fail_msg)) goto fail;
 
   if (args[1].kind != SYM_VARIABLE || args[1].as.value.type != TYPE_U32) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 index", fn_name);

@@ -4,6 +4,16 @@
 #include "wipe-memory.h"
 #include "symbol-print.h"
 
+bool validate_symbol_mutable(
+  const Symbol *symbol,
+  const char *fn_name,
+  char (*fail_msg)[ERR_MSG_SIZE]
+) {
+  if (!symbol->frozen) return true;
+  snprintf(*fail_msg, sizeof(*fail_msg), "(%s) symbol “%s” is frozen", fn_name, symbol->name);
+  return false;
+}
+
 // Validate exact amount of arguments
 bool validate_argc(
   Interpreter *interpreter,

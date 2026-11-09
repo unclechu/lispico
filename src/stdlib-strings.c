@@ -321,6 +321,8 @@ Datum std_str_set(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
+  if (!validate_symbol_mutable(symbol, fn_name, &fail_msg)) goto fail;
+
   if (symbol->kind != SYM_VARIABLE || symbol->as.variable.type != TYPE_STRING) {
     snprintf(
       fail_msg,
@@ -561,6 +563,7 @@ Datum std_str_resize(Interpreter *interpreter, const Datum *args, size_t argc) {
     );
     goto fail;
   }
+  if (!validate_symbol_mutable(symbol, fn_name, &fail_msg)) goto fail;
   if (symbol->kind != SYM_VARIABLE) {
     snprintf(
       fail_msg,

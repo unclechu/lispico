@@ -123,6 +123,7 @@ Symbol* symbol_define(Interpreter *interpreter, const char *name, SymbolKind kin
     if (s->kind == SYM_EMPTY) {
       memcpy(s->name, name, len + 1u);
       s->kind = kind;
+      s->frozen = false;
       interpreter->symbol_count++;
       return s;
     }

@@ -142,6 +142,29 @@ int main(void) {
   assert(first.symbol_count == 0);
   assert(second.symbol_count == 0);
 
+  // Freezing is scoped to one evaluation; the same name is mutable again
+  // after cleaning up and evaluating a new program.
+  source_a = "(var \"only_a\" 7) (freeze \"only_a\") only_a";
+  assert(parse_source(&first, source_a, strlen(source_a), &error));
+  result_a = evaluate(&first, NULL, NULL);
+  assert(result_a.kind == EVAL_OK);
+  assert(symbol_lookup(&first, "only_a")->frozen);
+
+  clean_evaluation(&first);
+  clean_symbols(&first);
+  clean_expressions(&first);
+
+  source_a = "(var \"only_a\" 8) (set \"only_a\" 9) only_a";
+  assert(parse_source(&first, source_a, strlen(source_a), &error));
+  result_a = evaluate(&first, NULL, NULL);
+  assert(result_a.kind == EVAL_OK);
+  assert(result_a.result.as.value.as.u32 == 9);
+  assert(!symbol_lookup(&first, "only_a")->frozen);
+
+  clean_evaluation(&first);
+  clean_symbols(&first);
+  clean_expressions(&first);
+
   puts("Interpreter isolation tests passed");
   return 0;
 }

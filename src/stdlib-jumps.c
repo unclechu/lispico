@@ -50,8 +50,15 @@ Datum std_label(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  // Global labels can be updated by executing `(label)` again.
-  symbol->as.instruction_index = expression_index;
+  // A frozen label may be encountered again through (goto), but only at its
+  // original expression. Moving the destination would change the symbol.
+  if (symbol->frozen && symbol->as.instruction_index != expression_index) {
+    (void)validate_symbol_mutable(symbol, fn_name, &fail_msg);
+    goto fail;
+  }
+
+  // Global labels can be updated by executing `(label)` again unless frozen.
+  if (!symbol->frozen) symbol->as.instruction_index = expression_index;
 
   // Defining a label preserves the previous evaluation result.
   (void)get_last_evaluation_value(interpreter, &return_value);
