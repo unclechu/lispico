@@ -55,6 +55,37 @@ Datum std_freeze(Interpreter *interpreter, const Datum *args, size_t argc) {
     return return_value;
 }
 
+// (is-frozen "NAME") — Return a u32 boolean for an existing symbol.
+Datum std_is_frozen(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "is-frozen";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid symbol name", fn_name);
+    goto fail;
+  }
+
+  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  if (symbol == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) symbol “%s” is not defined", fn_name, symbol_name);
+    goto fail;
+  }
+
+  return (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = { .type = TYPE_U32, .as.u32 = symbol->frozen ? 1u : 0u },
+  };
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // (var) — Define a new variable, inferring its type from the initial value
 Datum std_var(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };

@@ -1161,6 +1161,8 @@ features:
       allowing its type, array element type, and length to change
     + `(freeze "foo")` — Make an existing symbol immutable until the evaluation
       ends
+    + `(is-frozen "foo")` — Return `1` (`u32`) if an existing symbol is frozen,
+      otherwise `0` (`u32`); fail if its name is not defined
 
     `(freeze "NAME")` accepts the name of any existing symbol, including
     scalar variables, arrays, labels, and native functions. Calling it more
@@ -1172,6 +1174,8 @@ features:
 
     The user may freeze standard-library symbols as well. No symbols are
     frozen by default, and a fresh evaluation starts with unfrozen symbols.
+    `(is-frozen)` works with variables, arrays, labels, and native functions
+    without changing their frozen state.
 
     `(override "NAME" VALUE)` accepts the same scalar and array values as
     `(var)`, but requires the symbol name to exist already. It can replace any
