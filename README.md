@@ -2453,7 +2453,17 @@ Measure time and memory usage for all examples individually:
 nix-shell --run './build.sh && tests/measure-examples.sh'
 ```
 
-## Local Vim configuration example
+## Development environment
+
+### [direnv](https://direnv.net) example
+
+Create `.envrc`:
+
+```sh
+use nix
+```
+
+### Local Vim configuration example
 
 ```vim
 se cc=81,101 tw=100

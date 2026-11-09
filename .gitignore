@@ -13,3 +13,6 @@ lispico-*-tests
 *.zip
 *.tar
 *.gz
+
+# direnv configuration
+.envrc
