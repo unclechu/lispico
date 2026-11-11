@@ -16,6 +16,8 @@
 #include "src/parse-cli-args.h"
 #include "src/storage.h"
 
+#define DEFAULT_EXECUTABLE_NAME "lispico"
+
 typedef struct {
   int argc;
   Array argv;
@@ -103,13 +105,13 @@ int main(int argc, char **argv) {
       break;
 
     case CLI_PARSE_HELP:
-      print_cli_usage(stdout, argc > 0 ? argv[0] : "lispico");
+      print_cli_usage(stdout, argc > 0 ? argv[0] : DEFAULT_EXECUTABLE_NAME);
       clean_cli_args(&cli);
       return 0;
 
     case CLI_PARSE_ERROR:
-      fprintf(stderr, "lispico: %s\n\n", parse_error);
-      print_cli_usage(stderr, argc > 0 ? argv[0] : "lispico");
+      fprintf(stderr, "%s: %s\n\n", argc > 0 ? argv[0] : DEFAULT_EXECUTABLE_NAME, parse_error);
+      print_cli_usage(stderr, argc > 0 ? argv[0] : DEFAULT_EXECUTABLE_NAME);
       clean_cli_args(&cli);
       return 1;
 
@@ -242,8 +244,6 @@ int main(int argc, char **argv) {
           goto done;
       }
 
-      break;
-
     case EVAL_FAIL:
       fprintf(stderr, "[FAIL] Evaluation failed: %s\n", eval_outcome.as.fail_msg);
       exit_code = 1;
@@ -258,6 +258,7 @@ int main(int argc, char **argv) {
   malloc_fail:
     fprintf(stderr, "[FAIL] malloc failed (OOM?)\n");
     exit_code = 1;
+    goto done;
 
   done:
     clean_evaluation(&interpreter);
