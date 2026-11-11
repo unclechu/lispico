@@ -850,26 +850,26 @@ features:
 
   * <a id="basic-arithmetics"></a>Basic arithmetics
 
-    + `(+ VALUE...)` — Add two or more numeric values
+    + `(+ VALUE…)` — Add two or more numeric values
       + `(+ 1 2 3)` → `6`
       + `(+ 1 2 3 4 5)` → `15`
       + `(+ u32-max 1)` → `0` (`u32` wraparound)
 
-    + `(- VALUE...)` — Subtract two or more numeric values from left to right
+    + `(- VALUE…)` — Subtract two or more numeric values from left to right
       + `(- 20 3 2)` → `15`
       + `(- 100 10 5 2)` → `83`
       + `(- 2 3)` → `4_294_967_295` (`u32` wraparound)
 
-    + `(* VALUE...)` — Multiply two or more numeric values
+    + `(* VALUE…)` — Multiply two or more numeric values
       + `(* 2 3 4)` → `24`
       + `(* 1 2 3 4 5)` → `120`
 
-    + `(/ VALUE...)` — Divide two or more numeric values from left to right
+    + `(/ VALUE…)` — Divide two or more numeric values from left to right
       + `(/ 100 5 2)` → `10` (`u32`)
       + `(/ 7.5 2.0 0.5)` → `7.5` (`f32`)
       + `(/ 7 2)` → `3` (`u32`, fractional part discarded)
 
-    + `(div VALUE...)` — Divide two or more numeric values from left to right,
+    + `(div VALUE…)` — Divide two or more numeric values from left to right,
       truncating the result toward zero after each division
       + `(div 100 3 2)` → `16` (`u32`)
       + `(div 9.0 2.0 0.5)` → `8.0` (`f32`)
@@ -953,14 +953,14 @@ features:
 
     + `(min)` and `(max)`
 
-      + `(min VALUE...)` — Return the smallest of one or more numeric values
+      + `(min VALUE…)` — Return the smallest of one or more numeric values
         + `(min 42)` → `42`
         + `(min 5 3 7 1 2)` → `1`
         + `(min -5 -10 -3 -20)` → `-20`
         + `(min 3.5 1.5 2.5)` → `1.5`
         + `(min)` → Evaluation failure (requires at least one argument)
 
-      + `(max VALUE...)` — Return the largest of one or more numeric values
+      + `(max VALUE…)` — Return the largest of one or more numeric values
         + `(max 42)` → `42`
         + `(max 5 3 7 1 2)` → `7`
         + `(max -5 -10 -3 -20)` → `-3`
@@ -2244,7 +2244,7 @@ the same usage information on stderr, then exit with code `1`.
 The interpreter **does not print the final result by default**. Printing from
 explicit functions such as `(println)` still works. Use `-p` or
 `--print-result` to display the result of normal evaluation or `(exit)`, using
-the usual `SYM_VARIABLE(...)`, `SYM_ARRAY(...)`, or `SYM_EMPTY` representation.
+the usual `SYM_VARIABLE(…)`, `SYM_ARRAY(…)`, or `SYM_EMPTY` representation.
 The flag does not change the program’s exit status or evaluation error output.
 
 ### Initial variables
