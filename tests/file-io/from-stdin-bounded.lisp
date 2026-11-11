@@ -4,7 +4,7 @@
 (var "prefix" (read-file "/dev/stdin" 4096))
 (assert (== (str-size prefix) 4096))
 (assert (== read-file-status read-file-status-truncated))
-(write-file (arr-get argv 2) prefix)
-(write-file (arr-get argv 3) (read-file "/dev/stdin"))
+(write-file (arr-get args 0) prefix)
+(write-file (arr-get args 1) (read-file "/dev/stdin"))
 ; Unlimited reads must not update the status
 (assert (== read-file-status read-file-status-truncated))

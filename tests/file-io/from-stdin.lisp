@@ -1,1 +1,1 @@
-(write-file (arr-get argv 2) (read-file "/dev/stdin"))
+(write-file (arr-get args 0) (read-file "/dev/stdin"))

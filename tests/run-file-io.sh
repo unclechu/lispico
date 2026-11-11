@@ -50,7 +50,7 @@ echo
 
 # A pipe has no advance file size, so (read-file) must grow its buffer.
 (set -o xtrace; cat -- "$TMP_DIR/input" | timeout -- "$TIMEOUT" \
-  "$LISPICO_EXECUTABLE" tests/file-io/from-stdin.lisp "$TMP_DIR/from-stdin" \
+  "$LISPICO_EXECUTABLE" -ps tests/file-io/from-stdin.lisp -- "$TMP_DIR/from-stdin" \
   >"$TMP_DIR/stream.stdout" 2>"$TMP_DIR/stream.stderr")
 
 (set -o xtrace; cmp -- "$TMP_DIR/input" "$TMP_DIR/from-stdin")
@@ -63,7 +63,7 @@ fi
 
 # Repeat through a regular file, where fstat() supplies a size hint.
 (set -o xtrace; timeout -- "$TIMEOUT" \
-  "$LISPICO_EXECUTABLE" tests/file-io/from-file.lisp \
+  "$LISPICO_EXECUTABLE" -ps tests/file-io/from-file.lisp -- \
   "$TMP_DIR/input" "$TMP_DIR/from-file" \
   >"$TMP_DIR/file.stdout" 2>"$TMP_DIR/file.stderr")
 
@@ -77,7 +77,7 @@ fi
 
 # Empty streams still produce a valid, NUL-terminated zero-length string.
 (set -o xtrace; printf '' | timeout -- "$TIMEOUT" \
-  "$LISPICO_EXECUTABLE" tests/file-io/from-stdin.lisp "$TMP_DIR/empty" \
+  "$LISPICO_EXECUTABLE" -ps tests/file-io/from-stdin.lisp -- "$TMP_DIR/empty" \
   >"$TMP_DIR/empty.stdout" 2>"$TMP_DIR/empty.stderr")
 
 if [[ -s "$TMP_DIR/empty" || -s "$TMP_DIR/empty.stderr" ]]; then
@@ -88,7 +88,7 @@ fi
 # A bounded stdin read must leave the rest of the pipe available to a later
 # unlimited read, including the one-byte lookahead used to detect truncation.
 (set -o xtrace; cat -- "$TMP_DIR/input" | timeout -- "$TIMEOUT" \
-  "$LISPICO_EXECUTABLE" tests/file-io/from-stdin-bounded.lisp \
+  "$LISPICO_EXECUTABLE" -ps tests/file-io/from-stdin-bounded.lisp -- \
   "$TMP_DIR/prefix" "$TMP_DIR/suffix" \
   >"$TMP_DIR/bounded.stdout" 2>"$TMP_DIR/bounded.stderr")
 
@@ -112,7 +112,7 @@ fi
 )
 
 (set -o xtrace; timeout -- "$TIMEOUT" \
-  "$LISPICO_EXECUTABLE" tests/file-io/file-type.lisp \
+  "$LISPICO_EXECUTABLE" -ps tests/file-io/file-type.lisp -- \
   "$TMP_DIR/input" "$TMP_DIR" \
   "$TMP_DIR/link-to-file" "$TMP_DIR/link-to-dir" \
   "$TMP_DIR/link-dead" "$TMP_DIR/link-to-device" \
@@ -129,7 +129,7 @@ fi
 # Following a symbolic link loop must fail, not return the dead-link type.
 (set -o xtrace; ln -s link-loop "$TMP_DIR/link-loop")
 if (set -o xtrace; timeout -- "$TIMEOUT" \
-  "$LISPICO_EXECUTABLE" tests/file-io/file-type-error.lisp "$TMP_DIR/link-loop" \
+  "$LISPICO_EXECUTABLE" -ps tests/file-io/file-type-error.lisp -- "$TMP_DIR/link-loop" \
   >"$TMP_DIR/type-loop.stdout" 2>"$TMP_DIR/type-loop.stderr"); then
   >&2 echo '[FAIL] File type symbolic link loop should fail evaluation'
   exit 1

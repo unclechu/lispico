@@ -32,6 +32,7 @@ See [examples](examples), they are also used as regression tests.
   * [Sleep functions](#sleep-functions)
   * [**TODO** for next releases](#todo)
 - [Undefined behavior](#undefined-behavior)
+- [Command-line interface](#command-line-interface)
 - **[Usage examples](#usage-examples)**
 - [Memory management and cleanup](#memory-management-and-cleanup)
 - [Interpreter instances and thread safety](#interpreter-instances-and-thread-safety)
@@ -72,13 +73,6 @@ See [examples](examples), they are also used as regression tests.
       and make necessary changes to make it work on that platform
 
     * Provide examples how to use it on Raspberry Pico (making parser optional)
-
-  * Interpreter executable:
-    + Variables as inputs: `--var foo u32:123`/`--var bar string:test`
-    + `--print-result` Print last evaluation result (disabled by default)
-    + `--source-file` For input source file (reading from `/dev/stdin` by default)
-    + `--` Raw arguments separator for arguments passing for the script only
-      (`args` variable, C `argv`/`argc` are already passed to the script)
 
   * Dynamically growing interpreter storage
 
@@ -2196,6 +2190,129 @@ or evaluator.
 
 Automatic table growth is not yet supported. It is a separate planned feature.
 
+## Command-line interface
+
+The desktop interpreter parses its command line without third-party argument
+parsing libraries. The reusable parser is in `src/parse-cli-args.{c,h}`.
+
+```text
+Usage: lispico [OPTIONS] [SOURCE_FILE] [-- SCRIPT_ARGS…]
+
+Options:
+  -s, --source-file FILE     Read source from FILE (or '-' for stdin)
+      --source-file=FILE     Alternative form for the source path
+  -p, --print-result         Print the final evaluation result
+      --var NAME TYPE:VAL    Define a mutable variable (repeatable)
+      --const NAME TYPE:VAL  Define a frozen variable (repeatable)
+  -h, --help                 Display this help and exit
+```
+
+Without a source file, Lispico reads `/dev/stdin`. Exactly one source file may
+be specified, either positionally or through `--source-file` / `-s`; specifying
+more than one is an error. Options may appear before or after a positional
+source file, until `--` is encountered.
+
+Use `--source-file` or `-s` for a file whose name begins with a dash, to avoid
+interpreting it as a command-line option:
+
+```sh
+lispico --source-file=-my-script.lisp
+lispico -s -my-script.lisp
+```
+
+The special path `-` also means standard input (`/dev/stdin`):
+
+```sh
+lispico -s -
+```
+
+The `-p` and `-h` flags may be grouped with other short options. `-s` requires
+a separate following file-path argument and **must be the final letter** in
+any short-option group. For example, `-ps script.lisp` is valid, while
+`-psh script.lisp` and `-sp script.lisp` are invalid. The joined forms `-sFILE`
+and `-psFILE` are not supported; use `-s FILE` or `-ps FILE` instead.
+
+`-h` / `--help` displays usage information and exits with code `0` without
+reading or evaluating a source file. Invalid arguments display an error and
+the same usage information on stderr, then exit with code `1`.
+
+### Final evaluation result
+
+The interpreter **does not print the final result by default**. Printing from
+explicit functions such as `(println)` still works. Use `-p` or
+`--print-result` to display the result of normal evaluation or `(exit)`, using
+the usual `SYM_VARIABLE(...)`, `SYM_ARRAY(...)`, or `SYM_EMPTY` representation.
+The flag does not change the program’s exit status or evaluation error output.
+
+### Initial variables
+
+Use `--var NAME TYPE:VALUE` to define mutable variables before evaluation, or
+`--const NAME TYPE:VALUE` to define variables that start out frozen. Frozen
+variables obey the same immutability rules as `(freeze "NAME")`.
+
+```sh
+lispico \
+  --var count u32:1_000 \
+  --var signed i32:-123 \
+  --var fraction f32:1.25 \
+  --var converted i32:123 \
+  --var decimal f32:123 \
+  --var enabled u32:true \
+  --var negative-flag i32:false \
+  --var ratio f32:true \
+  --var message 's:Hello, world!' \
+  --const limit u32:100 \
+  -s program.lisp
+```
+
+Supported type prefixes are `u32:`, `i32:`, `f32:`, and `s:` (string). Numeric
+values follow Lispico’s native numeric grammar, including underscores and
+exponents, and are checked against the requested type’s range. Explicit
+conversion is permitted: `i32:123` and `f32:123` are valid, but `u32:-123` and
+`u32:123.456` are not. The lowercase pseudo-booleans `true` and `false` work
+for all three numeric types, becoming typed `1` and `0` respectively.
+
+For strings, only the **first** colon separates the type from the value.
+Therefore `s:https://example.com:8080/` is valid. An empty string is `s:`.
+Shell quoting controls spaces; no extra quoting or escape syntax is applied to
+the string contents by the CLI parser.
+
+Duplicate `--var` / `--const` names (including a name appearing in both) are
+an error. Command-line variables take precedence over built-in symbols,
+including native functions, `argc`, `argv`, and `args`: they are deliberately
+registered last, and the user is free to override them. The language literal
+`empty` is not a symbol and cannot be defined as a variable.
+
+### Original arguments and script arguments
+
+The process arguments remain available unchanged as `argc` (a `u32`) and
+`argv` (an array of strings), including the executable name, interpreter
+options, source file and `--` separator. A separate `args` array contains
+**only** the arguments after the first standalone `--`. The separator itself
+is excluded. When no separator is present, `args` is an empty string array.
+
+For example:
+
+```sh
+lispico -ps program.lisp --var answer u32:42 -- --debug 'two words'
+```
+
+The script initially sees:
+
+```text
+argc = 9
+argv = [
+  "lispico", "-ps", "program.lisp", "--var", "answer", "u32:42",
+  "--", "--debug", "two words"
+]
+args = ["--debug", "two words"]
+```
+
+Everything following `--` is passed through unchanged and never interpreted
+as an executable option. Source-file selection must therefore happen before
+`--`. These arrays are independent, so replacing an element in one does not
+replace that element in the other.
+
 ## Usage examples
 
 Enter a nix-shell (for supplying dependencies):
@@ -2213,19 +2330,19 @@ Build the interpreter:
 Try something:
 
 ```console
-$ ./lispico <<< '(println "hello")'
+$ ./lispico -p <<< '(println "hello")'
 hello
 SYM_EMPTY
 
-$ ./lispico <<< '(println "hello")(+ 10 5)(+ (last-val) 3)'
+$ ./lispico -p <<< '(println "hello")(+ 10 5)(+ (last-val) 3)'
 hello
 SYM_VARIABLE(TYPE_U32(18))
 
-$ ./lispico examples/hello-world.lisp
+$ ./lispico -p examples/hello-world.lisp
 Hello, World!
 SYM_EMPTY
 
-$ ./lispico <<'LISP'
+$ ./lispico -p <<'LISP'
 (var "foo" 123)
 (set "foo" (+ foo 3))
 (type f32 foo)
@@ -2237,7 +2354,7 @@ Or try all examples (note that test environment variables required for some
 examples):
 
 ```sh
-(set -eu; . tests/examples.env; find examples/ -maxdepth 1 -type f -name '*.lisp' | while read -r f; do (set -x; ./lispico "$f") done)
+(set -eu; . tests/examples.env; find examples/ -maxdepth 1 -type f -name '*.lisp' | while read -r f; do (set -x; ./lispico -p "$f") done)
 ```
 
 You can also just build `lispico` derivation (or add it to your NixOS config):
@@ -2245,7 +2362,7 @@ You can also just build `lispico` derivation (or add it to your NixOS config):
 ```console
 $ nix-build -A lispico
 
-$ result/bin/lispico <<< '(println "hello")'
+$ result/bin/lispico -p <<< '(println "hello")'
 hello
 SYM_EMPTY
 ```

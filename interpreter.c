@@ -12,11 +12,14 @@
 #include "src/stdlib-sleep.h"
 #include "src/stdlib-env-var.h"
 #include "src/stdlib-file-io.h"
+#include "src/parse-cli-args.h"
 #include "src/storage.h"
 
 typedef struct {
   int argc;
   Array argv;
+  Array args;
+  const CliOptions *cli;
 } SettingsState;
 
 static void eval_settings_cb(EvalSettingsInterface *interface) {
@@ -31,12 +34,53 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   if (argv_sym == NULL) return;
   argv_sym->as.array = state->argv;
 
+  Symbol *args_sym = interface->define_symbol(interface, "args", SYM_ARRAY);
+  if (args_sym == NULL) return;
+  args_sym->as.array = state->args;
+
   Interpreter *interpreter = interface->interpreter;
   const char *symbol_name;
   POPULATE_STDLIB_PRINT();
   POPULATE_STDLIB_SLEEP();
   POPULATE_STDLIB_ENV_VAR();
   POPULATE_STDLIB_FILE_IO();
+
+  // CLI definitions come last, intentionally allowing overrides of built-in
+  // symbols, including `argc`, `argv`, `args` and native standard-library
+  // functions.
+  for (size_t i = 0; i < state->cli->variable_count; ++i) {
+    const CliVariable *definition = &state->cli->variables[i];
+    symbol_name = definition->name;
+    Symbol *sym = interface->symbol_lookup(interface, symbol_name);
+    if (sym == NULL) {
+      sym = interface->define_symbol(interface, symbol_name, SYM_VARIABLE);
+      if (sym == NULL) goto symbol_define_fail;
+    }
+
+    Value value = definition->value;
+    if (value.type == TYPE_STRING) {
+      // `argv` memory remains alive, but it must not serve as mutable storage
+      // for script variables. Copy it into evaluator-owned runtime memory.
+      size_t length = value.as.string.length;
+      if (length >= SIZE_MAX) {
+        interface->report_failure(interface, "CLI string length is too large");
+        return;
+      }
+      char *data = allocate_runtime_data(interpreter, length + 1); // +1 for the `\0`
+      if (data == NULL) {
+        interface->report_failure(interface, "Unable to allocate CLI string value");
+        return;
+      }
+      memcpy(data, value.as.string.data, length);
+      data[length] = '\0';
+      value.as.string.data = data;
+    }
+
+    sym->kind = SYM_VARIABLE;
+    sym->as.variable = value;
+    sym->frozen = definition->frozen;
+  }
+
   return;
 
   symbol_define_fail:
@@ -45,6 +89,31 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
 }
 
 int main(int argc, char **argv) {
+  CliOptions cli = {0};
+  char parse_error[ERR_MSG_SIZE] = {'\0'};
+  CliParseStatus cli_status = parse_cli_args(argc, argv, &cli, parse_error, sizeof(parse_error));
+
+  switch (cli_status) {
+    case CLI_PARSE_OK:
+      break;
+
+    case CLI_PARSE_HELP:
+      print_cli_usage(stdout, argc > 0 ? argv[0] : "lispico");
+      clean_cli_args(&cli);
+      return 0;
+      break;
+
+    case CLI_PARSE_ERROR:
+      fprintf(stderr, "lispico: %s\n\n", parse_error);
+      print_cli_usage(stderr, argc > 0 ? argv[0] : "lispico");
+      clean_cli_args(&cli);
+      break;
+
+    default:
+      fprintf(stderr, "[FAIL] Unexpected CLI parse result status: %d\n", cli_status);
+      return 1;
+  }
+
   // Host-provided fixed-capacity interpreter storage.
   // Static storage keeps these tables off the C call stack.
   static Expression expression_storage[EXPR_CAPACITY] = {0};
@@ -74,32 +143,48 @@ int main(int argc, char **argv) {
 
   if (!configure_interpreter_storage(&interpreter, &storage)) {
     fprintf(stderr, "[FAIL] Unable to configure interpreter storage\n");
+    clean_cli_args(&cli);
     return 1;
   }
 
   int exit_code = 0;
 
-  char parse_error[ERR_MSG_SIZE] = {'\0'};
-
   Array argv_as_Array = {
     .element_type = TYPE_STRING,
     .length = argc,
-    .data = malloc(sizeof(String) * argc),
+    .data = argc > 0 ? (malloc(sizeof(String) * (size_t)argc)) : NULL,
   };
-  if (argv_as_Array.data == NULL) goto malloc_fail;
+  if (argc > 0 && argv_as_Array.data == NULL) goto malloc_fail;
   for (int i = 0; i < argc; ++i) {
     String arg = { .data = argv[i], .length = strlen(argv[i]) };
     ((String*) argv_as_Array.data)[i] = arg;
   }
 
-  SettingsState state = { .argc = argc, .argv = argv_as_Array };
+  Array args_as_Array = {
+    .element_type = TYPE_STRING,
+    .length = (uint32_t)(argc - cli.raw_args_start),
+    .data = NULL,
+  };
+  if (args_as_Array.length > 0) {
+    args_as_Array.data = malloc(sizeof(String) * args_as_Array.length);
+    if (args_as_Array.data == NULL) goto malloc_fail;
+    for (uint32_t i = 0; i < args_as_Array.length; ++i) {
+      const char *arg = argv[cli.raw_args_start + (int)i];
+      ((String*) args_as_Array.data)[i] = (String) { .data = arg, .length = strlen(arg) };
+    }
+  }
+
+  SettingsState state = {
+    .argc = argc,
+    .argv = argv_as_Array,
+    .args = args_as_Array,
+    .cli = &cli,
+  };
 
   static char source[SOURCE_CAPACITY];
   size_t source_size = 0;
 
-  const char *source_path = argc > 1 ? argv[1] : "/dev/stdin";
-
-  if (!read_file_contents(source_path, &source, &source_size)) {
+  if (!read_file_contents(cli.source_file, &source, &source_size)) {
     exit_code = 1;
     goto done;
   }
@@ -116,6 +201,7 @@ int main(int argc, char **argv) {
     case EVAL_OK:
     case EVAL_EXIT:
       if (eval_outcome.kind == EVAL_EXIT) exit_code = eval_outcome.as.exit_code;
+      if (!cli.print_result) goto done;
       const char *shown_symbol_kind = show_SymbolKind(eval_outcome.result.kind);
 
       switch (eval_outcome.result.kind) {
@@ -166,12 +252,14 @@ int main(int argc, char **argv) {
 
   malloc_fail:
     fprintf(stderr, "[FAIL] malloc failed (OOM?)\n");
-    return 1;
+    exit_code = 1;
 
   done:
     clean_evaluation(&interpreter);
     clean_symbols(&interpreter);
     clean_expressions(&interpreter);
     free(argv_as_Array.data);
+    free(args_as_Array.data);
+    clean_cli_args(&cli);
     return exit_code;
 }
