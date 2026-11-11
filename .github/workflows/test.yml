@@ -30,6 +30,11 @@ jobs:
         env:
           LISPICO_EXECUTABLE: ./result/bin/lispico
 
+      - name: Run CLI executable tests
+        run: bash tests/run-cli.sh
+        env:
+          LISPICO_EXECUTABLE: ./result/bin/lispico
+
       - name: Run C tests
         run: nix-shell --run './tests/run-c.sh'
 

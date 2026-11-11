@@ -2651,8 +2651,14 @@ $ ./build.sh
 
 $ tests/run-examples.sh
 $ tests/run-file-io.sh
+$ tests/run-cli.sh
 $ tests/run-c.sh
 ```
+
+The standalone parser tests are in `tests/c/parse-cli-args.c` and run with
+`tests/run-c.sh`. The executable integration tests in `tests/run-cli.sh` check
+argument parsing, typed scalars and arrays, interpolation, freezing, and
+CLI error behavior. Both are also run in CI.
 
 Measure time and memory usage for all examples individually:
 

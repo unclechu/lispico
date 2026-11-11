@@ -65,11 +65,8 @@ if [[ $LISPICO_EXECUTABLE_NAME != lispico ]]; then
     "${E_FAIL_COLOR}${LISPICO_EXECUTABLE_NAME}${E_RESET_COLOR}"
 fi
 
-cleanup() {
-  rm -rfv -- "$TMP_DIR"
-}
-
 TMP_DIR="$(mktemp -d)"
+cleanup() { rm -rfv -- "$TMP_DIR"; }
 trap cleanup EXIT
 
 TIMEOUT=30s
@@ -191,4 +188,4 @@ printf '%sPassed: %d%s, %sFailed: %d%s\n' \
   "$FAIL_HL" "$failed" "$O_RESET_COLOR"
 
 # Final exit code
-[[ "$passed" -gt 0 && "$failed" -eq 0 ]]
+(( passed > 0 && failed == 0 ))

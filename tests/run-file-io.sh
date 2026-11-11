@@ -31,11 +31,8 @@ fi
 >/dev/null type tail
 >/dev/null type ln
 
-cleanup() {
-  rm -rfv -- "$TMP_DIR"
-}
-
 TMP_DIR="$(mktemp -d)"
+cleanup() { rm -rfv -- "$TMP_DIR"; }
 trap cleanup EXIT
 
 TIMEOUT=30s

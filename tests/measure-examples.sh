@@ -64,11 +64,8 @@ if [[ $LISPICO_EXECUTABLE_NAME != lispico ]]; then
     "${E_FAIL_COLOR}${LISPICO_EXECUTABLE_NAME}${E_RESET_COLOR}"
 fi
 
-cleanup() {
-  rm -fv -- "$TMP_FILE"
-}
-
 TMP_FILE="$(mktemp)"
+cleanup() { rm -fv -- "$TMP_FILE"; }
 trap cleanup EXIT
 
 TIMEOUT=30s
@@ -173,4 +170,4 @@ echo 'bss      — Uninitialized or zero-initialized static/global data.'
 echo 'dec      — Sum of text, data, and bss (not peak RAM).'
 
 # Final exit code
-[[ "$passed" -gt 0 && "$failed" -eq 0 ]]
+(( passed > 0 && failed == 0 ))

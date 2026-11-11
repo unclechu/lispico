@@ -68,6 +68,15 @@ else
   (( failed += 1 ))
 fi
 
+echo '=== Running command-line interface tests ==============================='
+if (set -o xtrace; tests/run-cli.sh); then
+  printf '%s[PASS]%s CLI executable tests passed\n' "$O_PASS_COLOR" "$O_RESET_COLOR"
+  (( passed += 1 ))
+else
+  >&2 printf '%s[FAIL]%s CLI executable tests failed\n' "$E_FAIL_COLOR" "$E_RESET_COLOR"
+  (( failed += 1 ))
+fi
+
 echo '=== Running C tests ===================================================='
 if (set -o xtrace; tests/run-c.sh); then
   printf '%s[PASS]%s C tests passed\n' "$O_PASS_COLOR" "$O_RESET_COLOR"
@@ -92,4 +101,4 @@ printf 'Test suites summary: %sPassed: %d%s, %sFailed: %d%s\n' \
   "$FAIL_HL" "$failed" "$O_RESET_COLOR"
 
 # Final exit code
-[[ "$passed" -gt 0 && "$failed" -eq 0 ]]
+(( passed > 0 && failed == 0 ))

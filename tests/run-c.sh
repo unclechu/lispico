@@ -150,4 +150,4 @@ printf 'C tests summary: %sPassed: %d%s, %sFailed: %d%s\n' \
   "$FAIL_HL" "$failed" "$O_RESET_COLOR"
 
 # Final exit code
-[[ "$passed" -gt 0 && "$failed" -eq 0 ]]
+(( passed > 0 && failed == 0 ))
