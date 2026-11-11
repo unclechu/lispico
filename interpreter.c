@@ -5,6 +5,7 @@
 #include "src/symbol-print.h"
 #include "src/symbol-error.h"
 #include "src/evaluate.h"
+#include "src/evaluate-copy.h"
 #include "src/expression.h"
 #include "src/read-file.h"
 #include "src/parse.h"
@@ -48,36 +49,40 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   // CLI definitions come last, intentionally allowing overrides of built-in
   // symbols, including `argc`, `argv`, `args` and native standard-library
   // functions.
-  for (size_t i = 0; i < state->cli->variable_count; ++i) {
-    const CliVariable *definition = &state->cli->variables[i];
+  for (size_t i = 0; i < state->cli->definition_count; ++i) {
+    const CliDefinition *definition = &state->cli->definitions[i];
     symbol_name = definition->name;
     Symbol *sym = interface->symbol_lookup(interface, symbol_name);
     if (sym == NULL) {
-      sym = interface->define_symbol(interface, symbol_name, SYM_VARIABLE);
+      sym = interface->define_symbol(interface, symbol_name, definition->kind);
       if (sym == NULL) goto symbol_define_fail;
     }
 
-    Value value = definition->value;
-    if (value.type == TYPE_STRING) {
-      // `argv` memory remains alive, but it must not serve as mutable storage
-      // for script variables. Copy it into evaluator-owned runtime memory.
-      size_t length = value.as.string.length;
-      if (length >= SIZE_MAX) {
-        interface->report_failure(interface, "CLI string length is too large");
+    if (definition->kind == SYM_VARIABLE) {
+      Value value = definition->as.value;
+      if (value.type == TYPE_STRING) {
+        String copied = {0};
+        if (!copy_runtime_string(interpreter, value.as.string, &copied)) {
+          interface->report_failure(interface, "Unable to allocate CLI string value");
+          return;
+        }
+        value.as.string = copied;
+      }
+      sym->kind = SYM_VARIABLE;
+      sym->as.variable = value;
+    } else if (definition->kind == SYM_ARRAY) {
+      Array copied = {0};
+      if (!copy_runtime_array(interpreter, definition->as.array, &copied)) {
+        interface->report_failure(interface, "Unable to allocate CLI array value");
         return;
       }
-      char *data = allocate_runtime_data(interpreter, length + 1); // +1 for the `\0`
-      if (data == NULL) {
-        interface->report_failure(interface, "Unable to allocate CLI string value");
-        return;
-      }
-      memcpy(data, value.as.string.data, length);
-      data[length] = '\0';
-      value.as.string.data = data;
+      sym->kind = SYM_ARRAY;
+      sym->as.array = copied;
+    } else {
+      interface->report_failure(interface, "Unsupported CLI definition kind");
+      return;
     }
 
-    sym->kind = SYM_VARIABLE;
-    sym->as.variable = value;
     sym->frozen = definition->frozen;
   }
 
@@ -101,13 +106,12 @@ int main(int argc, char **argv) {
       print_cli_usage(stdout, argc > 0 ? argv[0] : "lispico");
       clean_cli_args(&cli);
       return 0;
-      break;
 
     case CLI_PARSE_ERROR:
       fprintf(stderr, "lispico: %s\n\n", parse_error);
       print_cli_usage(stderr, argc > 0 ? argv[0] : "lispico");
       clean_cli_args(&cli);
-      break;
+      return 1;
 
     default:
       fprintf(stderr, "[FAIL] Unexpected CLI parse result status: %d\n", cli_status);
@@ -154,17 +158,18 @@ int main(int argc, char **argv) {
     .length = argc,
     .data = argc > 0 ? (malloc(sizeof(String) * (size_t)argc)) : NULL,
   };
+  Array args_as_Array = {
+    .element_type = TYPE_STRING,
+    .length = (uint32_t)(argc - cli.raw_args_start),
+    .data = NULL,
+  };
+
   if (argc > 0 && argv_as_Array.data == NULL) goto malloc_fail;
   for (int i = 0; i < argc; ++i) {
     String arg = { .data = argv[i], .length = strlen(argv[i]) };
     ((String*) argv_as_Array.data)[i] = arg;
   }
 
-  Array args_as_Array = {
-    .element_type = TYPE_STRING,
-    .length = (uint32_t)(argc - cli.raw_args_start),
-    .data = NULL,
-  };
   if (args_as_Array.length > 0) {
     args_as_Array.data = malloc(sizeof(String) * args_as_Array.length);
     if (args_as_Array.data == NULL) goto malloc_fail;

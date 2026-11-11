@@ -2199,12 +2199,15 @@ parsing libraries. The reusable parser is in `src/parse-cli-args.{c,h}`.
 Usage: lispico [OPTIONS] [SOURCE_FILE] [-- SCRIPT_ARGS…]
 
 Options:
-  -s, --source-file FILE     Read source from FILE (or '-' for stdin)
-      --source-file=FILE     Alternative form for the source path
-  -p, --print-result         Print the final evaluation result
-      --var NAME TYPE:VAL    Define a mutable variable (repeatable)
-      --const NAME TYPE:VAL  Define a frozen variable (repeatable)
-  -h, --help                 Display this help and exit
+  -s, --source-file FILE        Read source from FILE (or “-” for stdin)
+      --source-file=FILE        Alternative form for the source path
+  -p, --print-result            Print the final evaluation result
+      --var NAME TYPE:VAL       Define a mutable variable (repeatable)
+      --arr NAME TYPE N VALUE…  Define an array from N arguments
+      --arr-new NAME TYPE N     Define a zero-initialized array of length N
+      --arr-set NAME IDX VAL    Set an element of a previously defined array
+      --freeze NAME             Freeze a previously defined variable or array
+  -h, --help                    Display this help and exit
 ```
 
 Without a source file, Lispico reads `/dev/stdin`. Exactly one source file may
@@ -2246,9 +2249,9 @@ The flag does not change the program’s exit status or evaluation error output.
 
 ### Initial variables
 
-Use `--var NAME TYPE:VALUE` to define mutable variables before evaluation, or
-`--const NAME TYPE:VALUE` to define variables that start out frozen. Frozen
-variables obey the same immutability rules as `(freeze "NAME")`.
+Use `--var NAME TYPE:VALUE` to define mutable variables before evaluation.
+Use `--freeze NAME` after a definition to make the variable immutable before
+the script runs, using the same rules as `(freeze "NAME")`.
 
 ```sh
 lispico \
@@ -2261,7 +2264,8 @@ lispico \
   --var negative-flag i32:false \
   --var ratio f32:true \
   --var message 's:Hello, world!' \
-  --const limit u32:100 \
+  --var limit u32:100 \
+  --freeze limit \
   -s program.lisp
 ```
 
@@ -2277,11 +2281,97 @@ Therefore `s:https://example.com:8080/` is valid. An empty string is `s:`.
 Shell quoting controls spaces; no extra quoting or escape syntax is applied to
 the string contents by the CLI parser.
 
-Duplicate `--var` / `--const` names (including a name appearing in both) are
-an error. Command-line variables take precedence over built-in symbols,
-including native functions, `argc`, `argv`, and `args`: they are deliberately
-registered last, and the user is free to override them. The language literal
-`empty` is not a symbol and cannot be defined as a variable.
+Duplicate CLI definitions (including an array and a scalar with the same name)
+are an error. Command-line variables and arrays take precedence over built-in
+symbols, including native functions, `argc`, `argv`, and `args`: they are
+deliberately registered last, and the user is free to override them. The
+language literal `empty` is not a symbol and cannot be defined as a variable.
+
+### Initial arrays
+
+Use `--arr NAME TYPE COUNT VALUE…` to define a fixed-length array populated
+from exactly `COUNT` separate command-line arguments:
+
+```sh
+lispico \
+  --arr numbers u32 6 1 2 3 4 5 6 \
+  --arr names s 3 'Alice' 'Bob' 'Charlie' \
+  program.lisp
+```
+
+The supported element types are `u32`, `i32`, `f32` and `s`. Numeric elements
+use the same conversions and pseudo-booleans as `--var`. String elements are
+passed literally, without an `s:` prefix or any special escaping imposed by
+Lispico. An array can be empty: `--arr numbers u32 0`.
+
+The element count is important: while consuming those elements, the parser
+does not interpret `--`, `--help`, or any other option-looking string as an
+option. For example, the following defines four string elements:
+
+```sh
+lispico --arr values s 4 '[' ']' '--help' '' program.lisp
+```
+
+Alternatively, use `--arr-new NAME TYPE LENGTH` for a zero-initialized array
+and `--arr-set NAME INDEX VALUE` to populate selected zero-based indices:
+
+```sh
+lispico \
+  --arr-new numbers u32 4 \
+  --arr-set numbers 0 123 \
+  --arr-set numbers 1 321 \
+  --arr-set numbers 3 567 \
+  program.lisp
+```
+
+The resulting array contains `[123, 321, 0, 567]`. Missing numeric elements
+are zero; missing string elements are empty strings. `--arr-set` requires an
+array already declared earlier on the command line, rejects invalid indices,
+and uses that array’s declared type to parse its value. It also works on arrays
+created with `--arr`.
+
+These options work naturally with Bash arrays, without any array-specific
+string serialization or escaping:
+
+```bash
+numbers=(10 20 30 40)
+
+lispico \
+  --arr numbers u32 "${#numbers[@]}" "${numbers[@]}" \
+  program.lisp
+
+values=(
+  'hello, world'
+  'some [text]'
+  '--help'
+  ''
+)
+
+lispico \
+  --arr values s "${#values[@]}" "${values[@]}" \
+  program.lisp
+```
+
+### Freezing command-line definitions
+
+`--freeze NAME` marks a previously declared CLI scalar or array immutable.
+Option order matters: freezing a name before its `--var`, `--arr` or `--arr-new`
+definition fails. Once frozen, the array cannot be modified by later
+`--arr-set` options, and the script cannot change it either.
+
+```sh
+lispico \
+  --var limit u32:100 \
+  --freeze limit \
+  --arr-new numbers u32 4 \
+  --arr-set numbers 0 123 \
+  --freeze numbers \
+  program.lisp
+```
+
+Only definitions made on the command line can be targeted by `--freeze`; it does
+not look up built-in symbols. Just as for scalar values, array values are copied
+to evaluator-owned storage before script evaluation.
 
 ### Original arguments and script arguments
 

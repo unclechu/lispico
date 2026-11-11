@@ -6,23 +6,28 @@
 
 #include "symbol.h"
 
-// CLI-only values are parsed before evaluation. Names and string contents
+// CLI definitions are collected before evaluation. Names and string contents
 // initially refer to the process `argv` strings, which remain alive in `main()`.
-// The executable copies string values into evaluator-owned storage later.
+// Arrays own temporary element storage; the executable copies all arrays and
+// strings into evaluator-owned storage before evaluating the source.
 typedef struct {
   const char *name;
-  Value value;
+  SymbolKind kind; // Either `SYM_VARIABLE` or `SYM_ARRAY`.
   bool frozen;
-} CliVariable;
+  union {
+    Value value;
+    Array array;
+  } as;
+} CliDefinition;
 
 typedef struct {
   const char *source_file; // Defaults to `/dev/stdin`.
   bool print_result;
   int raw_args_start; // Index immediately after `--`, or `argc` if absent.
 
-  CliVariable *variables;
-  size_t variable_count;
-  size_t variable_capacity;
+  CliDefinition *definitions;
+  size_t definition_count;
+  size_t definition_capacity;
 } CliOptions;
 
 typedef enum {
