@@ -6,37 +6,15 @@
 # shellcheck disable=SC1111
 # Do not assume environment variables presence:
 # shellcheck enable=check-unassigned-uppercase
+# Set directory to project root:
+# shellcheck source-path=SCRIPTDIR/..
 
 set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 
 SCRIPT_DIR=$(dirname -- "${BASH_SOURCE[0]}")
 cd -- "$SCRIPT_DIR/.." # Switch to project root
 
-# Terminal colors
-# Disable stdout terminal coloring for redirects
-if [[ ! -t 1 && ${FORCE_COLOR:-0} != 1 && ${GITHUB_ACTIONS:-} != true ]]; then
-  O_RESET_COLOR=
-  O_SECONDARY_COLOR=
-  O_FAIL_COLOR=
-  O_PASS_COLOR=
-else
-  O_RESET_COLOR=$'\033[0m'
-  O_SECONDARY_COLOR=$'\033[1m'
-  O_FAIL_COLOR=$'\033[1;37;41m'
-  O_PASS_COLOR=$'\033[32m'
-fi
-# Disable stderr terminal coloring for redirects
-if [[ ! -t 2 && ${FORCE_COLOR:-0} != 1 && ${GITHUB_ACTIONS:-} != true ]]; then
-  E_RESET_COLOR=
-  # E_SECONDARY_COLOR=
-  E_FAIL_COLOR=
-  # E_PASS_COLOR=
-else
-  E_RESET_COLOR=$'\033[0m'
-  # E_SECONDARY_COLOR=$'\033[1m'
-  E_FAIL_COLOR=$'\033[1;37;41m'
-  # E_PASS_COLOR=$'\033[32m'
-fi
+source tests/dev-scripts/colors.sh
 
 passed=0
 failed=0

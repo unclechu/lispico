@@ -6,7 +6,6 @@
 # shellcheck disable=SC1111
 # Do not assume environment variables presence:
 # shellcheck enable=check-unassigned-uppercase
-#
 # Set directory to project root:
 # shellcheck source-path=SCRIPTDIR/..
 
