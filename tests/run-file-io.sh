@@ -30,6 +30,8 @@ fi
 >/dev/null type tail
 >/dev/null type ln
 
+source tests/dev-scripts/colors.sh
+
 TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rfv -- "$TMP_DIR"; }
 trap cleanup EXIT
@@ -52,7 +54,8 @@ echo
 (set -o xtrace; cmp -- "$TMP_DIR/input" "$TMP_DIR/from-stdin")
 capture=$(<"$TMP_DIR/stream.stdout")
 if [[ $capture != SYM_EMPTY || -s "$TMP_DIR/stream.stderr" ]]; then
-  >&2 echo '[FAIL] File I/O stream test produced unexpected output'
+  >&2 printf '%s[FAIL]%s File I/O stream test produced unexpected output\n' \
+    "$E_FAIL_COLOR" "$E_RESET_COLOR"
   >&2 cat -- "$TMP_DIR/stream.stderr"
   exit 1
 fi
@@ -66,7 +69,8 @@ fi
 (set -o xtrace; cmp -- "$TMP_DIR/input" "$TMP_DIR/from-file")
 capture=$(<"$TMP_DIR/file.stdout")
 if [[ $capture != SYM_EMPTY || -s "$TMP_DIR/file.stderr" ]]; then
-  >&2 echo '[FAIL] File I/O regular file test produced unexpected output'
+  >&2 printf '%s[FAIL]%s File I/O regular file test produced unexpected output\n' \
+    "$E_FAIL_COLOR" "$E_RESET_COLOR"
   >&2 cat -- "$TMP_DIR/file.stderr"
   exit 1
 fi
@@ -77,7 +81,7 @@ fi
   >"$TMP_DIR/empty.stdout" 2>"$TMP_DIR/empty.stderr")
 
 if [[ -s "$TMP_DIR/empty" || -s "$TMP_DIR/empty.stderr" ]]; then
-  >&2 echo '[FAIL] Empty file I/O stream test failed'
+  >&2 printf '%s[FAIL]%s Empty file I/O stream test failed\n' "$E_FAIL_COLOR" "$E_RESET_COLOR"
   exit 1
 fi
 
@@ -92,7 +96,8 @@ fi
 (set -o xtrace; tail -c +4097 -- "$TMP_DIR/input" | cmp -- - "$TMP_DIR/suffix")
 capture=$(<"$TMP_DIR/bounded.stdout")
 if [[ $capture != SYM_EMPTY || -s "$TMP_DIR/bounded.stderr" ]]; then
-  >&2 echo '[FAIL] File I/O bounded stdin test produced unexpected output'
+  >&2 printf '%s[FAIL]%s File I/O bounded stdin test produced unexpected output\n' \
+    "$E_FAIL_COLOR" "$E_RESET_COLOR"
   >&2 cat -- "$TMP_DIR/bounded.stderr"
   exit 1
 fi
@@ -117,7 +122,8 @@ fi
 
 capture=$(<"$TMP_DIR/type.stdout")
 if [[ $capture != SYM_EMPTY || -s "$TMP_DIR/type.stderr" ]]; then
-  >&2 echo '[FAIL] File type classification test produced unexpected output'
+  >&2 printf '%s[FAIL]%s File type classification test produced unexpected output\n' \
+    "$E_FAIL_COLOR" "$E_RESET_COLOR"
   >&2 cat -- "$TMP_DIR/type.stderr"
   exit 1
 fi
@@ -127,14 +133,16 @@ fi
 if (set -o xtrace; timeout -- "$TIMEOUT" \
   "$LISPICO_EXECUTABLE" -ps tests/file-io/file-type-error.lisp -- "$TMP_DIR/link-loop" \
   >"$TMP_DIR/type-loop.stdout" 2>"$TMP_DIR/type-loop.stderr"); then
-  >&2 echo '[FAIL] File type symbolic link loop should fail evaluation'
+  >&2 printf '%s[FAIL]%s File type symbolic link loop should fail evaluation\n' \
+    "$E_FAIL_COLOR" "$E_RESET_COLOR"
   exit 1
 fi
 capture=$(<"$TMP_DIR/type-loop.stderr")
 if [[ $capture != *'(file-type) unable to follow symbolic link'* ]]; then
-  >&2 echo '[FAIL] File type symbolic link loop produced an unexpected error'
+  >&2 printf '%s[FAIL]%s File type symbolic link loop produced an unexpected error\n' \
+    "$E_FAIL_COLOR" "$E_RESET_COLOR"
   >&2 cat -- "$TMP_DIR/type-loop.stderr"
   exit 1
 fi
 
-echo '[PASS] File I/O streaming and file type tests passed'
+printf '%s[PASS]%s File I/O streaming and file type tests passed\n' "$O_PASS_COLOR" "$O_RESET_COLOR"
