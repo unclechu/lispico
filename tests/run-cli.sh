@@ -209,6 +209,11 @@ run_location_case 'custom single preceding line' \
 run_location_case 'zero preceding lines with separate option value' \
   $'[FAIL] Evaluation failed: Line 5 Column 8: Undefined variable\n5 |   (+ 1 missing)\n  |        ↑\n' \
   --source-context-before 0 "$TMP_DIR/context.lisp"
+# Every tab is displayed as four spaces, including tabs before the error.
+printf '\t123\n\t(+ 1\tmissing)\n' > "$TMP_DIR/tab-location.lisp"
+run_location_case 'tabs use fixed-width spacing in excerpt and arrow' \
+  $'[FAIL] Evaluation failed: Line 2 Column 7: Undefined variable\n1 |     123\n2 |     (+ 1    missing)\n  |             ↑\n' \
+  "$TMP_DIR/tab-location.lisp"
 run_location_case 'no source map omits excerpt' \
   $'[FAIL] Evaluation failed: Expression Index 7: Undefined variable\n' \
   --no-source-map "$TMP_DIR/context.lisp"

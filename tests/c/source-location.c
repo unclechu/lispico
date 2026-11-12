@@ -69,7 +69,23 @@ int main(void) {
   );
   check_excerpt(
     "one\r\n\t(+ missing)\r\n", 2, 5, 3,
-    "1 | one\n2 | \t(+ missing)\n  | \t   ↑\n"
+    "1 | one\n2 |     (+ missing)\n  |        ↑\n"
+  );
+  check_excerpt(
+    "a\tb\tmissing", 1, 5, 0,
+    "1 | a    b    missing\n  |           ↑\n"
+  );
+  check_excerpt(
+    "\t\tmissing", 1, 3, 0,
+    "1 |         missing\n  |         ↑\n"
+  );
+  check_excerpt(
+    "foo\tbar", 1, 4, 0,
+    "1 | foo    bar\n  |    ↑\n"
+  );
+  check_excerpt(
+    "\tfirst\nsecond\t\tmissing", 2, 9, 1,
+    "1 |     first\n2 | second        missing\n  |               ↑\n"
   );
   check_excerpt(
     "(println \"é\") missing", 1, 16, 0,

@@ -2277,8 +2277,8 @@ For example, `--source-context-before=0` shows only the failing line,
 while `--source-context-before=5` shows up to five lines before it.
 `--source-context-before N` is also accepted. When `--no-source-map` is
 specified, no source excerpt is printed. Positions are byte-based; tabs
-are preserved and ASCII control characters are escaped in excerpts.
-The reusable renderer is in `src/source-location.{c,h}`.
+are expanded to four spaces and ASCII control characters are escaped in
+excerpts. The reusable renderer is in `src/source-location.{c,h}`.
 
 ### Final evaluation result
 

@@ -66,7 +66,8 @@ bool print_source_location(
     fprintf(stream, "%*" PRIu32 " | ", width, line);
     for (size_t i = line_start; i < shown_end; ++i) {
       unsigned char c = (unsigned char)source[i];
-      if ((c < 0x20u && c != '\t') || c == 0x7fu)
+      if (c == '\t') fputs("    ", stream);
+      else if ((c < 0x20u && c != '\t') || c == 0x7fu)
         fprintf(stream, "\\x%02X", c);
       else
         fputc(c, stream);
@@ -75,11 +76,11 @@ bool print_source_location(
 
     if (line_start == error_line_start) {
       fprintf(stream, "%*s | ", width, "");
-      // Preserve tab stops, account for escaped control bytes, and skip
-      // UTF-8 continuation bytes when aligning ordinary single-width text.
+      // Match the displayed width of each source byte: four spaces for tabs,
+      // four for escaped controls, and one per UTF-8 leading byte.
       for (size_t i = line_start; i < error_offset; ++i) {
         unsigned char c = (unsigned char)source[i];
-        if (c == '\t') fputc('\t', stream);
+        if (c == '\t') fputs("    ", stream);
         else if ((c < 0x20u && c != '\t') || c == 0x7fu)
           fputs("    ", stream); // The corresponding source byte is shown as \xNN.
         else if ((c & 0xc0u) != 0x80u) fputc(' ', stream);
