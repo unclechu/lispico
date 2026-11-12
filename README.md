@@ -45,17 +45,28 @@ See [examples](examples), they are also used as regression tests.
 - **TODO** before removing WIP warning
 
   * Automated tests
-    + Parser tests (valid/invalid syntax, comments, escaping, numeric bounds)
-    + Evaluator tests for every supported operation
-    + Control-flow tests (`if`, `do`, `goto`, `label`, `exit`)
-    + Tests for expression, symbol, and allocation capacity limits
-    + Memory cleanup and repeated evaluation tests
-      + Evaluate multiple programs sequentially in the same process.
-      + Verify cleanup after successful evaluations, failures, and exits.
-      + Verify runtime allocations are wiped and released.
-      + Verify parser allocations are wiped and released.
-      + Verify symbols and control-flow state are reset between evaluations.
-      + Verify returned strings are copied before cleanup when needed.
+
+    + Parser
+      + [x] Numeric parser tests
+      + [x] CLI parser tests
+      + [ ] Lisp source parser syntax, comments, escaping and AST tests
+      + [ ] Parser failure atomicity and limits
+
+    + Evaluator and control flow
+      + [x] Existing success and failure regression examples
+      + [ ] Audit registered operations for missing cases
+      + [ ] Expand combined control-flow edge cases
+
+    + Storage and lifecycle
+      + [x] Basic storage capacity tests
+      + [x] Interpreter isolation and multithreading tests
+      + [ ] Exact capacity boundaries and symbol table exhaustion
+      + [ ] Dedicated sequential evaluation and cleanup tests
+      + [ ] Returned-value lifetime and ownership tests
+
+    + Memory verification
+      + [ ] Directly verify allocation wiping and freeing
+      + [ ] Run sanitizer and leak-checking builds
 
   * Using Lispico as a dynamic library option
 
