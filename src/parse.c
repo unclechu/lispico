@@ -372,16 +372,44 @@ static bool parse_atom(Parser *parser, uint32_t *index) {
 static bool parse_expression(Parser *parser, uint32_t *index) {
   if (!skip_layout(parser)) return false;
 
+  // Capture the start before parsing consumes the expression’s source text.
+  if (
+    parser->interpreter->storage.expression_source_locations != NULL &&
+    (
+      parser->position > UINT32_MAX ||
+      parser->line > UINT32_MAX ||
+      parser->column > UINT32_MAX
+    )
+  )
+    return parser_fail(parser, "Source location exceeds UINT32_MAX");
+
+  uint32_t byte_offset = (uint32_t)parser->position;
+  uint32_t line = (uint32_t)parser->line;
+  uint32_t column = (uint32_t)parser->column;
+
+  bool parsed = false;
   switch (current_char(parser)) {
-    case '(': return parse_list(parser, index);
-    case '"': return parse_string(parser, index);
+    case '(': parsed = parse_list(parser, index); break;
+    case '"': parsed = parse_string(parser, index); break;
     case ')': return parser_fail(parser, "Unexpected ')'");
     case '\0':
-      if (parser->position == parser->length) return parser_fail(parser, "Expected an expression");
+      if (parser->position >= parser->length) return parser_fail(parser, "Expected an expression");
+      parsed = parse_atom(parser, index);
       break;
+    default: parsed = parse_atom(parser, index); break;
   }
+  if (!parsed) return false;
 
-  return parse_atom(parser, index);
+  // A NULL map disables location tracking without changing expression storage.
+  if (parser->interpreter->storage.expression_source_locations != NULL)
+    parser->interpreter->storage.expression_source_locations[*index] =
+      (ExpressionSourceLocation) {
+        .byte_offset = byte_offset,
+        .line = line,
+        .column = column,
+      };
+
+  return true;
 }
 
 // Parse expressions from a string into

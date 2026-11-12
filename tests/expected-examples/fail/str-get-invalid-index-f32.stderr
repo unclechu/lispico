@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: Expression Index 4: (str-get) expects a u32 index
+[FAIL] Evaluation failed: Line 1 Column 25: (str-get) expects a u32 index

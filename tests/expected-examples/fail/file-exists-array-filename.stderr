@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: Expression Index 0: (file-exists) expects a string filename, got kind: SYM_ARRAY
+[FAIL] Evaluation failed: Line 1 Column 1: (file-exists) expects a string filename, got kind: SYM_ARRAY

@@ -8,6 +8,7 @@ void clean_expressions(Interpreter *interpreter) {
   if (interpreter == NULL || !interpreter->configured) return;
 
   Expression *expressions = interpreter->storage.expressions;
+  ExpressionSourceLocation *locations = interpreter->storage.expression_source_locations;
   ExpressionAllocation *allocations = interpreter->storage.expression_allocations;
 
   if (allocations != NULL)
@@ -26,16 +27,38 @@ void clean_expressions(Interpreter *interpreter) {
   if (expressions != NULL)
     wipe_memory(
       expressions,
-      (size_t)interpreter->storage.expression_capacity *
-      sizeof(*expressions)
+      (size_t)interpreter->storage.expression_capacity
+        * sizeof(*expressions)
+    );
+
+  if (locations != NULL)
+    wipe_memory(
+      locations,
+      (size_t)interpreter->storage.expression_source_location_capacity
+        * sizeof(*locations)
     );
 
   if (allocations != NULL)
     wipe_memory(
       allocations,
-      (size_t)interpreter->storage.expression_allocation_capacity *
-      sizeof(*allocations)
+      (size_t)interpreter->storage.expression_allocation_capacity
+        * sizeof(*allocations)
     );
+}
+
+const ExpressionSourceLocation* get_expression_source_location(
+  const Interpreter *interpreter,
+  uint32_t index
+) {
+  if (interpreter == NULL || !interpreter->configured) return NULL;
+  if (interpreter->storage.expression_source_locations == NULL) return NULL;
+  if (index >= interpreter->expression_count) return NULL;
+  if (index >= interpreter->storage.expression_source_location_capacity) return NULL;
+
+  const ExpressionSourceLocation *location =
+    &interpreter->storage.expression_source_locations[index];
+  if (location->line <= 0 || location->column <= 0) return NULL;
+  return location;
 }
 
 bool allocate_expression_data(

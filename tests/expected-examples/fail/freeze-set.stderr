@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: Expression Index 7: (set) symbol “number” is frozen
+[FAIL] Evaluation failed: Line 3 Column 1: (set) symbol “number” is frozen

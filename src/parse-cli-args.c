@@ -374,6 +374,7 @@ CliParseStatus parse_cli_args(
 
   *options = (CliOptions) {
     .source_file = "/dev/stdin",
+    .with_source_map = true,
     .raw_args_start = argc,
   };
 
@@ -394,6 +395,11 @@ CliParseStatus parse_cli_args(
 
     if (strcmp(arg, "--print-result") == 0) {
       options->print_result = true;
+      continue;
+    }
+
+    if (strcmp(arg, "--no-source-map") == 0) {
+      options->with_source_map = false;
       continue;
     }
 
@@ -572,6 +578,7 @@ void print_cli_usage(FILE *stream, const char *program_name) {
     "  -s, --source-file FILE        Read source from FILE (or “-” for stdin)\n"
     "      --source-file=FILE        Alternative form for the source path\n"
     "  -p, --print-result            Print the final evaluation result\n"
+    "      --no-source-map           Use expression indices instead of line and column\n"
     "      --var NAME TYPE:VAL       Define a mutable variable (repeatable)\n"
     "      --arr NAME TYPE N VALUE…  Define an array from N arguments\n"
     "      --arr-new NAME TYPE N     Define a zero-initialized array of length N\n"

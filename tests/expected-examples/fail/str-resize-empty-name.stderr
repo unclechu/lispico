@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: Expression Index 4: (str-resize) invalid variable name
+[FAIL] Evaluation failed: Line 1 Column 25: (str-resize) invalid variable name

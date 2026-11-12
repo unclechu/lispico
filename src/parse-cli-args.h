@@ -23,6 +23,7 @@ typedef struct {
 typedef struct {
   const char *source_file; // Defaults to `/dev/stdin`.
   bool print_result;
+  bool with_source_map; // Enabled by default; disabled by `--no-source-map`.
   int raw_args_start; // Index immediately after `--`, or `argc` if absent.
 
   CliDefinition *definitions;

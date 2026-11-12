@@ -124,6 +124,7 @@ int main(int argc, char **argv) {
   // Host-provided fixed-capacity interpreter storage.
   // Static storage keeps these tables off the C call stack.
   static Expression expression_storage[EXPR_CAPACITY] = {0};
+  static ExpressionSourceLocation expression_source_location_storage[EXPR_CAPACITY] = {0};
   static ExpressionAllocation expression_allocation_storage[EXPR_ALLOCATION_CAPACITY] = {0};
   static Symbol symbol_storage[SYMBOL_CAPACITY] = {0};
   static EvalRuntimeAllocation runtime_allocation_storage[EVAL_RUNTIME_ALLOCATION_CAPACITY] = {0};
@@ -132,6 +133,11 @@ int main(int argc, char **argv) {
   InterpreterStorage storage = {
     .expressions = expression_storage,
     .expression_capacity = EXPR_CAPACITY,
+
+    .expression_source_locations =
+      cli.with_source_map ? expression_source_location_storage : NULL,
+    .expression_source_location_capacity =
+      cli.with_source_map ? EXPR_CAPACITY : 0,
 
     .expression_allocations = expression_allocation_storage,
     .expression_allocation_capacity = EXPR_ALLOCATION_CAPACITY,
@@ -247,12 +253,24 @@ int main(int argc, char **argv) {
 
     case EVAL_FAIL:
       if (eval_outcome.failure_expression_index != EXPR_NONE) {
-        fprintf(
-          stderr,
-          "[FAIL] Evaluation failed: Expression Index %" PRIu32 ": %s\n",
-          eval_outcome.failure_expression_index,
-          eval_outcome.as.fail_msg
-        );
+        const ExpressionSourceLocation *location =
+          get_expression_source_location(&interpreter, eval_outcome.failure_expression_index);
+        if (location != NULL) {
+          fprintf(
+            stderr,
+            "[FAIL] Evaluation failed: Line %" PRIu32 " Column %" PRIu32 ": %s\n",
+            location->line,
+            location->column,
+            eval_outcome.as.fail_msg
+          );
+        } else {
+          fprintf(
+            stderr,
+            "[FAIL] Evaluation failed: Expression Index %" PRIu32 ": %s\n",
+            eval_outcome.failure_expression_index,
+            eval_outcome.as.fail_msg
+          );
+        }
       } else {
         fprintf(stderr, "[FAIL] Evaluation failed: %s\n", eval_outcome.as.fail_msg);
       }

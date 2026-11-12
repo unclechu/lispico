@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: Expression Index 0: (log) input is outside the finite mathematical domain
+[FAIL] Evaluation failed: Line 1 Column 1: (log) input is outside the finite mathematical domain

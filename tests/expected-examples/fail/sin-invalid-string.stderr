@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: Expression Index 0: (sin) received a value of an unexpected type: TYPE_STRING
+[FAIL] Evaluation failed: Line 1 Column 1: (sin) received a value of an unexpected type: TYPE_STRING

@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: Expression Index 0: (str-resize) expects a string variable “println”, got kind: SYM_NATIVE_FUNCTION
+[FAIL] Evaluation failed: Line 1 Column 1: (str-resize) expects a string variable “println”, got kind: SYM_NATIVE_FUNCTION

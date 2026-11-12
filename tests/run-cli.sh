@@ -50,6 +50,8 @@ printf '(set "answer" 999)\n' > "$TMP_DIR/mutate-answer.lisp"
 printf '(str-set "answer" 0 90)\n(arr-get argv 4)\n' > "$TMP_DIR/string-copy.lisp"
 printf '(exit 7)\n' > "$TMP_DIR/exit.lisp"
 printf '123\n' > "$TMP_DIR/stdin.lisp"
+printf '\n  (+ 1 missing)\n' > "$TMP_DIR/location.lisp"
+printf '(do\n  (defer missing) 123)\n' > "$TMP_DIR/deferred-location.lisp"
 
 passed=0
 failed=0
@@ -119,7 +121,8 @@ run_help_case() {
   && [[ ! -s "$TMP_DIR/actual.stderr" ]] \
   && grep -Fq -- 'Usage:' "$TMP_DIR/actual.stdout" \
   && grep -Fq -- '--arr-new' "$TMP_DIR/actual.stdout" \
-  && grep -Fq -- '--freeze' "$TMP_DIR/actual.stdout"
+  && grep -Fq -- '--freeze' "$TMP_DIR/actual.stdout" \
+  && grep -Fq -- '--no-source-map' "$TMP_DIR/actual.stdout"
   then
     printf '%s[PASS]%s %s\n' "$O_PASS_COLOR" "$O_RESET_COLOR" "$name"
     (( passed += 1 ))
@@ -153,6 +156,16 @@ run_case 'custom exit status remains unchanged by -p' 7 $'SYM_EMPTY\n' '' \
 run_help_case 'short help exits successfully' -h
 run_help_case 'long help exits successfully' --help
 run_help_case 'grouped help exits successfully' -ph
+
+printf '\nTesting evaluation source locations…\n'
+run_case 'source map is enabled by default' 1 '' \
+  'Line 2 Column 8: Undefined variable' "$TMP_DIR/location.lisp"
+run_case 'source map can be disabled' 1 '' \
+  'Expression Index 3: Undefined variable' --no-source-map "$TMP_DIR/location.lisp"
+run_case 'disabled map after positional source' 1 '' \
+  'Expression Index 3: Undefined variable' "$TMP_DIR/location.lisp" --no-source-map
+run_case 'deferred error retains its source location' 1 '' \
+  'Line 2 Column 10: Undefined variable' "$TMP_DIR/deferred-location.lisp"
 
 printf '\nTesting CLI variables and arrays…\n'
 run_case 'u32 scalar' 0 $'SYM_VARIABLE(TYPE_U32(123))\n' '' \

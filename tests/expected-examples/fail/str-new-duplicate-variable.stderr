@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: Expression Index 4: (str-new) variable “buffer” is already defined
+[FAIL] Evaluation failed: Line 1 Column 23: (str-new) variable “buffer” is already defined

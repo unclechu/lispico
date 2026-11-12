@@ -16,6 +16,7 @@ typedef struct {
   const char *expected_error;
   const char *expected_source;
   bool expected_print_result;
+  bool expected_without_source_map;
   int expected_raw_args_start; // 0 means argc (no standalone `--`).
   size_t expected_definitions;
 } ParseTest;
@@ -51,6 +52,7 @@ static void run_parse_test(
     ok = (
       strcmp(options.source_file, expected_source) == 0 &&
       options.print_result == test->expected_print_result &&
+      options.with_source_map == !test->expected_without_source_map &&
       options.raw_args_start == expected_raw_args_start &&
       options.definition_count == test->expected_definitions &&
       error[0] == '\0'
@@ -63,10 +65,11 @@ static void run_parse_test(
   snprintf(
     actual,
     sizeof(actual),
-    "status=%d, source=%s, print=%d, raw=%d, definitions=%zu, error=%s",
+    "status=%d, source=%s, print=%d, map=%d, raw=%d, definitions=%zu, error=%s",
     status,
     options.source_file != NULL ? options.source_file : "(null)",
     options.print_result,
+    options.with_source_map,
     options.raw_args_start,
     options.definition_count,
     error
@@ -256,7 +259,8 @@ static void test_usage(size_t *passed, size_t *failed) {
     strstr(buffer, "--arr NAME TYPE") != NULL &&
     strstr(buffer, "--arr-new NAME TYPE") != NULL &&
     strstr(buffer, "--arr-set NAME IDX VAL") != NULL &&
-    strstr(buffer, "--freeze NAME") != NULL,
+    strstr(buffer, "--freeze NAME") != NULL &&
+    strstr(buffer, "--no-source-map") != NULL,
     passed,
     failed
   );
@@ -267,6 +271,14 @@ int main(void) {
 
   const ParseTest cases[] = {
     { .name = "no arguments", .argv = {"lispico"}, .expected_status = CLI_PARSE_OK },
+    { .name = "source map disabled before positional source",
+      .argv = {"lispico", "--no-source-map", "script.lisp"},
+      .expected_status = CLI_PARSE_OK, .expected_source = "script.lisp",
+      .expected_without_source_map = true },
+    { .name = "source map disabled after positional source",
+      .argv = {"lispico", "script.lisp", "--no-source-map"},
+      .expected_status = CLI_PARSE_OK, .expected_source = "script.lisp",
+      .expected_without_source_map = true },
     { .name = "positional source", .argv = {"lispico", "script.lisp"},
       .expected_status = CLI_PARSE_OK, .expected_source = "script.lisp" },
     { .name = "stdin positional dash", .argv = {"lispico", "-"},

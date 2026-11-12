@@ -37,6 +37,10 @@ typedef struct {
   Expression *expressions;
   uint32_t expression_capacity;
 
+  // Optional source map. If provided, its capacity must cover all expressions.
+  ExpressionSourceLocation *expression_source_locations;
+  uint32_t expression_source_location_capacity;
+
   ExpressionAllocation *expression_allocations;
   uint32_t expression_allocation_capacity;
 

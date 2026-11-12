@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: Expression Index 0: (read-file) expects a u32 MAX_BYTES, got type: TYPE_I32
+[FAIL] Evaluation failed: Line 1 Column 1: (read-file) expects a u32 MAX_BYTES, got type: TYPE_I32

@@ -2213,6 +2213,7 @@ Options:
   -s, --source-file FILE        Read source from FILE (or “-” for stdin)
       --source-file=FILE        Alternative form for the source path
   -p, --print-result            Print the final evaluation result
+      --no-source-map           Use expression indices instead of line and column
       --var NAME TYPE:VAL       Define a mutable variable (repeatable)
       --arr NAME TYPE N VALUE…  Define an array from N arguments
       --arr-new NAME TYPE N     Define a zero-initialized array of length N
@@ -2249,6 +2250,13 @@ and `-psFILE` are not supported; use `-s FILE` or `-ps FILE` instead.
 `-h` / `--help` displays usage information and exits with code `0` without
 reading or evaluating a source file. Invalid arguments display an error and
 the same usage information on stderr, then exit with code `1`.
+
+Evaluation failures report the one-based source line and byte column of the
+innermost failing expression by default. Source locations are kept in an
+optional table separate from the expression storage. Use `--no-source-map`
+to disable that table and report `Expression Index N:` instead of
+`Line N Column N:`. Failures before an expression is evaluated have no location
+prefix. Source mapping does not change evaluation behavior or parser errors.
 
 ### Final evaluation result
 

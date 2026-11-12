@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
 #include "constants.h"
 #include "symbol.h"
@@ -42,6 +43,14 @@ typedef struct {
   uint32_t data;
 } Expression;
 
+// Optional location of an expression in its original source.
+// The array index matches the corresponding `Expression` index.
+typedef struct {
+  uint32_t byte_offset; // Zero-based byte position in the source
+  uint32_t line; // One-based source line
+  uint32_t column; // One-based byte column
+} ExpressionSourceLocation;
+
 typedef struct {
   void *data; // A pointer to the allocated memory (must be `free`-d when resetting evaluation)
   size_t size; // Allocated size in bytes (corresponds to `sizeof` value)
@@ -60,6 +69,12 @@ bool allocate_expression_data(
 );
 
 const ExpressionAllocation* get_expression_allocation(
+  const Interpreter *interpreter,
+  uint32_t index
+);
+
+// Returns NULL when source mapping is disabled or the index has no location.
+const ExpressionSourceLocation* get_expression_source_location(
   const Interpreter *interpreter,
   uint32_t index
 );

@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: Expression Index 4: (arr-size) symbol “foo” is not an array
+[FAIL] Evaluation failed: Line 2 Column 15: (arr-size) symbol “foo” is not an array
