@@ -17,6 +17,9 @@ cd -- "$SCRIPT_DIR/.." # Switch to project root
 
 : "${LISPICO_EXECUTABLE:=./lispico}"
 
+# Keep existing plain-text expectations independent of an installed `bat`.
+export LISPICO_SOURCE_HIGHLIGHT=none
+
 # Guard dependencies
 if [[ ! -x "$LISPICO_EXECUTABLE" ]]; then
   >&2 printf '“%s” is not executable (did you run “./build.sh” first?)\n' "$LISPICO_EXECUTABLE"

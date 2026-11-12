@@ -55,6 +55,15 @@ else
   (( failed += 1 ))
 fi
 
+echo '=== Running source highlighting tests =================================='
+if (set -o xtrace; tests/run-source-highlight.sh); then
+  printf '%s[PASS]%s Source highlighting tests passed\n' "$O_PASS_COLOR" "$O_RESET_COLOR"
+  (( passed += 1 ))
+else
+  >&2 printf '%s[FAIL]%s Source highlighting tests failed\n' "$E_FAIL_COLOR" "$E_RESET_COLOR"
+  (( failed += 1 ))
+fi
+
 echo '=== Running C tests ===================================================='
 if (set -o xtrace; tests/run-c.sh); then
   printf '%s[PASS]%s C tests passed\n' "$O_PASS_COLOR" "$O_RESET_COLOR"

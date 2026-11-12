@@ -261,7 +261,9 @@ static void test_usage(size_t *passed, size_t *failed) {
     strstr(buffer, "--arr-set NAME IDX VAL") != NULL &&
     strstr(buffer, "--freeze NAME") != NULL &&
     strstr(buffer, "--no-source-map") != NULL &&
-    strstr(buffer, "--source-context-before=N") != NULL,
+    strstr(buffer, "--source-context-before=N") != NULL &&
+    strstr(buffer, "--source-highlight=MODE") != NULL &&
+    strstr(buffer, "--source-highlight-sh=CMD") != NULL,
     passed,
     failed
   );
@@ -306,6 +308,66 @@ static void test_source_context_before(size_t *passed, size_t *failed) {
     if (ok && status == CLI_PARSE_ERROR)
       ok = (error[0] != '\0');
 
+    check(cases[i].name, ok, passed, failed);
+    clean_cli_args(&options);
+  }
+}
+
+// Highlighting configuration belongs to the CLI, but environment fallback is
+// intentionally resolved later by the desktop executable.
+static void test_source_highlighting_options(size_t *passed, size_t *failed) {
+  struct {
+    const char *name;
+    char *argv[5];
+    CliParseStatus expected_status;
+    const char *expected_mode;
+    const char *expected_command;
+  } cases[] = {
+    { "default highlight is deferred to the host", {"lispico", NULL}, CLI_PARSE_OK, NULL, NULL },
+    { "bat highlight mode", {"lispico", "--source-highlight=bat", NULL}, CLI_PARSE_OK, "bat", NULL },
+    { "none highlight mode", {"lispico", "--source-highlight=none", NULL}, CLI_PARSE_OK, "none", NULL },
+    { "shell highlight mode", {"lispico", "--source-highlight=sh", NULL}, CLI_PARSE_OK, "sh", NULL },
+    { "separate highlight mode", {"lispico", "--source-highlight", "bat", NULL}, CLI_PARSE_OK, "bat", NULL },
+    { "equals shell command", {"lispico", "--source-highlight-sh=printf hi", NULL}, CLI_PARSE_OK, NULL, "printf hi" },
+    { "separate shell command", {"lispico", "--source-highlight-sh", "cat", NULL}, CLI_PARSE_OK, NULL, "cat" },
+    { "CLI command follows mode", {"lispico", "--source-highlight=sh", "--source-highlight-sh=cat", NULL}, CLI_PARSE_OK, "sh", "cat" },
+    { "unknown highlight mode", {"lispico", "--source-highlight=other", NULL}, CLI_PARSE_ERROR, NULL, NULL },
+    { "empty highlight mode", {"lispico", "--source-highlight=", NULL}, CLI_PARSE_ERROR, NULL, NULL },
+    { "missing highlight mode", {"lispico", "--source-highlight", NULL}, CLI_PARSE_ERROR, NULL, NULL },
+    { "missing shell command", {"lispico", "--source-highlight-sh", NULL}, CLI_PARSE_ERROR, NULL, NULL },
+  };
+
+  for (size_t i = 0; i < (sizeof(cases) / sizeof(cases[0])); ++i) {
+    int argc = 0;
+    while (cases[i].argv[argc] != NULL) ++argc;
+
+    CliOptions options = {0};
+    char error[ERR_MSG_SIZE] = {'\0'};
+    CliParseStatus status = parse_cli_args(
+      argc,
+      cases[i].argv,
+      &options,
+      error,
+      sizeof(error)
+    );
+
+    bool ok = (status == cases[i].expected_status);
+    if (ok && status == CLI_PARSE_OK) {
+      ok = (
+        options.source_highlight == cases[i].expected_mode ||
+        (
+          options.source_highlight != NULL && cases[i].expected_mode != NULL &&
+          strcmp(options.source_highlight, cases[i].expected_mode) == 0
+        )
+      ) && (
+        options.source_highlight_sh == cases[i].expected_command ||
+        (
+          options.source_highlight_sh != NULL && cases[i].expected_command != NULL &&
+          strcmp(options.source_highlight_sh, cases[i].expected_command) == 0
+        )
+      );
+    }
+    if (ok && status == CLI_PARSE_ERROR) ok = (error[0] != '\0');
     check(cases[i].name, ok, passed, failed);
     clean_cli_args(&options);
   }
@@ -466,6 +528,7 @@ int main(void) {
   test_invalid_api(&passed, &failed);
   test_usage(&passed, &failed);
   test_source_context_before(&passed, &failed);
+  test_source_highlighting_options(&passed, &failed);
 
   return summary_report("CLI argument parser", passed, failed);
 }

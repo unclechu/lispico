@@ -21,6 +21,9 @@ cd -- "$SCRIPT_DIR/../.." # Switch to project root
 
 : "${LISPICO_EXECUTABLE:=./lispico}"
 
+# Keep existing plain-text expectations independent of an installed `bat`.
+export LISPICO_SOURCE_HIGHLIGHT=none
+
 LISPICO_EXECUTABLE_NAME=${LISPICO_EXECUTABLE##*/}
 LISPICO_EXECUTABLE_DIR=$(dirname -- "$LISPICO_EXECUTABLE")
 
@@ -127,7 +130,8 @@ handle-example() {
       PATH="$LISPICO_EXECUTABLE_DIR:$PATH" \
         "$PWD/$source" >"$expectation_out" 2>"$expectation_err" || exit_code=$?
     else
-      "$LISPICO_EXECUTABLE" -ps "$source" >"$expectation_out" 2>"$expectation_err" || exit_code=$?
+      "$LISPICO_EXECUTABLE" --source-highlight=none -ps "$source" \
+        >"$expectation_out" 2>"$expectation_err" || exit_code=$?
     fi
 
     printf '%d\n' "$exit_code" >"$expectation_ec"

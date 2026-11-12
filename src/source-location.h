@@ -16,3 +16,24 @@ bool print_source_location(
   const ExpressionSourceLocation *location,
   uint32_t lines_before
 );
+
+// The highlighted excerpt must contain exactly the requested lines, with
+// unchanged visible text and only ANSI SGR sequences added by a highlighter.
+// Validate the entire excerpt before printing so a caller can fall back.
+bool print_highlighted_source_location(
+  FILE *stream,
+  const char *source,
+  size_t source_length,
+  const ExpressionSourceLocation *location,
+  uint32_t lines_before,
+  const char *highlighted,
+  size_t highlighted_length
+);
+
+// Write the original source with tabs expanded to four spaces, matching the
+// built-in renderer. ASCII controls are escaped and CRLF becomes LF.
+bool write_source_for_highlighting(
+  FILE *stream,
+  const char *source,
+  size_t source_length
+);

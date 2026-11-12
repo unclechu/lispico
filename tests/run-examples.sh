@@ -16,6 +16,9 @@ cd -- "$SCRIPT_DIR/.." # Switch to project root
 
 : "${LISPICO_EXECUTABLE:=./lispico}"
 
+# Keep existing plain-text expectations independent of an installed `bat`.
+export LISPICO_SOURCE_HIGHLIGHT=none
+
 LISPICO_EXECUTABLE_NAME=${LISPICO_EXECUTABLE##*/}
 LISPICO_EXECUTABLE_DIR=$(dirname -- "$LISPICO_EXECUTABLE")
 
@@ -87,7 +90,8 @@ run_test() {
       || actual_exit_code=$?
   else
     timeout -- "$TIMEOUT" \
-      "$LISPICO_EXECUTABLE" -ps "$SOURCE" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" \
+      "$LISPICO_EXECUTABLE" --source-highlight=none -ps "$SOURCE" \
+      >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" \
       || actual_exit_code=$?
   fi
 

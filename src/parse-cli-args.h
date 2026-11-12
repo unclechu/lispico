@@ -26,6 +26,8 @@ typedef struct {
   bool print_result;
   bool with_source_map; // Enabled by default; disabled by `--no-source-map`.
   uint32_t source_context_before; // Number of preceding source lines (default: 3).
+  const char *source_highlight; // NULL means environment setting or default “bat”.
+  const char *source_highlight_sh; // NULL means environment setting, when needed.
   int raw_args_start; // Index immediately after `--`, or `argc` if absent.
 
   CliDefinition *definitions;

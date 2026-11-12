@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <inttypes.h>
 
@@ -15,7 +16,7 @@
 #include "src/stdlib-env-var.h"
 #include "src/stdlib-file-io.h"
 #include "src/parse-cli-args.h"
-#include "src/source-location.h"
+#include "src/source-highlight.h"
 #include "src/storage.h"
 
 #define DEFAULT_EXECUTABLE_NAME "lispico"
@@ -120,6 +121,36 @@ int main(int argc, char **argv) {
     default:
       fprintf(stderr, "[FAIL] Unexpected CLI parse result status: %d\n", cli_status);
       return 1;
+  }
+
+  // The command-line setting overrides the environment. With source mapping
+  // disabled, highlighting settings have no effect and need not be resolved.
+  SourceHighlightMode source_highlight = SOURCE_HIGHLIGHT_NONE;
+  const char *source_highlight_sh = NULL;
+  if (cli.with_source_map) {
+    const char *mode = cli.source_highlight;
+    if (mode == NULL) mode = getenv("LISPICO_SOURCE_HIGHLIGHT");
+    if (mode == NULL || mode[0] == '\0') mode = "bat";
+
+    if (!parse_source_highlight_mode(mode, &source_highlight)) {
+      fprintf(stderr, "[FAIL] Invalid source highlighter mode “%s”\n", mode);
+      clean_cli_args(&cli);
+      return 1;
+    }
+
+    source_highlight_sh = cli.source_highlight_sh;
+
+    if (source_highlight_sh == NULL)
+      source_highlight_sh = getenv("LISPICO_SOURCE_HIGHLIGHT_SH");
+
+    if (
+      source_highlight == SOURCE_HIGHLIGHT_SH &&
+      (source_highlight_sh == NULL || source_highlight_sh[0] == '\0')
+    ) {
+      fprintf(stderr, "[FAIL] Source highlighter sh mode requires a shell command\n");
+      clean_cli_args(&cli);
+      return 1;
+    }
   }
 
   // Host-provided fixed-capacity interpreter storage.
@@ -264,12 +295,14 @@ int main(int argc, char **argv) {
             location->column,
             eval_outcome.as.fail_msg
           );
-          print_source_location(
+          print_source_highlight(
             stderr,
             source,
             source_size,
             location,
-            cli.source_context_before
+            cli.source_context_before,
+            source_highlight,
+            source_highlight_sh
           );
         } else {
           fprintf(

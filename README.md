@@ -2216,6 +2216,10 @@ Options:
       --no-source-map            Use expression indices instead of line and column
       --source-context-before N  Show N preceding source lines (default: 3)
       --source-context-before=N  Alternative form of --source-context-before
+      --source-highlight=MODE    Source renderer: bat (default), none or sh
+      --source-highlight MODE    Alternative form of --source-highlight
+      --source-highlight-sh=CMD  Shell command for sh mode
+      --source-highlight-sh CMD  Alternative form of --source-highlight-sh
       --var NAME TYPE:VAL        Define a mutable variable (repeatable)
       --arr NAME TYPE N VALUE…   Define an array from N arguments
       --arr-new NAME TYPE N      Define a zero-initialized array of length N
@@ -2279,6 +2283,96 @@ while `--source-context-before=5` shows up to five lines before it.
 specified, no source excerpt is printed. Positions are byte-based; tabs
 are expanded to four spaces and ASCII control characters are escaped in
 excerpts. The reusable renderer is in `src/source-location.{c,h}`.
+
+### Source highlighting
+
+By default, Lispico tries to use `bat` to syntax-highlight the excerpt. If
+`bat` is unavailable, fails, or changes the displayed source text unexpectedly,
+Lispico silently falls back to its own plain source renderer. `bat` only
+provides ANSI syntax colors: Lispico still prints the line numbers, context,
+and `↑` marker. Before invoking `bat`, Lispico expands every source tab to
+exactly four spaces, matching the built-in arrow alignment. It sends the
+entire source through standard input so highlighting can retain the context
+of multiline strings or comments, while requesting only the relevant lines.
+The `bat` preset suppresses the highlighter’s stderr.
+
+```sh
+lispico --source-highlight=bat program.lisp
+lispico --source-highlight=none program.lisp
+```
+
+The selected renderer can also come from `LISPICO_SOURCE_HIGHLIGHT`. The
+CLI option always takes priority over the environment variable, and the
+built-in default is `bat`. Supported values are `bat`, `none`, and `sh`.
+The separate-argument form `--source-highlight MODE` is also supported.
+For reproducible plain-text diagnostics in tests, use
+`--source-highlight=none`.
+
+#### Custom shell renderer
+
+Use `--source-highlight=sh` to let an external shell expression render the
+**entire excerpt**, including any line numbers, colors, and column marker.
+Provide the expression with `--source-highlight-sh=COMMAND`,
+`--source-highlight-sh COMMAND`, or `LISPICO_SOURCE_HIGHLIGHT_SH`. The CLI
+command takes priority over the environment command. Selecting `sh` without
+a nonempty command is a configuration error.
+
+The command is executed using C’s `system()` shell-command interface in a
+separate child process. It receives the **unchanged original source** on
+standard input, and its standard output is directed into Lispico’s diagnostic
+stderr stream. Its stderr is inherited and is **not** suppressed. The child
+receives additional context variables without changing Lispico’s own process
+environment:
+
+| Variable                             | Description                                                       |
+| ---                                  | ---                                                               |
+| `LISPICO_SOURCE_CONTEXT_BEFORE`      | Requested number of preceding lines                               |
+| `LISPICO_SOURCE_CONTEXT_LINE`        | One-based failing source line; last line of the requested excerpt |
+| `LISPICO_SOURCE_CONTEXT_COLUMN`      | One-based byte column of the failing expression                   |
+| `LISPICO_SOURCE_CONTEXT_BYTE_OFFSET` | Zero-based source byte offset                                     |
+| `LISPICO_SOURCE_CONTEXT_FIRST_LINE`  | First line of the requested excerpt, clamped to line 1            |
+
+`LISPICO_SOURCE_CONTEXT_FIRST_LINE` saves custom commands from calculating
+the context range themselves. For example, with three preceding lines and an
+error on line 2, the requested range is lines **1–2**, not a nonexistent
+line −1 through 2. The command can use
+`--line-range="$LISPICO_SOURCE_CONTEXT_FIRST_LINE:$LISPICO_SOURCE_CONTEXT_LINE"`
+directly, or ignore the requested range and render any content it chooses.
+
+For example, this shell renderer uses `bat`’s native whole-line highlighting
+and adds a separate `↑` using the supplied error column:
+
+```sh
+export LISPICO_SOURCE_HIGHLIGHT=sh
+export LISPICO_SOURCE_HIGHLIGHT_SH='
+  bat \
+    --language=lisp \
+    --color=always \
+    --paging=never \
+    --style=plain \
+    --wrap=never \
+    --highlight-line="$LISPICO_SOURCE_CONTEXT_LINE" \
+    --line-range="$LISPICO_SOURCE_CONTEXT_FIRST_LINE:$LISPICO_SOURCE_CONTEXT_LINE" \
+    -
+  printf "%*s↑\n" "$((LISPICO_SOURCE_CONTEXT_COLUMN - 1))" ""
+'
+
+lispico program.lisp
+```
+
+`bat` supports highlighting an entire line but does not provide a native
+column marker. The example’s `printf` uses byte columns, so its arrow is
+intended for ASCII source without tabs. Custom renderers that expand tabs
+or display wide Unicode characters should adjust their marker themselves.
+Unlike the `bat` preset, `sh` receives the original tabs unchanged.
+
+The shell expression is executable code; only use commands you trust. If it
+fails, Lispico keeps any output and inherited stderr messages, adds a warning
+with the command’s exit status, and **does not fall back** to plain rendering.
+The highlighter’s status does not change Lispico’s evaluation exit code.
+`--no-source-map` takes precedence over all highlighting settings: no
+highlighter is run and the expression-index diagnostic remains unchanged.
+The process launcher is in `src/source-highlight.{c,h}`.
 
 ### Final evaluation result
 
@@ -2693,13 +2787,17 @@ $ ./build.sh
 $ tests/run-examples.sh
 $ tests/run-file-io.sh
 $ tests/run-cli.sh
+$ tests/run-source-highlight.sh
 $ tests/run-c.sh
 ```
 
 The standalone parser tests are in `tests/c/parse-cli-args.c` and run with
 `tests/run-c.sh`. The executable integration tests in `tests/run-cli.sh` check
 argument parsing, typed scalars and arrays, interpolation, freezing, and
-CLI error behavior. Both are also run in CI.
+CLI error behavior. `tests/run-source-highlight.sh` tests the `bat` preset
+with a fake executable, including tab conversion and silent fallback, as well
+as shell execution, context variables, environment overrides, and warnings.
+All are also run in CI.
 
 Measure time and memory usage for all examples individually:
 

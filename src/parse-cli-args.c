@@ -404,6 +404,56 @@ CliParseStatus parse_cli_args(
       continue;
     }
 
+    // The source-highlight mode is optional; environment defaults are resolved
+    // by the desktop executable after the command line has been parsed.
+    const char highlight_prefix[] = "--source-highlight=";
+    const char highlight_sh_prefix[] = "--source-highlight-sh=";
+    if (strncmp(arg, highlight_prefix, sizeof(highlight_prefix) - 1u) == 0) {
+      const char *mode = arg + sizeof(highlight_prefix) - 1u;
+
+      if (
+        strcmp(mode, "none") != 0 &&
+        strcmp(mode, "bat") != 0 &&
+        strcmp(mode, "sh") != 0
+      )
+        return cli_error(error, error_size, "invalid value for --source-highlight");
+
+      options->source_highlight = mode;
+      continue;
+    }
+    if (strcmp(arg, "--source-highlight") == 0) {
+
+      if (i + 1 >= argc)
+        return cli_error(error, error_size, "option “%s” requires a mode", arg);
+
+      ++i; // Consume the next value argument
+
+      const char *mode = argv[i];
+
+      if (
+        strcmp(mode, "none") != 0 &&
+        strcmp(mode, "bat") != 0 &&
+        strcmp(mode, "sh") != 0
+      )
+        return cli_error(error, error_size, "invalid value for --source-highlight");
+
+      options->source_highlight = mode;
+      continue;
+    }
+    if (strncmp(arg, highlight_sh_prefix, sizeof(highlight_sh_prefix) - 1u) == 0) {
+      options->source_highlight_sh = arg + sizeof(highlight_sh_prefix) - 1u;
+      continue;
+    }
+    if (strcmp(arg, "--source-highlight-sh") == 0) {
+      if (i + 1 >= argc)
+        return cli_error(error, error_size, "option “%s” requires a command", arg);
+
+      ++i; // Consume the next value argument
+
+      options->source_highlight_sh = argv[i];
+      continue;
+    }
+
     // Configure how many lines preceding a failure are included in its excerpt.
     const char context_prefix[] = "--source-context-before=";
     if (strncmp(arg, context_prefix, sizeof(context_prefix) - 1u) == 0) {
@@ -602,6 +652,10 @@ void print_cli_usage(FILE *stream, const char *program_name) {
     "      --no-source-map            Use expression indices instead of line and column\n"
     "      --source-context-before N  Show N preceding source lines (default: 3)\n"
     "      --source-context-before=N  Alternative form of --source-context-before\n"
+    "      --source-highlight=MODE    Source renderer: bat (default), none or sh\n"
+    "      --source-highlight MODE    Alternative form of --source-highlight\n"
+    "      --source-highlight-sh=CMD  Shell command for sh mode\n"
+    "      --source-highlight-sh CMD  Alternative form of --source-highlight-sh\n"
     "      --var NAME TYPE:VAL        Define a mutable variable (repeatable)\n"
     "      --arr NAME TYPE N VALUE…   Define an array from N arguments\n"
     "      --arr-new NAME TYPE N      Define a zero-initialized array of length N\n"

@@ -35,6 +35,11 @@ jobs:
         env:
           LISPICO_EXECUTABLE: ./result/bin/lispico
 
+      - name: Run source highlighting tests
+        run: bash tests/run-source-highlight.sh
+        env:
+          LISPICO_EXECUTABLE: ./result/bin/lispico
+
       - name: Run C tests
         run: nix-shell --run './tests/run-c.sh'
 
