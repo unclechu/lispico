@@ -106,97 +106,6 @@ bool write_source_for_highlighting(
   return true;
 }
 
-// Recognize only harmless ANSI Select Graphic Rendition sequences (colors).
-// Reject other control sequences rather than passing them into diagnostics.
-static bool skip_sgr(const char *text, size_t length, size_t *position) {
-  if (text[*position] != '\x1b') return false;
-  size_t i = *position + 1u;
-  if (i >= length || text[i] != '[') return false;
-  ++i;
-  while (i < length && ((text[i] >= '0' && text[i] <= '9') || text[i] == ';'))
-    ++i;
-  if (i >= length || text[i] != 'm') return false;
-  *position = i + 1u;
-  return true;
-}
-
-// Match a highlighted line against its exact visible source text. The original
-// source determines tab widths and arrow positions, never ANSI byte lengths.
-static bool match_highlighted_line(
-  const char *source,
-  size_t line_start,
-  size_t shown_end,
-  const char *highlighted,
-  size_t highlighted_length,
-  size_t *position
-) {
-  for (size_t i = line_start; i < shown_end; ++i) {
-    char shown[4];
-    size_t length = display_byte((unsigned char)source[i], shown);
-
-    for (size_t j = 0; j < length; ++j) {
-
-      while (*position < highlighted_length && highlighted[*position] == '\x1b')
-        if (!skip_sgr(highlighted, highlighted_length, position))
-          return false;
-
-      if (*position >= highlighted_length || highlighted[*position] != shown[j])
-        return false;
-
-      *position += 1u;
-    }
-  }
-
-  while (*position < highlighted_length && highlighted[*position] == '\x1b')
-    if (!skip_sgr(highlighted, highlighted_length, position))
-      return false;
-
-  if (*position < highlighted_length && highlighted[*position] != '\n') return false;
-  if (*position < highlighted_length) *position += 1u;
-  return true;
-}
-
-// First validate the complete highlighter output. This prevents partially
-// colored diagnostics followed by a second plain excerpt on failure.
-static bool validate_highlighted_excerpt(
-  const char *source,
-  size_t source_length,
-  const SourceExcerpt *excerpt,
-  const char *highlighted,
-  size_t highlighted_length
-) {
-  if (highlighted == NULL) return false;
-  size_t position = 0;
-  size_t line_start = excerpt->first_line_start;
-
-  for (;;) {
-    size_t line_end = line_start;
-    while (line_end < source_length && source[line_end] != '\n') ++line_end;
-    size_t shown_end = line_end;
-    if (shown_end > line_start && source[shown_end - 1u] == '\r') --shown_end;
-
-    if (!match_highlighted_line(
-      source,
-      line_start,
-      shown_end,
-      highlighted,
-      highlighted_length,
-      &position
-    )) return false;
-
-    if (line_start == excerpt->error_line_start) break;
-    if (line_end >= source_length) return false;
-    line_start = line_end + 1u;
-  }
-
-  // bat may append a final color reset after the last source line.
-  while (position < highlighted_length && highlighted[position] == '\x1b')
-    if (!skip_sgr(highlighted, highlighted_length, &position))
-      return false;
-
-  return position == highlighted_length;
-}
-
 // Display a source excerpt with its failing line and an upward arrow.
 // Source locations use byte offsets; the displayed source is never modified.
 static bool print_source_excerpt(
@@ -214,16 +123,8 @@ static bool print_source_excerpt(
   if (!find_excerpt(source, source_length, location, lines_before, &excerpt))
     return false;
 
-  if (
-    highlighted != NULL &&
-    !validate_highlighted_excerpt(
-      source,
-      source_length,
-      &excerpt,
-      highlighted,
-      highlighted_length
-    )
-  ) return false;
+  // Trust the highlighter’s returned source text; only require some output.
+  if (highlighted != NULL && highlighted_length == 0) return false;
 
   uint32_t line = excerpt.first_line;
   size_t line_start = excerpt.first_line_start;

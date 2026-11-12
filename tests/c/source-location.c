@@ -109,8 +109,8 @@ int main(void) {
   assert(strcmp(prepared_text, "first\n    (+ 1 missing)\n") == 0);
   fclose(prepared);
 
-  // The external highlighter may add ANSI SGR sequences but must not change
-  // any displayed source bytes. The entire excerpt is checked before output.
+  // The highlighter’s output is used as-is. The arrow still uses the original
+  // source bytes, independently of any color codes or changed text.
   const char *colored_source = "\x1b[35mfirst\x1b[0m\n\x1b[35m    (+ 1 missing)\x1b[0m\n";
   ExpressionSourceLocation highlighted_location = {
     .byte_offset = 13,
@@ -141,15 +141,42 @@ int main(void) {
 
   highlighted_stream = tmpfile();
   assert(highlighted_stream != NULL);
-  const char *invalid_color = "first\n\x1b[2J    (+ 1 missing)\n";
+  const char *different_text = "different first line\ndifferent failing line\n";
+  assert(print_highlighted_source_location(
+    highlighted_stream,
+    source_with_tabs,
+    strlen(source_with_tabs),
+    &highlighted_location,
+    1,
+    different_text,
+    strlen(different_text)
+  ));
+  rewind(highlighted_stream);
+  char different_result[512] = {0};
+  size_t different_length = fread(
+    different_result,
+    1,
+    sizeof(different_result) - 1u,
+    highlighted_stream
+  );
+  const char *expected_different =
+    "1 | different first line\x1b[0m\n"
+    "2 | different failing line\x1b[0m\n"
+    "  |          ↑\n";
+  assert(different_length == strlen(expected_different));
+  assert(memcmp(different_result, expected_different, different_length) == 0);
+  fclose(highlighted_stream);
+
+  highlighted_stream = tmpfile();
+  assert(highlighted_stream != NULL);
   assert(!print_highlighted_source_location(
     highlighted_stream,
     source_with_tabs,
     strlen(source_with_tabs),
     &highlighted_location,
     1,
-    invalid_color,
-    strlen(invalid_color)
+    "",
+    0
   ));
   assert(ftell(highlighted_stream) == 0);
   fclose(highlighted_stream);

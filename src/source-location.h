@@ -17,9 +17,9 @@ bool print_source_location(
   uint32_t lines_before
 );
 
-// The highlighted excerpt must contain exactly the requested lines, with
-// unchanged visible text and only ANSI SGR sequences added by a highlighter.
-// Validate the entire excerpt before printing so a caller can fall back.
+// Render the highlighter’s output with Lispico’s line-number gutter and arrow.
+// Trust its source text; arrow placement still uses the original source bytes.
+// Return false for an empty highlighter result or an invalid source location.
 bool print_highlighted_source_location(
   FILE *stream,
   const char *source,

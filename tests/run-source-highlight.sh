@@ -46,7 +46,7 @@ mkdir -p -- "$TMP_DIR/bin"
 printf '\t10\n20\n\t(+ 1 missing)\n' > "$TMP_DIR/failure.lisp"
 
 # An independent fake bat makes the tests deterministic on machines with or
-# without a real bat executable. It can also simulate invalid output/failure.
+# without a real bat executable. It can also simulate unusual output/failure.
 cat > "$TMP_DIR/bin/bat" <<'BAT'
 #!/usr/bin/env bash
 set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
@@ -57,8 +57,11 @@ case "${LISPICO_TEST_BAT_RESULT:-ok}" in
     >&2 printf 'Fake bat diagnostic that must be suppressed\n'
     exit 23
     ;;
-  invalid)
-    printf 'Not the original source\n'
+  modified)
+    printf 'Different context\nDifferent failing line\n'
+    exit 0
+    ;;
+  empty)
     exit 0
     ;;
   ok)
@@ -133,6 +136,8 @@ check_result 'bat is the default renderer' 1 '' "${header}${colored}" \
 
 printf '\t10\n20\n\t(+ 1 missing)\n' | sed $'s/\t/    /g' > "$TMP_DIR/expected-bat-stdin"
 if grep -Fqx -- '--style=plain' "$TMP_DIR/bat-args" \
+&& grep -Fqx -- '--wrap=never' "$TMP_DIR/bat-args" \
+&& grep -Fqx -- '--paging=never' "$TMP_DIR/bat-args" \
 && grep -Fqx -- '--color=always' "$TMP_DIR/bat-args" \
 && grep -Fqx -- '--line-range=2:3' "$TMP_DIR/bat-args" \
 && cmp -s -- "$TMP_DIR/expected-bat-stdin" "$TMP_DIR/bat-stdin"
@@ -149,8 +154,13 @@ fi
 export LISPICO_TEST_BAT_RESULT=failed
 check_result 'bat command failure silently falls back' 1 '' "${header}${plain}" \
   --source-highlight=bat --source-context-before=1 "$TMP_DIR/failure.lisp"
-export LISPICO_TEST_BAT_RESULT=invalid
-check_result 'invalid bat output silently falls back' 1 '' "${header}${plain}" \
+export LISPICO_TEST_BAT_RESULT=modified
+modified=$'2 | Different context\033[0m\n3 | Different failing line\033[0m\n  |          ↑\n'
+check_result 'bat output is rendered without comparing its text to the source' 1 '' \
+  "${header}${modified}" \
+  --source-highlight=bat --source-context-before=1 "$TMP_DIR/failure.lisp"
+export LISPICO_TEST_BAT_RESULT=empty
+check_result 'empty bat output silently falls back' 1 '' "${header}${plain}" \
   --source-highlight=bat --source-context-before=1 "$TMP_DIR/failure.lisp"
 unset LISPICO_TEST_BAT_RESULT
 

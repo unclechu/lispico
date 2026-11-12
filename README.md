@@ -2286,15 +2286,15 @@ excerpts. The reusable renderer is in `src/source-location.{c,h}`.
 
 ### Source highlighting
 
-By default, Lispico tries to use `bat` to syntax-highlight the excerpt. If
-`bat` is unavailable, fails, or changes the displayed source text unexpectedly,
-Lispico silently falls back to its own plain source renderer. `bat` only
-provides ANSI syntax colors: Lispico still prints the line numbers, context,
-and `↑` marker. Before invoking `bat`, Lispico expands every source tab to
-exactly four spaces, matching the built-in arrow alignment. It sends the
-entire source through standard input so highlighting can retain the context
-of multiline strings or comments, while requesting only the relevant lines.
-The `bat` preset suppresses the highlighter’s stderr.
+By default, Lispico tries to use `bat` to syntax-highlight the excerpt. If `bat`
+is unavailable, fails, or returns empty output, Lispico silently falls back to
+its own plain source renderer. `bat` only provides ANSI syntax colors: Lispico
+still prints the line numbers, context, and `↑` marker. Before invoking `bat`,
+Lispico expands every source tab to exactly four spaces, matching the built-in
+arrow alignment. It sends the entire source through standard input so
+highlighting can retain the context of multiline strings or comments, while
+requesting only the relevant lines. The `bat` preset suppresses the
+highlighter’s stderr.
 
 ```sh
 lispico --source-highlight=bat program.lisp
