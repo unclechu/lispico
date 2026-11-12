@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (arr-slice) requested range is out of bounds
+1 | (arr-slice (arr 1 2) 3 0) ; Starting index exceeds array size
+  | ↑

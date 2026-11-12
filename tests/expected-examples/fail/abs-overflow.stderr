@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (abs) result exceeds i32 range
+1 | (abs -2147483648) ; i32 overflow
+  | ↑

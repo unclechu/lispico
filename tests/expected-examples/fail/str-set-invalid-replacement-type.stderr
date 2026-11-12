@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 25: (str-set) expects a string as the second argument
+1 | (var "message" "Hello") (str-set "message" 123) ; Two-argument form requires a string
+  |                         ↑

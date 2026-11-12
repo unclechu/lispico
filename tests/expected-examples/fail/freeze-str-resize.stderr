@@ -1,1 +1,5 @@
 [FAIL] Evaluation failed: Line 3 Column 1: (str-resize) symbol “text” is frozen
+1 | (var "text" "hello")
+2 | (freeze "text")
+3 | (str-resize "text" 5)
+  | ↑

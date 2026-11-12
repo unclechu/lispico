@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (arr-take) requested range is out of bounds
+1 | (arr-take (arr 1 2) 3) ; Cannot take more than array size
+  | ↑

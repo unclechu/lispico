@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 1: (type-of) expects a primitive value or string, got instead: SYM_LABEL
+1 | (label "foo")
+2 | (type-of foo) ; Evaluation failure (evaluated labels are not considered primitives or strings)
+  | ↑

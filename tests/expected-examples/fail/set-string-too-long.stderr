@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 1: (set) invalid string or out-of-bounds write
+1 | (var "message" "Hello")
+2 | (set "message" "Hello, Lispico") ; Replacement exceeds the allocated string length
+  | ↑

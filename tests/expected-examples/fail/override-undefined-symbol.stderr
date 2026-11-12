@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (override) symbol “undefined-override-target” is not defined
+1 | (override "undefined-override-target" 42) ; Target symbol must already exist
+  | ↑

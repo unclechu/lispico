@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (atan2) expects both arguments be of the same type, got instead: (TYPE_F32, TYPE_U32)
+1 | (atan2 1.0 0) ; Both arguments must have the same type
+  | ↑

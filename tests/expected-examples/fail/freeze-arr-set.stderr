@@ -1,1 +1,5 @@
 [FAIL] Evaluation failed: Line 3 Column 1: (arr-set) symbol “numbers” is frozen
+1 | (arr-new "numbers" u32 3)
+2 | (freeze "numbers")
+3 | (arr-set "numbers" 0 42)
+  | ↑

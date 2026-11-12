@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 25: (str-get) string index is out of bounds
+1 | (var "message" "Hello") (str-get "message" 5) ; Index equals string length
+  |                         ↑

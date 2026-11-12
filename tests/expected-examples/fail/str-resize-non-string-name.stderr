@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 25: (str-resize) invalid variable name
+1 | (var "message" "Hello") (str-resize 123 2) ; Variable name must be a string
+  |                         ↑

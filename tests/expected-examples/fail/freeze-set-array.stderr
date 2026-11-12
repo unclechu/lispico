@@ -1,1 +1,5 @@
 [FAIL] Evaluation failed: Line 3 Column 1: (set) symbol “numbers” is frozen
+1 | (var "numbers" (arr 1 2 3))
+2 | (freeze "numbers")
+3 | (set "numbers" numbers)
+  | ↑

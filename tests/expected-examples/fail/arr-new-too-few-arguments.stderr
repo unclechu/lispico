@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 1: (arr-new) expects exactly 3 arguments, got instead: 2
+1 | ; arr-new-too-few-arguments.lisp
+2 | (arr-new "foo" u32) ; Missing array length
+  | ↑

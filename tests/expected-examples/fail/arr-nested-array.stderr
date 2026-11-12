@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (arr) expects scalar elements
+1 | (arr (arr-new "inner" u32 1)) ; Arrays cannot be elements of arrays
+  | ↑

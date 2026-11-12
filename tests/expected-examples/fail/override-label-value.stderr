@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 30: (override) expects a scalar or array value, got kind: SYM_LABEL
+1 | (var "foo" 1) (label "here") (override "foo" here) ; Labels cannot be stored as values
+  |                              ↑

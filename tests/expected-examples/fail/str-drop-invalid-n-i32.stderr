@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (str-drop) expects a u32 byte count
+1 | (str-drop "Hello" -1) ; N must be u32
+  | ↑

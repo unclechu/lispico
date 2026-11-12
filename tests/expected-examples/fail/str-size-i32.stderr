@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (str-size) expects a string
+1 | (str-size -123) ; Expected a string, got i32
+  | ↑

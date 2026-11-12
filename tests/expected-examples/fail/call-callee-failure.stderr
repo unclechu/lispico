@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 1: (/) division by zero
+1 | ; The native callee’s evaluation failure must propagate through (call).
+2 | (call "/" 1 0)
+  | ↑

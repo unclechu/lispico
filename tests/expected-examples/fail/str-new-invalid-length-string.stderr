@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (str-new) expects a u32 length
+1 | (str-new "buffer" "10") ; Length must be u32
+  | ↑

@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 12: (defer) deferred expression cannot interrupt its enclosing sequence
+1 | (do (defer (leave))) ; Deferred expression tries to interrupt the enclosing sequence
+  |            ↑

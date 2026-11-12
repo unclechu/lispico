@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
 
@@ -24,6 +25,7 @@ typedef struct {
   const char *source_file; // Defaults to `/dev/stdin`.
   bool print_result;
   bool with_source_map; // Enabled by default; disabled by `--no-source-map`.
+  uint32_t source_context_before; // Number of preceding source lines (default: 3).
   int raw_args_start; // Index immediately after `--`, or `argc` if absent.
 
   CliDefinition *definitions;

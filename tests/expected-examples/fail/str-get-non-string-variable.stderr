@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 20: (str-get) symbol “number” is not a string variable
+1 | (var "number" 123) (str-get "number" 0) ; Named variable must contain a string
+  |                    ↑

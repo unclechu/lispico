@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (call) function “missing-function” is not defined
+1 | (call "missing-function" 1)
+  | ↑

@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 23: (arr-set) array element type mismatch
+1 | ; arr-set-type-mismatch.lisp
+2 | (arr-new "foo" u32 1) (arr-set "foo" 0 -1) ; Element type mismatch
+  |                       ↑

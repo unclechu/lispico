@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 25: (str-resize) expects a string variable “items”, got kind: SYM_ARRAY
+1 | (var "items" (arr 1 2)) (str-resize "items" 2) ; Arrays cannot be resized as strings
+  |                         ↑

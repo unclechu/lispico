@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 5: (leave) count exceeds current (depth)
+1 | (do (leave 2)) ; Count exceeds depth
+  |     ↑

@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 1: (arr-new) unsupported array element type
+1 | ; arr-new-invalid-element-type.lisp
+2 | (arr-new "foo" void 2) ; void is not a supported array element type
+  | ↑

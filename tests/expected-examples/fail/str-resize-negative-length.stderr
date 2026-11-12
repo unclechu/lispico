@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 25: (str-resize) expects a u32 length, got type: TYPE_I32
+1 | (var "message" "Hello") (str-resize "message" -1) ; Length must be u32, not i32
+  |                         ↑

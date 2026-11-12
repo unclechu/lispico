@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 26: (set) symbol “values” is not a variable
+1 | (arr-new "values" u32 2) (set "values" 1) ; Cannot assign scalar to array
+  |                          ↑

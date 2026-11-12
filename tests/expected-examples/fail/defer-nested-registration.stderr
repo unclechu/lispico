@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 12: (defer) cannot register in an exiting (do) sequence
+1 | (do (defer (defer 123))) ; Cannot register in an exiting sequence
+  |            ↑

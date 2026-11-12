@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (/) division by zero
+1 | (/ 5 0) ; Expected evaluation failure (division by zero attempt)
+  | ↑

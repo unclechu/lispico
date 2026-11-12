@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (and) condition must be a numeric value
+1 | (and true "hello") ; Evaluation failure (strings are not allowed)
+  | ↑

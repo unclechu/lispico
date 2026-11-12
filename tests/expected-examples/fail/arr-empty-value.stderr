@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (arr) expects scalar elements
+1 | (arr (if false 1)) ; Empty evaluation result is not an array element
+  | ↑

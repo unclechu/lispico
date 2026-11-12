@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 1: (call) function “if” is not defined
+1 | ; (if) is an evaluator special form, not a native function.
+2 | (call "if" true 1 2)
+  | ↑

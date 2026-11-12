@@ -15,6 +15,7 @@
 #include "src/stdlib-env-var.h"
 #include "src/stdlib-file-io.h"
 #include "src/parse-cli-args.h"
+#include "src/source-location.h"
 #include "src/storage.h"
 
 #define DEFAULT_EXECUTABLE_NAME "lispico"
@@ -262,6 +263,13 @@ int main(int argc, char **argv) {
             location->line,
             location->column,
             eval_outcome.as.fail_msg
+          );
+          print_source_location(
+            stderr,
+            source,
+            source_size,
+            location,
+            cli.source_context_before
           );
         } else {
           fprintf(

@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (freeze) invalid symbol name
+1 | (freeze 123)
+  | ↑

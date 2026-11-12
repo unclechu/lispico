@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (str-get) symbol “println” is not a string variable
+1 | (str-get "println" 0) ; Named symbol is not a string variable
+  | ↑

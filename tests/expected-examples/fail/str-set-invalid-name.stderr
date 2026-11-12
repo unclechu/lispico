@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (str-set) invalid variable name
+1 | (str-set 123 "hello") ; Variable name must be a string
+  | ↑

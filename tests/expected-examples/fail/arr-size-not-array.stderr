@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 15: (arr-size) symbol “foo” is not an array
+1 | ; arr-size-not-array.lisp
+2 | (var "foo" 1) (arr-size "foo") ; Symbol is not an array
+  |               ↑

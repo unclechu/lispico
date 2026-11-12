@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (env-var-read) environment variable “LISPICO_TEST_ENV_UNSET” is not set
+1 | (env-var-read "LISPICO_TEST_ENV_UNSET") ; Unset without a default
+  | ↑

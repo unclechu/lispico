@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 23: (arr-get) array index is out of bounds
+1 | ; arr-get-empty.lisp
+2 | (arr-new "foo" u32 0) (arr-get "foo" 0) ; Empty array cannot be indexed
+  |                       ↑

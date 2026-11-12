@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 1: (arr-get) array “unknown” is not defined
+1 | ; arr-get-undefined.lisp
+2 | (arr-get "unknown" 0) ; Array does not exist
+  | ↑

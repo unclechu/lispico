@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (str-resize) expects exactly 2 arguments, got instead: 1
+1 | (str-resize "message") ; Missing the new length
+  | ↑

@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 23: (arr-set) expects a u32 index
+1 | ; arr-set-invalid-index.lisp
+2 | (arr-new "foo" u32 1) (arr-set "foo" 0.0 1) ; Index must be u32
+  |                       ↑

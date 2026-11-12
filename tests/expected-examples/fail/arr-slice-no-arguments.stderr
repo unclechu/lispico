@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (arr-slice) expects exactly 3 arguments, got instead: 0
+1 | (arr-slice) ; Requires an array, starting index, and length
+  | ↑

@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (max) expects finite numeric values (u32, i32, or f32)
+1 | (max "a" "b") ; Not numeric
+  | ↑

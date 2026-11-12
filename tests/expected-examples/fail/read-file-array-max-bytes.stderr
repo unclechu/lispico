@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (read-file) expects a u32 MAX_BYTES, got kind: SYM_ARRAY
+1 | (read-file "/dev/null" (arr 1 2)) ; MAX_BYTES must be a scalar u32
+  | ↑

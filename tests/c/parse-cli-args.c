@@ -260,10 +260,55 @@ static void test_usage(size_t *passed, size_t *failed) {
     strstr(buffer, "--arr-new NAME TYPE") != NULL &&
     strstr(buffer, "--arr-set NAME IDX VAL") != NULL &&
     strstr(buffer, "--freeze NAME") != NULL &&
-    strstr(buffer, "--no-source-map") != NULL,
+    strstr(buffer, "--no-source-map") != NULL &&
+    strstr(buffer, "--source-context-before=N") != NULL,
     passed,
     failed
   );
+}
+
+// Exercise the configurable source excerpt size without involving evaluation.
+static void test_source_context_before(size_t *passed, size_t *failed) {
+  struct {
+    const char *name;
+    char *argv[5];
+    CliParseStatus expected_status;
+    uint32_t expected_lines;
+  } cases[] = {
+    { "default three preceding lines", {"lispico", NULL}, CLI_PARSE_OK, 3u },
+    { "equals form", {"lispico", "--source-context-before=5", NULL}, CLI_PARSE_OK, 5u },
+    { "separate value form", {"lispico", "--source-context-before", "2", NULL}, CLI_PARSE_OK, 2u },
+    { "zero preceding lines", {"lispico", "--source-context-before=0", NULL}, CLI_PARSE_OK, 0u },
+    { "source option after a source path", {"lispico", "file.lisp", "--source-context-before=1", NULL}, CLI_PARSE_OK, 1u },
+    { "missing context value", {"lispico", "--source-context-before", NULL}, CLI_PARSE_ERROR, 0u },
+    { "negative context value", {"lispico", "--source-context-before=-1", NULL}, CLI_PARSE_ERROR, 0u },
+    { "non-numeric context value", {"lispico", "--source-context-before=many", NULL}, CLI_PARSE_ERROR, 0u },
+    { "empty context value", {"lispico", "--source-context-before=", NULL}, CLI_PARSE_ERROR, 0u },
+    { "overflowing context value", {"lispico", "--source-context-before=4294967296", NULL}, CLI_PARSE_ERROR, 0u },
+  };
+
+  for (size_t i = 0; i < (sizeof(cases) / sizeof(cases[0])); ++i) {
+    int argc = 0;
+    while (cases[i].argv[argc] != NULL) ++argc;
+
+    CliOptions options = {0};
+    char error[ERR_MSG_SIZE] = {'\0'};
+    CliParseStatus status = parse_cli_args(
+      argc,
+      cases[i].argv,
+      &options,
+      error,
+      sizeof(error)
+    );
+    bool ok = (status == cases[i].expected_status);
+    if (ok && status == CLI_PARSE_OK)
+      ok = (options.source_context_before == cases[i].expected_lines);
+    if (ok && status == CLI_PARSE_ERROR)
+      ok = (error[0] != '\0');
+
+    check(cases[i].name, ok, passed, failed);
+    clean_cli_args(&options);
+  }
 }
 
 int main(void) {
@@ -420,6 +465,7 @@ int main(void) {
   print_test_header("parse_cli_args() API validation and usage");
   test_invalid_api(&passed, &failed);
   test_usage(&passed, &failed);
+  test_source_context_before(&passed, &failed);
 
   return summary_report("CLI argument parser", passed, failed);
 }

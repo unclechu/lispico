@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 26: (set) source array has 3 elements, destination has 2
+1 | (arr-new "values" u32 2) (set "values" (arr 1 2 3)) ; Source exceeds destination capacity
+  |                          ↑

@@ -1,1 +1,5 @@
 [FAIL] Evaluation failed: Line 3 Column 1: (read-file) symbol “read-file-status” is frozen
+1 | (read-file "tests/fixtures/file-io-input.txt" 2)
+2 | (freeze "read-file-status")
+3 | (read-file "tests/fixtures/file-io-input.txt" 2)
+  | ↑

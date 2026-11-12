@@ -1,1 +1,5 @@
 [FAIL] Evaluation failed: Line 3 Column 1: (label) symbol “again” is frozen
+1 | (label "again")
+2 | (freeze "again")
+3 | (label "again")
+  | ↑

@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 26: (set) array element type mismatch: expected TYPE_U32, got TYPE_I32
+1 | (arr-new "values" u32 2) (set "values" (arr -1)) ; Element types must match
+  |                          ↑

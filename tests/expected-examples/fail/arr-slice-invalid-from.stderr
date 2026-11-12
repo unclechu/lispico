@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (arr-slice) expects a u32 starting index
+1 | (arr-slice (arr 1 2) -1 1) ; Starting index must be u32
+  | ↑

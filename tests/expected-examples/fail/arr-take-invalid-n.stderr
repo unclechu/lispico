@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (arr-take) expects a u32 element count
+1 | (arr-take (arr 1 2) -1) ; Element count must be u32
+  | ↑

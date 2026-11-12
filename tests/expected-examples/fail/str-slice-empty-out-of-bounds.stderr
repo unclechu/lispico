@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (str-slice) requested range is out of bounds
+1 | (str-slice "" 0 1) ; Empty source cannot supply one byte
+  | ↑

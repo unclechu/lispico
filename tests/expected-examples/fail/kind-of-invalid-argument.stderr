@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (kind-of) invalid variable name
+1 | (kind-of 123) ; Evaluation failure (`(kind-of)` references variables by their names, not values)
+  | ↑

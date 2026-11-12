@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (sin) expects an f32 value
+1 | (sin 1) ; Requires f32
+  | ↑

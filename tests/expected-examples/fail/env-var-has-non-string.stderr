@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (env-var-has) expects a string environment variable name, got type: TYPE_U32
+1 | (env-var-has 123) ; Variable name must be a string
+  | ↑

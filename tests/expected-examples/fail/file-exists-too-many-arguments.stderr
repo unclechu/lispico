@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (file-exists) expects exactly 1 argument, got instead: 2
+1 | (file-exists "README.md" "README.md") ; Only one filename is accepted
+  | ↑

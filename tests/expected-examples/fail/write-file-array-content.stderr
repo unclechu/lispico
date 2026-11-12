@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (write-file) expects a string content value, got kind: SYM_ARRAY
+1 | (write-file "/dev/null" (arr 1 2)) ; Content must be a scalar string
+  | ↑

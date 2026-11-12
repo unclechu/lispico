@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 27: (arr-get) array index is out of bounds
+1 | (arr-new "numbers" u32 2) (arr-get numbers 2) ; Array index is out of bounds
+  |                           ↑

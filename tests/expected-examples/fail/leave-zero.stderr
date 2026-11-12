@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 5: (leave) count must be greater than 0
+1 | (do (leave 0)) ; Count cannot be zero
+  |     ↑

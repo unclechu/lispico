@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (var) expects a scalar or array value, got kind: SYM_EMPTY
+1 | (var "values" (if false 1)) ; Empty result is neither scalar nor array
+  | ↑

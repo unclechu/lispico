@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 23: (arr-get) expects a u32 index
+1 | ; arr-get-invalid-index.lisp
+2 | (arr-new "foo" u32 1) (arr-get "foo" -1) ; Index must be u32
+  |                       ↑

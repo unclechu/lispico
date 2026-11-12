@@ -1,1 +1,6 @@
 [FAIL] Evaluation failed: Line 5 Column 3: (assert) assertion failed: Original failure
+2 | ; while "Deferred failure" is executed too.
+3 | (do
+4 |   (defer (assert false "Deferred failure"))
+5 |   (assert false "Original failure"))
+  |   ↑

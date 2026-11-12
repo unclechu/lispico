@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (div) expects at least 2 arguments
+1 | (div) ; Requires at least two arguments
+  | ↑

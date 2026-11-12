@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (abs) received a value of an unexpected type: TYPE_STRING
+1 | (abs "hello") ; Not numeric
+  | ↑

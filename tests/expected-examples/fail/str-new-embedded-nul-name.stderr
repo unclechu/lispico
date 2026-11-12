@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (str-new) invalid variable name
+1 | (str-new "buf\0fer" 10) ; Variable names cannot contain NUL bytes
+  | ↑

@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 23: (arr-new) symbol “foo” is already defined
+1 | ; arr-new-duplicate.lisp
+2 | (arr-new "foo" u32 1) (arr-new "foo" u32 2) ; Duplicate symbol
+  |                       ↑

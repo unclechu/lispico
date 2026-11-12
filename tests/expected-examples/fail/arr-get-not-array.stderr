@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 17: (arr-get) symbol “foo” is not an array
+1 | ; arr-get-not-array.lisp
+2 | (var "foo" 123) (arr-get "foo" 0) ; Symbol is not an array
+  |                 ↑

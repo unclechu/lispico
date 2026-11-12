@@ -375,6 +375,7 @@ CliParseStatus parse_cli_args(
   *options = (CliOptions) {
     .source_file = "/dev/stdin",
     .with_source_map = true,
+    .source_context_before = 3u,
     .raw_args_start = argc,
   };
 
@@ -403,11 +404,31 @@ CliParseStatus parse_cli_args(
       continue;
     }
 
+    // Configure how many lines preceding a failure are included in its excerpt.
+    const char context_prefix[] = "--source-context-before=";
+    if (strncmp(arg, context_prefix, sizeof(context_prefix) - 1u) == 0) {
+      uint32_t count = 0;
+      if (!parse_array_index(arg + sizeof(context_prefix) - 1u, &count))
+        return cli_error(error, error_size, "invalid value for --source-context-before");
+      options->source_context_before = count;
+      continue;
+    }
+    if (strcmp(arg, "--source-context-before") == 0) {
+      if (i + 1 >= argc)
+        return cli_error(error, error_size, "option “%s” requires a line count", arg);
+      ++i; // Consume the next value argument
+      uint32_t count = 0;
+      if (!parse_array_index(argv[i], &count))
+        return cli_error(error, error_size, "invalid value for --source-context-before");
+      options->source_context_before = count;
+      continue;
+    }
+
     if (strcmp(arg, "--source-file") == 0 || strcmp(arg, "-s") == 0) {
       // Not enough arguments to provide the value for the option
       if (i + 1 >= argc)
         return cli_error(error, error_size, "option “%s” requires a file path", arg);
-      ++i;
+      ++i; // Consume the next value argument
       CliParseStatus result =
         set_source_file(options, &source_specified, argv[i], error, error_size);
       if (result != CLI_PARSE_OK) return result;
@@ -575,16 +596,18 @@ void print_cli_usage(FILE *stream, const char *program_name) {
     "Usage: %s [OPTIONS] [SOURCE_FILE] [-- SCRIPT_ARGS…]\n"
     "\n"
     "Options:\n"
-    "  -s, --source-file FILE        Read source from FILE (or “-” for stdin)\n"
-    "      --source-file=FILE        Alternative form for the source path\n"
-    "  -p, --print-result            Print the final evaluation result\n"
-    "      --no-source-map           Use expression indices instead of line and column\n"
-    "      --var NAME TYPE:VAL       Define a mutable variable (repeatable)\n"
-    "      --arr NAME TYPE N VALUE…  Define an array from N arguments\n"
-    "      --arr-new NAME TYPE N     Define a zero-initialized array of length N\n"
-    "      --arr-set NAME IDX VAL    Set an element of a previously defined array\n"
-    "      --freeze NAME             Freeze a previously defined variable or array\n"
-    "  -h, --help                    Display this help and exit\n"
+    "  -s, --source-file FILE         Read source from FILE (or “-” for stdin)\n"
+    "      --source-file=FILE         Alternative form for the source path\n"
+    "  -p, --print-result             Print the final evaluation result\n"
+    "      --no-source-map            Use expression indices instead of line and column\n"
+    "      --source-context-before N  Show N preceding source lines (default: 3)\n"
+    "      --source-context-before=N  Alternative form of --source-context-before\n"
+    "      --var NAME TYPE:VAL        Define a mutable variable (repeatable)\n"
+    "      --arr NAME TYPE N VALUE…   Define an array from N arguments\n"
+    "      --arr-new NAME TYPE N      Define a zero-initialized array of length N\n"
+    "      --arr-set NAME IDX VAL     Set an element of a previously defined array\n"
+    "      --freeze NAME              Freeze a previously defined variable or array\n"
+    "  -h, --help                     Display this help and exit\n"
     "\n"
     "Types: u32, i32, f32, s. Numeric true/false become typed 1/0.\n"
     "Array values are separate arguments; --freeze prevents later --arr-set.\n"

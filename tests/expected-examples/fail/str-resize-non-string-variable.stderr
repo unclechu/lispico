@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 20: (str-resize) expects a string variable “number”, got type: TYPE_U32
+1 | (var "number" 123) (str-resize "number" 2) ; The target must be a string variable
+  |                    ↑

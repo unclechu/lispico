@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (sqrt) expects an f32 value
+1 | (sqrt 4) ; Requires f32
+  | ↑

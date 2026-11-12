@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 1: (arr-new) expects a type and length of u32
+1 | ; arr-new-invalid-element-type-kind.lisp
+2 | (arr-new "foo" -1 2) ; Type identifier must be u32
+  | ↑

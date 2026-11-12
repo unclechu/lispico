@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (pow) result exceeds the numeric type range
+1 | (pow -2 (type i32 32)) ; i32 overflow
+  | ↑

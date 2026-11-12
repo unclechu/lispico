@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (arr) expects all elements to have the same type (TYPE_U32 vs. TYPE_I32)
+1 | (arr 1 -2) ; u32 and i32 do not match
+  | ↑

@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 5: (leave) argument must be u32
+1 | (do (leave -1)) ; Argument is i32, not u32
+  |     ↑

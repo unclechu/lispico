@@ -28,6 +28,7 @@ fi
 >/dev/null type timeout
 >/dev/null type cmp
 >/dev/null type cat
+>/dev/null type diff
 
 source tests/dev-scripts/colors.sh
 
@@ -122,7 +123,8 @@ run_help_case() {
   && grep -Fq -- 'Usage:' "$TMP_DIR/actual.stdout" \
   && grep -Fq -- '--arr-new' "$TMP_DIR/actual.stdout" \
   && grep -Fq -- '--freeze' "$TMP_DIR/actual.stdout" \
-  && grep -Fq -- '--no-source-map' "$TMP_DIR/actual.stdout"
+  && grep -Fq -- '--no-source-map' "$TMP_DIR/actual.stdout" \
+  && grep -Fq -- '--source-context-before=N' "$TMP_DIR/actual.stdout"
   then
     printf '%s[PASS]%s %s\n' "$O_PASS_COLOR" "$O_RESET_COLOR" "$name"
     (( passed += 1 ))
@@ -166,6 +168,54 @@ run_case 'disabled map after positional source' 1 '' \
   'Expression Index 3: Undefined variable' "$TMP_DIR/location.lisp" --no-source-map
 run_case 'deferred error retains its source location' 1 '' \
   'Line 2 Column 10: Undefined variable' "$TMP_DIR/deferred-location.lisp"
+
+# Exact stderr comparison for the source excerpt and arrow placement.
+run_location_case() {
+  local name=$1
+  local expected_stderr=$2
+  shift 2
+
+  local actual_status=0
+  if timeout -- 15s \
+  "$LISPICO_EXECUTABLE" "$@" \
+  > "$TMP_DIR/actual.stdout" \
+  2> "$TMP_DIR/actual.stderr"
+  then
+    actual_status=0
+  else
+    actual_status=$?
+  fi
+
+  printf '%s' "$expected_stderr" > "$TMP_DIR/expected.stderr"
+  if (( actual_status == 1 )) \
+  && [[ ! -s "$TMP_DIR/actual.stdout" ]] \
+  && cmp -s -- "$TMP_DIR/expected.stderr" "$TMP_DIR/actual.stderr"; then
+    printf '%s[PASS]%s %s\n' "$O_PASS_COLOR" "$O_RESET_COLOR" "$name"
+    (( passed += 1 ))
+  else
+    >&2 printf '%s[FAIL]%s %s (exit %d)\n' "$E_FAIL_COLOR" "$E_RESET_COLOR" "$name" "$actual_status"
+    >&2 diff -u -- "$TMP_DIR/expected.stderr" "$TMP_DIR/actual.stderr" || true
+    (( failed += 1 ))
+  fi
+}
+
+printf '10\n20\n30\n40\n  (+ 1 missing)\n' > "$TMP_DIR/context.lisp"
+run_location_case 'default three preceding lines' \
+  $'[FAIL] Evaluation failed: Line 5 Column 8: Undefined variable\n2 | 20\n3 | 30\n4 | 40\n5 |   (+ 1 missing)\n  |        ↑\n' \
+  "$TMP_DIR/context.lisp"
+run_location_case 'custom single preceding line' \
+  $'[FAIL] Evaluation failed: Line 5 Column 8: Undefined variable\n4 | 40\n5 |   (+ 1 missing)\n  |        ↑\n' \
+  --source-context-before=1 "$TMP_DIR/context.lisp"
+run_location_case 'zero preceding lines with separate option value' \
+  $'[FAIL] Evaluation failed: Line 5 Column 8: Undefined variable\n5 |   (+ 1 missing)\n  |        ↑\n' \
+  --source-context-before 0 "$TMP_DIR/context.lisp"
+run_location_case 'no source map omits excerpt' \
+  $'[FAIL] Evaluation failed: Expression Index 7: Undefined variable\n' \
+  --no-source-map "$TMP_DIR/context.lisp"
+run_case 'reject malformed source context' 1 '' 'invalid value for --source-context-before' \
+  --source-context-before=oops "$TMP_DIR/context.lisp"
+run_case 'reject missing source context value' 1 '' 'requires a line count' \
+  "$TMP_DIR/context.lisp" --source-context-before
 
 printf '\nTesting CLI variables and arrays…\n'
 run_case 'u32 scalar' 0 $'SYM_VARIABLE(TYPE_U32(123))\n' '' \

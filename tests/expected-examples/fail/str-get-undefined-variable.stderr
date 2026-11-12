@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (str-get) variable “unknown” is not defined
+1 | (str-get "unknown" 0) ; Variable does not exist
+  | ↑

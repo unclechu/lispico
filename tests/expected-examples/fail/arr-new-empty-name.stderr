@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 1: (arr-new) invalid array name
+1 | ; arr-new-empty-name.lisp
+2 | (arr-new "" u32 2) ; Name cannot be empty
+  | ↑

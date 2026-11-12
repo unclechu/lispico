@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (str-resize) expects a string variable “println”, got kind: SYM_NATIVE_FUNCTION
+1 | (str-resize "println" 2) ; Native functions are not string variables
+  | ↑

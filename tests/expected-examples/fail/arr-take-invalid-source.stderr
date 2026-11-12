@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (arr-take) expects an array as the first argument, got kind: SYM_VARIABLE
+1 | (arr-take "hello" 1) ; The source must be an array value
+  | ↑

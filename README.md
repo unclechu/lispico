@@ -2210,16 +2210,18 @@ parsing libraries. The reusable parser is in `src/parse-cli-args.{c,h}`.
 Usage: lispico [OPTIONS] [SOURCE_FILE] [-- SCRIPT_ARGS…]
 
 Options:
-  -s, --source-file FILE        Read source from FILE (or “-” for stdin)
-      --source-file=FILE        Alternative form for the source path
-  -p, --print-result            Print the final evaluation result
-      --no-source-map           Use expression indices instead of line and column
-      --var NAME TYPE:VAL       Define a mutable variable (repeatable)
-      --arr NAME TYPE N VALUE…  Define an array from N arguments
-      --arr-new NAME TYPE N     Define a zero-initialized array of length N
-      --arr-set NAME IDX VAL    Set an element of a previously defined array
-      --freeze NAME             Freeze a previously defined variable or array
-  -h, --help                    Display this help and exit
+  -s, --source-file FILE         Read source from FILE (or “-” for stdin)
+      --source-file=FILE         Alternative form for the source path
+  -p, --print-result             Print the final evaluation result
+      --no-source-map            Use expression indices instead of line and column
+      --source-context-before N  Show N preceding source lines (default: 3)
+      --source-context-before=N  Alternative form of --source-context-before
+      --var NAME TYPE:VAL        Define a mutable variable (repeatable)
+      --arr NAME TYPE N VALUE…   Define an array from N arguments
+      --arr-new NAME TYPE N      Define a zero-initialized array of length N
+      --arr-set NAME IDX VAL     Set an element of a previously defined array
+      --freeze NAME              Freeze a previously defined variable or array
+  -h, --help                     Display this help and exit
 ```
 
 Without a source file, Lispico reads `/dev/stdin`. Exactly one source file may
@@ -2257,6 +2259,26 @@ optional table separate from the expression storage. Use `--no-source-map`
 to disable that table and report `Expression Index N:` instead of
 `Line N Column N:`. Failures before an expression is evaluated have no location
 prefix. Source mapping does not change evaluation behavior or parser errors.
+
+When source mapping is enabled, Lispico also prints the failing source line
+and up to three lines immediately preceding it, followed by an `↑` marker
+under the failing expression. For example:
+
+```text
+[FAIL] Evaluation failed: Line 3 Column 8: Undefined variable
+1 | (var "x" 123)
+2 | (do
+3 |   (+ x missing))
+  |        ↑
+```
+
+Use `--source-context-before=N` to change the number of preceding lines.
+For example, `--source-context-before=0` shows only the failing line,
+while `--source-context-before=5` shows up to five lines before it.
+`--source-context-before N` is also accepted. When `--no-source-map` is
+specified, no source excerpt is printed. Positions are byte-based; tabs
+are preserved and ASCII control characters are escaped in excerpts.
+The reusable renderer is in `src/source-location.{c,h}`.
 
 ### Final evaluation result
 

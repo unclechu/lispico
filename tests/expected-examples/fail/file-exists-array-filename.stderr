@@ -1,1 +1,3 @@
 [FAIL] Evaluation failed: Line 1 Column 1: (file-exists) expects a string filename, got kind: SYM_ARRAY
+1 | (file-exists (arr "README.md")) ; Filename must be a scalar string
+  | ↑

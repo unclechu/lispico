@@ -1,1 +1,4 @@
 [FAIL] Evaluation failed: Line 2 Column 23: (arr-set) array index is out of bounds
+1 | ; arr-set-out-of-bounds.lisp
+2 | (arr-new "foo" u32 1) (arr-set "foo" 1 42) ; Index is out of bounds
+  |                       ↑
