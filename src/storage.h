@@ -80,6 +80,8 @@ typedef struct Interpreter {
   // (label) and (goto)
   uint32_t current_native_call_expression_index;
   uint32_t pending_jump_index;
+  // Call site of the pending (goto), needed if the destination is unreachable.
+  uint32_t pending_jump_expression_index;
   uint32_t resume_target_index;
 
   // (depth) and (leave)
@@ -124,6 +126,7 @@ static inline uint32_t get_current_native_call_expression_index(const Interprete
 
 static inline void request_evaluation_jump(Interpreter *interpreter, uint32_t instruction_index) {
   interpreter->pending_jump_index = instruction_index;
+  interpreter->pending_jump_expression_index = interpreter->current_native_call_expression_index;
 }
 
 static inline uint32_t get_current_sequence_depth(Interpreter *interpreter) {

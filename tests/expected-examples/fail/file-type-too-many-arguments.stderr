@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (file-type) expects exactly 1 argument, got instead: 2
+[FAIL] Evaluation failed: Expression Index 0: (file-type) expects exactly 1 argument, got instead: 2

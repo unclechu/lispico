@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (env-var-has) expects a string environment variable name, got type: TYPE_U32
+[FAIL] Evaluation failed: Expression Index 0: (env-var-has) expects a string environment variable name, got type: TYPE_U32

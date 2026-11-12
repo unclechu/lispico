@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (arr-slice) expects an array as the first argument, got kind: SYM_VARIABLE
+[FAIL] Evaluation failed: Expression Index 0: (arr-slice) expects an array as the first argument, got kind: SYM_VARIABLE

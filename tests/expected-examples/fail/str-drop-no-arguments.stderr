@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (str-drop) expects exactly 2 arguments, got instead: 0
+[FAIL] Evaluation failed: Expression Index 0: (str-drop) expects exactly 2 arguments, got instead: 0

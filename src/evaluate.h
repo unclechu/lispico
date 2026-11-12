@@ -12,6 +12,10 @@ typedef enum {
 typedef struct {
   EvalOutcomeKind kind;
   Datum result; // Result of expression evaluation
+
+  // Innermost failing expression, or `EXPR_NONE` for failures before evaluation.
+  uint32_t failure_expression_index;
+
   union {
     // `kind == EVAL_EXIT`
     int exit_code;

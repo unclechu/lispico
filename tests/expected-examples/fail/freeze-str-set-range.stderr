@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (str-set) symbol “text” is frozen
+[FAIL] Evaluation failed: Expression Index 7: (str-set) symbol “text” is frozen

@@ -128,6 +128,12 @@ static bool evaluate_expression(
   Datum *result
 );
 
+static bool evaluate_expression_impl(
+  Interpreter *interpreter,
+  uint32_t current_expression_index,
+  Datum *result
+);
+
 // Register a GC root frame in the current C scope.
 // The frame must remain alive until it is explicitly removed.
 // `root_name` declares a local GC root frame that remains alive in this C
@@ -161,6 +167,7 @@ static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_st
   // result is temporarily removed from `eval_outcome`.
   PUSH_GC_ROOT(interpreter, saved_eval_outcome_result, &saved_result, 1);
   uint32_t saved_jump_index = interpreter->pending_jump_index;
+  uint32_t saved_jump_expression_index = interpreter->pending_jump_expression_index;
   uint32_t saved_resume_index = interpreter->resume_target_index;
   uint32_t saved_leave_count = interpreter->pending_leave_count;
   uint32_t saved_deferred_depth = interpreter->executing_deferred_depth;
@@ -185,7 +192,9 @@ static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_st
     interpreter->eval_outcome = saved_outcome;
     interpreter->eval_outcome.kind = EVAL_OK;
     interpreter->eval_outcome.result = saved_result;
+    interpreter->eval_outcome.failure_expression_index = EXPR_NONE;
     interpreter->pending_jump_index = EXPR_NONE;
+    interpreter->pending_jump_expression_index = EXPR_NONE;
     interpreter->resume_target_index = EXPR_NONE;
     interpreter->pending_leave_count = 0;
 
@@ -222,6 +231,7 @@ static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_st
           saved_outcome = interpreter->eval_outcome;
         } else {
           saved_outcome.kind = EVAL_FAIL;
+          saved_outcome.failure_expression_index = expression_index;
           snprintf(
             saved_outcome.as.fail_msg,
             sizeof(saved_outcome.as.fail_msg),
@@ -241,6 +251,7 @@ static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_st
   interpreter->executing_deferred_depth = saved_deferred_depth;
   interpreter->eval_outcome = saved_outcome;
   interpreter->pending_jump_index = saved_jump_index;
+  interpreter->pending_jump_expression_index = saved_jump_expression_index;
   interpreter->resume_target_index = saved_resume_index;
   interpreter->pending_leave_count = saved_leave_count;
 
@@ -248,6 +259,7 @@ static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_st
     // A deferred failure cancels pending jumps, leaves, or exits.
     // The evaluation failure is already stored in `eval_outcome`.
     interpreter->pending_jump_index = EXPR_NONE;
+    interpreter->pending_jump_expression_index = EXPR_NONE;
     interpreter->resume_target_index = EXPR_NONE;
     interpreter->pending_leave_count = 0;
   }
@@ -284,6 +296,8 @@ static bool evaluate_sequence(
 
     if (current_expression_index == EXPR_NONE) {
       report_evaluation_failure(interpreter, "(goto) cannot find nested jump destination");
+      interpreter->eval_outcome.failure_expression_index =
+        interpreter->pending_jump_expression_index;
       ok = false;
       goto finish;
     }
@@ -292,6 +306,7 @@ static bool evaluate_sequence(
   while (current_expression_index != EXPR_NONE) {
     if (current_expression_index >= interpreter->expression_count) {
       report_evaluation_failure(interpreter, "Invalid expression index");
+      interpreter->eval_outcome.failure_expression_index = current_expression_index;
       ok = false;
       goto finish;
     }
@@ -338,6 +353,7 @@ static bool evaluate_sequence(
               : interpreter->pending_jump_index;
 
           interpreter->pending_jump_index = EXPR_NONE;
+          interpreter->pending_jump_expression_index = EXPR_NONE;
           current_expression_index = jump_entry;
           continue;
         }
@@ -345,11 +361,14 @@ static bool evaluate_sequence(
         // Otherwise let the enclosing sequence try to handle the jump.
         // Only the top-level sequence reports an unresolved destination.
         if (is_top_level) {
+          uint32_t jump_expression_index = interpreter->pending_jump_expression_index;
           interpreter->pending_jump_index = EXPR_NONE;
+          interpreter->pending_jump_expression_index = EXPR_NONE;
           report_evaluation_failure(
             interpreter,
             "(goto) destination is not reachable through (do)"
           );
+          interpreter->eval_outcome.failure_expression_index = jump_expression_index;
         }
       }
 
@@ -374,7 +393,31 @@ static bool evaluate_sequence(
     return ok;
 }
 
+// Record the innermost failing expression before the failure propagates.
+// Recursive calls use this wrapper, so outer expressions cannot overwrite it.
 static bool evaluate_expression(
+  Interpreter *interpreter,
+  uint32_t current_expression_index,
+  Datum *result
+) {
+  bool ok = evaluate_expression_impl(
+    interpreter,
+    current_expression_index,
+    result
+  );
+
+  if (
+    !ok &&
+    interpreter->eval_outcome.kind == EVAL_FAIL &&
+    interpreter->eval_outcome.failure_expression_index == EXPR_NONE
+  ) {
+    interpreter->eval_outcome.failure_expression_index = current_expression_index;
+  }
+
+  return ok;
+}
+
+static bool evaluate_expression_impl(
   Interpreter *interpreter,
   uint32_t current_expression_index,
   Datum *result
@@ -878,6 +921,7 @@ EvalOutcome evaluate(
     return (EvalOutcome) {
       .kind = EVAL_FAIL,
       .result = { .kind = SYM_EMPTY },
+      .failure_expression_index = EXPR_NONE,
       .as.fail_msg = "Interpreter storage is not configured or expression table mismatch",
     };
 
@@ -891,6 +935,7 @@ EvalOutcome evaluate(
   interpreter->eval_outcome = (EvalOutcome) {
     .kind = EVAL_OK,
     .result = { .kind = SYM_EMPTY },
+    .failure_expression_index = EXPR_NONE,
   };
 
   EvalSettingsInterfaceContext settings_ctx = {
@@ -936,6 +981,7 @@ EvalOutcome evaluate(
     EvalOutcome result = {
       .kind = EVAL_FAIL,
       .result = { .kind = SYM_EMPTY },
+      .failure_expression_index = EXPR_NONE,
       .as.fail_msg = {'\0'},
     };
     snprintf(
@@ -954,6 +1000,7 @@ void clean_evaluation(Interpreter *interpreter) {
 
   // (label) & (goto)
   interpreter->pending_jump_index = EXPR_NONE;
+  interpreter->pending_jump_expression_index = EXPR_NONE;
   interpreter->resume_target_index = EXPR_NONE;
   interpreter->current_native_call_expression_index = EXPR_NONE;
 

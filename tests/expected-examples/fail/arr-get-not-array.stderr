@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (arr-get) symbol “foo” is not an array
+[FAIL] Evaluation failed: Expression Index 4: (arr-get) symbol “foo” is not an array

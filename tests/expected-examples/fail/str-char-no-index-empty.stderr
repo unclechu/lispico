@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (str-char) index is required unless string length is 1
+[FAIL] Evaluation failed: Expression Index 0: (str-char) index is required unless string length is 1

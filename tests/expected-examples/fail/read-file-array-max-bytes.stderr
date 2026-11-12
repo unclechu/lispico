@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (read-file) expects a u32 MAX_BYTES, got kind: SYM_ARRAY
+[FAIL] Evaluation failed: Expression Index 0: (read-file) expects a u32 MAX_BYTES, got kind: SYM_ARRAY

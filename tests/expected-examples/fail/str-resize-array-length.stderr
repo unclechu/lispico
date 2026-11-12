@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (str-resize) expects a u32 length, got kind: SYM_ARRAY
+[FAIL] Evaluation failed: Expression Index 4: (str-resize) expects a u32 length, got kind: SYM_ARRAY

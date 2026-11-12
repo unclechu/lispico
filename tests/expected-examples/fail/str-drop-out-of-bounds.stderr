@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (str-drop) requested range is out of bounds
+[FAIL] Evaluation failed: Expression Index 0: (str-drop) requested range is out of bounds

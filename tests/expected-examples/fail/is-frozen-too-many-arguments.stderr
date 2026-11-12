@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (is-frozen) expects exactly 1 argument, got instead: 2
+[FAIL] Evaluation failed: Expression Index 0: (is-frozen) expects exactly 1 argument, got instead: 2

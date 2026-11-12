@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (set) symbol “value” is not an array, got kind: SYM_VARIABLE
+[FAIL] Evaluation failed: Expression Index 4: (set) symbol “value” is not an array, got kind: SYM_VARIABLE

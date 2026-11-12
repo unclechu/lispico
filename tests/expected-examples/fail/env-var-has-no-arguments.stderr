@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (env-var-has) expects exactly 1 argument, got instead: 0
+[FAIL] Evaluation failed: Expression Index 0: (env-var-has) expects exactly 1 argument, got instead: 0

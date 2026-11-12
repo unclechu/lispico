@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (str-drop) expects a u32 byte count
+[FAIL] Evaluation failed: Expression Index 0: (str-drop) expects a u32 byte count

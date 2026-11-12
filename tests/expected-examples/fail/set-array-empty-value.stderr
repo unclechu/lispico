@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (set) expects a scalar or array value, got kind: SYM_EMPTY
+[FAIL] Evaluation failed: Expression Index 5: (set) expects a scalar or array value, got kind: SYM_EMPTY

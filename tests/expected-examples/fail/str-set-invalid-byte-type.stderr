@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (str-set) expects a u32 byte or string
+[FAIL] Evaluation failed: Expression Index 4: (str-set) expects a u32 byte or string

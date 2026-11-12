@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (str-char) expects a u32 index as the second argument
+[FAIL] Evaluation failed: Expression Index 0: (str-char) expects a u32 index as the second argument

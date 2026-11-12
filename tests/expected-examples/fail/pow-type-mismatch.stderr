@@ -1,1 +1,1 @@
-[FAIL] Evaluation failed: (pow) expects both arguments be of the same type, got instead: (TYPE_U32, TYPE_F32)
+[FAIL] Evaluation failed: Expression Index 0: (pow) expects both arguments be of the same type, got instead: (TYPE_U32, TYPE_F32)

@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 #include "src/symbol.h"
 #include "src/symbol-print.h"
@@ -245,7 +246,16 @@ int main(int argc, char **argv) {
       }
 
     case EVAL_FAIL:
-      fprintf(stderr, "[FAIL] Evaluation failed: %s\n", eval_outcome.as.fail_msg);
+      if (eval_outcome.failure_expression_index != EXPR_NONE) {
+        fprintf(
+          stderr,
+          "[FAIL] Evaluation failed: Expression Index %" PRIu32 ": %s\n",
+          eval_outcome.failure_expression_index,
+          eval_outcome.as.fail_msg
+        );
+      } else {
+        fprintf(stderr, "[FAIL] Evaluation failed: %s\n", eval_outcome.as.fail_msg);
+      }
       exit_code = 1;
       goto done;
 
