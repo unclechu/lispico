@@ -2294,7 +2294,9 @@ Lispico expands every source tab to exactly four spaces, matching the built-in
 arrow alignment. It sends the entire source through standard input so
 highlighting can retain the context of multiline strings or comments, while
 requesting only the relevant lines. The `bat` preset suppresses the
-highlighter’s stderr.
+highlighter’s stderr. The file type is passed to `bat` as its `--language`
+argument. The Lispico CLI uses `lisp`; other frontends can supply their own
+file type through `print_source_highlight()`.
 
 ```sh
 lispico --source-highlight=bat program.lisp
@@ -2324,13 +2326,14 @@ stderr stream. Its stderr is inherited and is **not** suppressed. The child
 receives additional context variables without changing Lispico’s own process
 environment:
 
-| Variable                             | Description                                                       |
-| ---                                  | ---                                                               |
-| `LISPICO_SOURCE_CONTEXT_BEFORE`      | Requested number of preceding lines                               |
-| `LISPICO_SOURCE_CONTEXT_LINE`        | One-based failing source line; last line of the requested excerpt |
-| `LISPICO_SOURCE_CONTEXT_COLUMN`      | One-based byte column of the failing expression                   |
-| `LISPICO_SOURCE_CONTEXT_BYTE_OFFSET` | Zero-based source byte offset                                     |
-| `LISPICO_SOURCE_CONTEXT_FIRST_LINE`  | First line of the requested excerpt, clamped to line 1            |
+| Variable                             | Description                                                         |
+| ---                                  | ---                                                                 |
+| `LISPICO_SOURCE_CONTEXT_BEFORE`      | Requested number of preceding lines                                 |
+| `LISPICO_SOURCE_CONTEXT_LINE`        | One-based failing source line; last line of the requested excerpt   |
+| `LISPICO_SOURCE_CONTEXT_COLUMN`      | One-based byte column of the failing expression                     |
+| `LISPICO_SOURCE_CONTEXT_BYTE_OFFSET` | Zero-based source byte offset                                       |
+| `LISPICO_SOURCE_CONTEXT_FIRST_LINE`  | First line of the requested excerpt, clamped to line 1              |
+| `LISPICO_SOURCE_CONTEXT_FILE_TYPE`   | Source file type supplied by the frontend (e.g. `lisp`, `confetti`) |
 
 `LISPICO_SOURCE_CONTEXT_FIRST_LINE` saves custom commands from calculating
 the context range themselves. For example, with three preceding lines and an
@@ -2346,7 +2349,7 @@ and adds a separate `↑` using the supplied error column:
 export LISPICO_SOURCE_HIGHLIGHT=sh
 export LISPICO_SOURCE_HIGHLIGHT_SH='
   bat \
-    --language=lisp \
+    --language="$LISPICO_SOURCE_CONTEXT_FILE_TYPE" \
     --color=always \
     --paging=never \
     --style=plain \

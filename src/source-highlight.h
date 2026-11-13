@@ -19,12 +19,14 @@ bool parse_source_highlight_mode(const char *name, SourceHighlightMode *mode);
 // Show the source excerpt below a diagnostic that has already been printed.
 // The bat preset silently falls back to the plain renderer; sh mode owns the
 // complete excerpt and reports command failures without replacing its output.
+// The file type is passed to bat as its language and to sh as context metadata.
 void print_source_highlight(
   FILE *stream,
   const char *source,
   size_t source_length,
   const ExpressionSourceLocation *location,
   uint32_t lines_before,
+  const char *file_type,
   SourceHighlightMode mode,
   const char *shell_command
 );

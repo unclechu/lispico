@@ -63,7 +63,8 @@ static bool print_with_bat(
   const char *source,
   size_t source_length,
   const ExpressionSourceLocation *location,
-  uint32_t lines_before
+  uint32_t lines_before,
+  const char *file_type
 ) {
   FILE *input = tmpfile();
   if (input == NULL) return false;
@@ -74,6 +75,11 @@ static bool print_with_bat(
   }
 
   bool ok = false;
+
+  // `execvp` does not accept `const`. Need to make a copy.
+  char *file_type_copy = strdup(file_type);
+  if (file_type_copy == NULL) goto done;
+
   if (!write_source_for_highlighting(input, source, source_length)) goto done;
   if (fflush(input) != 0 || fseek(input, 0, SEEK_SET) != 0) goto done;
 
@@ -101,7 +107,7 @@ static bool print_with_bat(
 
     char *const arguments[] = {
       "bat",
-      "--language=lisp",
+      "--language", file_type_copy,
       "--color=always",
       "--paging=never",
       "--style=plain",
@@ -134,6 +140,7 @@ static bool print_with_bat(
   free(highlighted);
 
   done:
+    if (file_type_copy != NULL) free(file_type_copy);
     fclose(output);
     fclose(input);
     return ok;
@@ -143,14 +150,15 @@ static bool print_with_bat(
 // process. The original source is passed unchanged through standard input.
 static bool set_source_context_environment(
   const ExpressionSourceLocation *location,
-  uint32_t lines_before
+  uint32_t lines_before,
+  const char *file_type
 ) {
   uint32_t first_line = (location->line > lines_before) ? (location->line - lines_before) : 1u;
 
   struct {
     const char *name;
-    uint32_t number;
-  } values[] = {
+    uint32_t value;
+  } numeric_values[] = {
     { "LISPICO_SOURCE_CONTEXT_BEFORE", lines_before },
     { "LISPICO_SOURCE_CONTEXT_LINE", location->line },
     { "LISPICO_SOURCE_CONTEXT_COLUMN", location->column },
@@ -158,11 +166,23 @@ static bool set_source_context_environment(
     { "LISPICO_SOURCE_CONTEXT_FIRST_LINE", first_line },
   };
 
-  for (size_t i = 0; i < (sizeof(values) / sizeof(values[0])); ++i) {
+  struct {
+    const char *name;
+    const char *value;
+  } string_values[] = {
+    { "LISPICO_SOURCE_CONTEXT_FILE_TYPE", file_type },
+  };
+
+  for (size_t i = 0; i < (sizeof(numeric_values) / sizeof(numeric_values[0])); ++i) {
     char text[32] = {0};
-    snprintf(text, sizeof(text), "%" PRIu32, values[i].number);
-    if (setenv(values[i].name, text, 1) != 0) return false;
+    snprintf(text, sizeof(text), "%" PRIu32, numeric_values[i].value);
+    if (setenv(numeric_values[i].name, text, 1) != 0) return false;
   }
+
+  for (size_t i = 0; i < (sizeof(string_values) / sizeof(string_values[0])); ++i)
+    if (setenv(string_values[i].name, string_values[i].value, 1) != 0)
+      return false;
+
   return true;
 }
 
@@ -175,6 +195,7 @@ static void print_with_shell(
   size_t source_length,
   const ExpressionSourceLocation *location,
   uint32_t lines_before,
+  const char *file_type,
   const char *command
 ) {
   FILE *input = tmpfile();
@@ -203,7 +224,7 @@ static void print_with_shell(
     if (
       dup2(fileno(input), STDIN_FILENO) < 0 ||
       dup2(fileno(stream), STDOUT_FILENO) < 0 ||
-      !set_source_context_environment(location, lines_before)
+      !set_source_context_environment(location, lines_before, file_type)
     ) _exit(126);
 
     int status = system(command);
@@ -238,10 +259,12 @@ void print_source_highlight(
   size_t source_length,
   const ExpressionSourceLocation *location,
   uint32_t lines_before,
+  const char *file_type,
   SourceHighlightMode mode,
   const char *shell_command
 ) {
   if (stream == NULL || source == NULL || location == NULL) return;
+  if (file_type == NULL) file_type = "lisp";
 
   if (mode == SOURCE_HIGHLIGHT_SH) {
     if (shell_command != NULL) {
@@ -251,6 +274,7 @@ void print_source_highlight(
         source_length,
         location,
         lines_before,
+        file_type,
         shell_command
       );
     }
@@ -259,7 +283,7 @@ void print_source_highlight(
 
   if (
     mode == SOURCE_HIGHLIGHT_BAT &&
-    print_with_bat(stream, source, source_length, location, lines_before)
+    print_with_bat(stream, source, source_length, location, lines_before, file_type)
   ) return;
 
   print_source_location(

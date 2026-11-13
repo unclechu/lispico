@@ -301,6 +301,7 @@ int main(int argc, char **argv) {
             source_size,
             location,
             cli.source_context_before,
+            "lisp",
             source_highlight,
             source_highlight_sh
           );

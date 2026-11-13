@@ -135,7 +135,8 @@ check_result 'bat is the default renderer' 1 '' "${header}${colored}" \
   --source-context-before=1 "$TMP_DIR/failure.lisp"
 
 printf '\t10\n20\n\t(+ 1 missing)\n' | sed $'s/\t/    /g' > "$TMP_DIR/expected-bat-stdin"
-if grep -Fqx -- '--style=plain' "$TMP_DIR/bat-args" \
+if (grep -FxA1 -- '--language' "$TMP_DIR/bat-args" | grep -Fxq -- 'lisp') \
+&& grep -Fqx -- '--style=plain' "$TMP_DIR/bat-args" \
 && grep -Fqx -- '--wrap=never' "$TMP_DIR/bat-args" \
 && grep -Fqx -- '--paging=never' "$TMP_DIR/bat-args" \
 && grep -Fqx -- '--color=always' "$TMP_DIR/bat-args" \
@@ -177,9 +178,18 @@ fi
 
 printf '\nTesting custom shell renderer…\n'
 # shellcheck disable=SC2016
-shell_metadata='printf "context=%s,%s,%s,%s,%s\\n" "$LISPICO_SOURCE_CONTEXT_BEFORE" "$LISPICO_SOURCE_CONTEXT_FIRST_LINE" "$LISPICO_SOURCE_CONTEXT_LINE" "$LISPICO_SOURCE_CONTEXT_COLUMN" "$LISPICO_SOURCE_CONTEXT_BYTE_OFFSET"; cat'
+shell_metadata='
+  printf "context=%s,%s,%s,%s,%s,%s\\n" \
+    "$LISPICO_SOURCE_CONTEXT_BEFORE" \
+    "$LISPICO_SOURCE_CONTEXT_FIRST_LINE" \
+    "$LISPICO_SOURCE_CONTEXT_LINE" \
+    "$LISPICO_SOURCE_CONTEXT_COLUMN" \
+    "$LISPICO_SOURCE_CONTEXT_BYTE_OFFSET" \
+    "$LISPICO_SOURCE_CONTEXT_FILE_TYPE"
+  cat
+'
 check_result 'shell receives metadata and unmodified source on stdin' 1 '' \
-  "${header}"$'context=1,2,3,7,13\n\t10\n20\n\t(+ 1 missing)\n' \
+  "${header}"$'context=1,2,3,7,13,lisp\n\t10\n20\n\t(+ 1 missing)\n' \
   --source-highlight=sh "--source-highlight-sh=$shell_metadata" \
   --source-context-before=1 "$TMP_DIR/failure.lisp"
 
