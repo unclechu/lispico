@@ -24,8 +24,15 @@ let
 
   lispico = stdenv.mkDerivation (lib.fix (self: {
     pname = projectName;
-    meta.mainProgram = self.pname;
     version = "0.0.0";
+
+    meta = {
+      description = "A small, explicitly typed Lisp-like programming language interpreter";
+      homepage = "https://github.com/unclechu/lispico";
+      license = lib.licenses.mit;
+      mainProgram = self.pname;
+      platforms = lib.platforms.unix;
+    };
 
     src = pkgs.nix-gitignore.gitignoreFilterRecursiveSource (path: type:
       (type == "directory" && builtins.baseNameOf path == "src") ||
