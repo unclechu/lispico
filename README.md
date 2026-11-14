@@ -1157,6 +1157,8 @@ features:
       (variable type is infered from the default value type)
     + `(var "numbers" (arr 1 2 3))` — Define an array variable with type and
       length inferred from the array value (independent copy)
+    + `(get "foo")` — Read a variable by its name, evaluated at runtime
+    + `(get (str "fo" "o"))` — Resolve a variable name dynamically
     + `(set "foo" (+ foo 3))` — Set a value to an already defined variable
     + `(set "numbers" (arr 4 5))` — Overwrite the beginning of a named array
       and clear its remaining elements without changing its capacity
@@ -1166,6 +1168,13 @@ features:
       ends
     + `(is-frozen "foo")` — Return `1` (`u32`) if an existing symbol is frozen,
       otherwise `0` (`u32`); fail if its name is not defined
+
+    `(get NAME)` evaluates `NAME` to a string and looks up the corresponding
+    symbol, returning the same result as referencing that symbol directly.
+    It works with scalar variables, arrays, and labels. It does not invoke
+    native functions; use `(call)` for dynamic function calls.
+    An invalid name, an undefined symbol, or a native function name causes an
+    evaluation failure.
 
     `(freeze "NAME")` accepts the name of any existing symbol, including
     scalar variables, arrays, labels, and native functions. Calling it more

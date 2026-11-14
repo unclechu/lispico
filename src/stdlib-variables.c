@@ -25,6 +25,50 @@ bool get_variable_name(const Datum *datum, char (*name)[SYMBOL_NAME_SIZE]) {
   return true;
 }
 
+// (get "NAME") — Read a variable by its evaluated string name.
+Datum std_get(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "get";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
+    goto fail;
+  }
+
+  const Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  if (symbol == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) variable “%s” is not defined", fn_name, symbol_name);
+    goto fail;
+  }
+
+  switch (symbol->kind) {
+    case SYM_VARIABLE:
+      return (Datum) { .kind = SYM_VARIABLE, .as.value = symbol->as.variable };
+    case SYM_ARRAY:
+      return (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
+    case SYM_LABEL:
+      return (Datum) { .kind = SYM_LABEL, .as.instruction_index = symbol->as.instruction_index };
+    default:
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) symbol “%s” is not a variable or array",
+        fn_name,
+        symbol_name
+      );
+      goto fail;
+  }
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // (freeze "NAME") — Make any existing symbol immutable for this evaluation.
 Datum std_freeze(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };

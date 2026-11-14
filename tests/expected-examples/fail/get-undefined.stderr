@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: Line 1 Column 1: (get) variable “missing-variable” is not defined
+1 | (get "missing-variable")
+  | ↑
