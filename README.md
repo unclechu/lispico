@@ -1231,6 +1231,27 @@ features:
       comparisons are case-sensitive, and lexicographic ordering compares bytes,
       not human-language alphabetical order.
 
+    + Array equality
+
+      `(== ARRAY1 ARRAY2)` and `(!= ARRAY1 ARRAY2)` also accept evaluated
+      arrays. Both arrays must have the same element type (`u32`, `i32`, `f32`,
+      or `s`); different element types cause an evaluation failure, even for
+      empty arrays. Mixing an array and a scalar is also an evaluation failure.
+
+      Arrays of the same element type compare equal when their lengths match
+      and all elements at corresponding indexes are equal. Different lengths
+      produce `false` for `(==)` and `true` for `(!=)`.
+
+      String elements use the same case-sensitive, length-aware byte comparison
+      as scalar strings, including embedded `\0` bytes. Numeric elements use
+      their respective scalar equality rules. The result is always `u32`.
+      The other comparison operators (`<`, `<=`, `>`, `>=`) do not accept
+      arrays.
+
+      + `(== (arr 1 2 3) (arr 1 2 3))` → `true`
+      + `(!= (arr "a" "b") (arr "a" "c"))` → `true`
+      + `(== (arr 1 2) (arr 1 2 3))` → `false`
+
     + Conjunctions and disjunctions
 
       + `(and (< 1 2) (> 4 3))` → equals to `true` (`u32`)

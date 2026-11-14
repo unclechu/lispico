@@ -26,7 +26,7 @@
 (assert (== (arr-get (get "numbers") 1) 20))
 (arr-set "numbers" 1 99)
 (assert (== (arr-get (get "numbers") 1) 99))
-; (assert (== (get "numbers") numbers)) ; TODO: equality check for arrays
+(assert (== (get "numbers") numbers))
 
 ; Labels can also be read using their names.
 (label "here")
