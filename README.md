@@ -1800,6 +1800,11 @@ features:
     arguments. It interrupts the current expression and propagates through
     the requested number of enclosing `(do)` sequences.
 
+  + If evaluating `VALUE` triggers another `(leave)`, the inner `(leave)`
+    interrupts the outer one before it can initiate its own leave. Only the
+    inner leave count and resulting value take effect; the counts are not
+    combined.
+
   + `(depth)` is restored as each sequence is terminated.
 
   + Examples:
@@ -1814,6 +1819,12 @@ features:
     (assert (== (do
       (leave 1 (+ 20 22))
       (println "Never printed")) 42))
+
+    ; The inner (leave) interrupts the outer (leave)
+    (assert (== (do
+      (leave 1 (leave 1 100))
+      200
+    ) 100))
 
     ; Leave two nested sequences
     (do
