@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 5: (leave) expects 0 or 1 arguments
-1 | (do (leave 1 2)) ; Too many arguments
+[FAIL] Evaluation failed: Line 1 Column 5: (leave) expects 0, 1, or 2 arguments
+1 | (do (leave 1 2 3)) ; Too many arguments
   |     ↑

@@ -1767,8 +1767,8 @@ features:
 
 * <a id="leaving-sequences"></a>Leaving sequences early
 
-  + `(leave [COUNT])` — Immediately terminates one or more active `(do)`
-    sequences.
+  + `(leave [COUNT [VALUE]])` — Immediately terminates one or more active
+    `(do)` sequences, optionally forwarding an explicit resulting value.
 
   + `(leave)` is an evaluator special form, not an ordinary native function.
 
@@ -1780,14 +1780,21 @@ features:
     + `COUNT` greater than `(depth)` causes an evaluation failure.
     + `COUNT` equal to `0` causes an evaluation failure.
 
+  + `VALUE` is an optional evaluated expression, allowed only when `COUNT` is
+    provided. Its result can be any datum, including `empty`. `COUNT` is
+    validated before evaluating `VALUE`.
+
   + `(leave)` requires at least one active `(do)` sequence. Calling it at the
     top level causes an evaluation failure.
 
   + Expressions following `(leave)` in any terminated sequence are skipped.
     Evaluation resumes after the outermost terminated `(do)` expression.
 
-  + `(leave)` preserves the last successfully evaluated value. If there is no
-    previous nonempty value, the resulting value is `SYM_EMPTY`.
+  + Without `VALUE`, `(leave)` preserves the last successfully evaluated value.
+    If there is no previous nonempty value, the resulting value is `SYM_EMPTY`.
+    When `VALUE` is provided, its result replaces the previous value and is
+    forwarded through all terminated sequences. For example,
+    `(leave 1 (last-val))` is equivalent to `(leave 1)`.
 
   + `(leave)` can be used inside `(if)`, `(and)`, `(or)`, and native function
     arguments. It interrupts the current expression and propagates through
@@ -1802,6 +1809,11 @@ features:
     (do
       (leave)
       (println "Never printed"))
+
+    ; Return an explicit value from the nearest sequence
+    (assert (== (do
+      (leave 1 (+ 20 22))
+      (println "Never printed")) 42))
 
     ; Leave two nested sequences
     (do
@@ -1951,6 +1963,7 @@ features:
       Examples:
       + `(do 123 (defer 456))` returns `123`.
       + `(do 123 (defer 456) (leave))` returns `123`.
+      + `(do (defer 456) (leave 1 123))` returns `123`.
       + `(do (defer 456) (exit 0 123))` exits with code `0` and result `123`.
 
     + Deferred expressions execute while their enclosing `(do)` sequence is

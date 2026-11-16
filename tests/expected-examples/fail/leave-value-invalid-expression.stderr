@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: Line 1 Column 14: Undefined variable
+1 | (do (leave 1 missing)) ; The value expression fails
+  |              ↑

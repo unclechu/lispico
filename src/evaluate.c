@@ -710,16 +710,25 @@ static bool evaluate_expression_impl(
       // Special form: leave one or more enclosing `(do)` sequences.
       if (strcmp(function_name, "leave") == 0) {
         uint32_t arg_index = fn->next;
+        uint32_t value_index = EXPR_NONE;
 
-        if (
-          arg_index != EXPR_NONE &&
-          (
-            arg_index >= interpreter->expression_count ||
-            interpreter->storage.expressions[arg_index].next != EXPR_NONE
-          )
-        ) {
-          report_evaluation_failure(interpreter, "(leave) expects 0 or 1 arguments");
-          return false;
+        if (arg_index != EXPR_NONE) {
+          if (arg_index >= interpreter->expression_count) {
+            report_evaluation_failure(interpreter, "(leave) expects 0, 1, or 2 arguments");
+            return false;
+          }
+
+          value_index = interpreter->storage.expressions[arg_index].next;
+          if (
+            value_index != EXPR_NONE &&
+            (
+              value_index >= interpreter->expression_count ||
+              interpreter->storage.expressions[value_index].next != EXPR_NONE
+            )
+          ) {
+            report_evaluation_failure(interpreter, "(leave) expects 0, 1, or 2 arguments");
+            return false;
+          }
         }
 
         if (interpreter->current_sequence_depth == 0) {
@@ -749,6 +758,12 @@ static bool evaluate_expression_impl(
         if (leave_count > interpreter->current_sequence_depth) {
           report_evaluation_failure(interpreter, "(leave) count exceeds current (depth)");
           return false;
+        }
+
+        if (value_index != EXPR_NONE) {
+          Datum value = { .kind = SYM_EMPTY };
+          if (!evaluate_expression(interpreter, value_index, &value)) return false;
+          interpreter->eval_outcome.result = value;
         }
 
         interpreter->pending_leave_count = leave_count;
