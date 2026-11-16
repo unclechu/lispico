@@ -69,6 +69,53 @@ Datum std_get(Interpreter *interpreter, const Datum *args, size_t argc) {
     return return_value;
 }
 
+// (reset "NAME") — Drop a scalar or array variable’s value without collecting memory.
+Datum std_reset(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "reset";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
+    goto fail;
+  }
+
+  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  if (symbol == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) variable “%s” is not defined", fn_name, symbol_name);
+    goto fail;
+  }
+
+  if (symbol->kind != SYM_VARIABLE && symbol->kind != SYM_ARRAY) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) symbol “%s” is not a variable or array",
+      fn_name,
+      symbol_name
+    );
+    goto fail;
+  }
+
+  if (!validate_symbol_mutable(symbol, fn_name, &fail_msg)) goto fail;
+
+  // Keep the symbol-table entry but drop its reference to any runtime data.
+  // Memory is reclaimed only by a subsequent (gc) or evaluation cleanup.
+  symbol->kind = SYM_VARIABLE;
+  symbol->as.variable = (Value) { .type = TYPE_VOID };
+
+  return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = symbol->as.variable };
+  return return_value;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // (freeze "NAME") — Make any existing symbol immutable for this evaluation.
 Datum std_freeze(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };

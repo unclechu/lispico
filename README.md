@@ -1159,6 +1159,7 @@ features:
       length inferred from the array value (independent copy)
     + `(get "foo")` — Read a variable by its name, evaluated at runtime
     + `(get (str "fo" "o"))` — Resolve a variable name dynamically
+    + `(reset "foo")` — Reset an existing scalar or array variable to `TYPE_VOID`
     + `(set "foo" (+ foo 3))` — Set a value to an already defined variable
     + `(set "numbers" (arr 4 5))` — Overwrite the beginning of a named array
       and clear its remaining elements without changing its capacity
@@ -1168,6 +1169,22 @@ features:
       ends
     + `(is-frozen "foo")` — Return `1` (`u32`) if an existing symbol is frozen,
       otherwise `0` (`u32`); fail if its name is not defined
+
+    `(reset "NAME")` sets an existing scalar or array variable’s value to
+    actual `TYPE_VOID`, regardless of its previous type. For arrays, the symbol
+    becomes a scalar variable containing `TYPE_VOID`. The symbol remains
+    defined, and `(reset)` returns its new void value. Resetting an already
+    reset variable is allowed. Undefined names, invalid names, non-variable
+    symbols, and frozen variables cause evaluation failures. `(reset)` does
+    not unfreeze variables.
+
+    Unlike `(set "NAME" void)` or `(set "NAME" 0)`, `(reset)` does not assign a
+    numeric `u32` zero: `void` is the numeric type identifier for `TYPE_VOID`.
+    `(reset)` only removes the variable’s reference to any previously held
+    dynamic data. It does **not** free memory or call `(gc)` automatically.
+    A later manual `(gc)` can reclaim the data only if no other symbols or
+    active evaluator values still reference it. See
+    [Manual garbage collection](#manual-garbage-collection).
 
     `(get NAME)` evaluates `NAME` to a string and looks up the corresponding
     symbol, returning the same result as referencing that symbol directly.
@@ -1229,7 +1246,7 @@ features:
 
     + Track active `(do)` expression indices and their activation lifetimes.
       On exit, after user-defined `(defer)` expressions have run, reset local
-      values to `void`/zero and unfreeze them. Keep their symbol table entries;
+      values to `TYPE_VOID` and unfreeze them. Keep their symbol table entries;
       do not run `(gc)` automatically. Unreferenced runtime allocations can be
       reclaimed by an explicit `(gc)` call.
 
@@ -2746,6 +2763,12 @@ There is no automatic garbage collection. Runtime values may be reclaimed
 manually, keeping memory management predictable on embedded platforms.
 
 ### Manual garbage collection
+
+`(reset "NAME")` is a way to drop an existing variable’s reference to a
+string or array allocation by replacing its value with `TYPE_VOID`. It does
+not perform garbage collection: a later explicit `(gc)` may reclaim that
+allocation only when it has no other references. Resetting a symbol does not
+invalidate values still held by other variables or active expressions.
 
 - `(gc)` — Manually reclaim unreachable runtime allocations and return a `u32`
   count of freed `EvalRuntimeAllocation` entries. Accepts no arguments.
