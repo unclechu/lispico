@@ -21,6 +21,8 @@ See [examples](examples), they are also used as regression tests.
   * [Primitive data types](#primitive-data-types)
   * [Basic arithmetics](#basic-arithmetics)
   * [Variables](#variables)
+  * [Pseudo-local scopes](#pseudo-local-scopes)
+  * [User-defined pseudo-functions](#user-defined-pseudo-functions)
   * [Strings](#strings)
   * [Arrays](#arrays)
   * [Control flow and sequences](#control-flow-and-sequences)
@@ -811,8 +813,6 @@ features:
   (assert (== (arr-type "foo") u32))
   ```
 
-- There are no user-defined functions (at least for now)
-
 - There are no conventional loops, only `(label "foo")` definitions and
   `(goto foo)` jumps
 
@@ -1201,6 +1201,95 @@ features:
 
     Unlike `(override)`, `(set)` preserves the destination’s existing type and
     storage size, including its fixed string length or array length.
+
+  * <a id="pseudo-local-scopes"></a>**TODO** Pseudo-local scopes
+
+    + Only `(do)` establishes a pseudo-local scope. The top-level program does
+      not provide one; attempting to define a local outside a `(do)` fails.
+
+    + Local variables still live in the existing global symbol table. For a
+      `(do)` at expression index `N`, `(local "foo" VALUE)` defines or replaces
+      `_LOCAL_N_foo`. No separate symbol table or lexical scopes are required.
+      Generated names are not reserved; they can be accessed or modified
+      explicitly like ordinary globals.
+
+    + `(local "NAME" VALUE)` always defines or overrides the current scope’s
+      variable, including its type. Like `(override)`, it fails when the
+      existing symbol is frozen. There is no `(local-override)`.
+
+    + `(local-str-new)` and `(local-arr-new)` provide scoped equivalents of
+      `(str-new)` and `(arr-new)`.
+
+    + Direct variable references and name-based operations such as `(get)`,
+      `(set)`, `(str-get)`, `(str-set)`, `(str-resize)`, `(arr-get)`,
+      `(arr-set)`, `(arr-size)`, `(arr-type)`, `(freeze)`, `(is-frozen)`, and
+      `(kind-of)` search the active `(do)` scopes from innermost to outermost,
+      then fall back to the unprefixed global name. `(var)` and `(override)`
+      continue to define and replace global symbols.
+
+    + Track active `(do)` expression indices and their activation lifetimes.
+      On exit, after user-defined `(defer)` expressions have run, reset local
+      values to `void`/zero and unfreeze them. Keep their symbol table entries;
+      do not run `(gc)` automatically. Unreferenced runtime allocations can be
+      reclaimed by an explicit `(gc)` call.
+
+    + Locals defined while running a `(defer)` belong to its enclosing `(do)`
+      and are reset with that scope. Cleanup also applies to early exits and
+      evaluation failures, without invalidating values returned by `(do)`.
+
+    + Increase `SYMBOL_NAME_SIZE` to `64` to accommodate generated prefixes.
+      Design scope activation tracking so that reentrant execution can later
+      preserve and restore earlier local values.
+
+  * <a id="user-defined-pseudo-functions"></a>**TODO** User-defined pseudo-functions
+
+    + `(fn "sum-fn" (args "one" "two") (+ one two))` defines a function with
+      named arguments. `(sum-fn 10 20)` calls it. The argument declaration may
+      be omitted when no named arguments are needed, for example
+      `(fn "answer" 42)`.
+
+    + `(fn "name" (var-args) BODY)` accepts any number of arguments;
+      `(fn "name" (var-args "foo" "bar") BODY)` requires the named arguments
+      first and permits additional ones. Function arguments retain their
+      individual types; no heterogeneous array type is required.
+
+    + Initially permit `(fn)` definitions only at the top level. Evaluate the
+      function name when defining it, allowing dynamically constructed names.
+      Register a public, ordinary label named `_FN_<name>` in the existing
+      symbol table, pointing to the original function definition expression.
+      No separate function symbol kind is introduced.
+
+    + For a function call, look up `_FN_<name>` first; fall back to the native
+      function of that name if no such label is defined. Keep normal `(goto)`
+      behavior for labels, including labels that follow this naming convention.
+
+    + Make function invocation an evaluator operation, not a synthetic jump to
+      a return label. Evaluate call arguments in the caller’s scope, then
+      evaluate the existing function body in its definition-site scope, without
+      inheriting the caller’s local scopes or generating extra expressions.
+      Keep the original expression indices for source-location diagnostics.
+
+    + Give every invocation an implicit outer `(do)` scope, with its own local
+      argument bindings and cleanup. Return the function body’s evaluation
+      result like an ordinary expression, including from nested calls. Preserve
+      and restore the caller’s evaluation and scope context on return or
+      failure.
+
+    + A user-defined argument named `argc` replaces the implicit function-local
+      argument count. The local `argc` shadows any global variable with the same
+      name, without modifying it. The global variable becomes accessible again
+      after leaving the function’s scope.
+
+    + Preserve the existing `(leave COUNT)` semantics inside functions: `COUNT`
+      is the number of enclosing `(do)` scopes to exit. A future `(fn-depth)`
+      helper could supply the count needed to leave the function; `(return)`
+      could later provide a shorthand for returning a value early.
+
+    + Prepare function call frames to hold arguments, return state, and caller
+      context. Recursive or reentrant calls may be unreliable initially;
+      support them later by preserving activation-specific local values,
+      including mutable strings and arrays, without replacing the global
+      symbol table. Tail-call optimization can be considered separately.
 
   * If-conditions and comparisons:
 
@@ -2086,8 +2175,6 @@ features:
 
 - <a id="todo"></a>**TODO** for next releases
 
-  * Pseudo-scoped variables vs. global ones
-  * Macroses/functions
   * Sub-process invocation stdlib functions (spawning, capturing)
   * File reading & writing stdlib functions
   * Streamed parsing + evaluation
