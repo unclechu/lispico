@@ -252,7 +252,7 @@ Datum std_str_get(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
 
   if (symbol == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) variable “%s” is not defined", fn_name, symbol_name);
@@ -314,7 +314,7 @@ Datum std_str_set(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
 
   if (symbol == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) variable “%s” is not defined", fn_name, symbol_name);
@@ -438,10 +438,15 @@ Datum std_str_set(Interpreter *interpreter, const Datum *args, size_t argc) {
 }
 
 // (str-new) — Define a new zero-initialized string variable with a fixed byte length
-Datum std_str_new(Interpreter *interpreter, const Datum *args, size_t argc) {
+static Datum std_str_new_impl(
+  Interpreter *interpreter,
+  const Datum *args,
+  size_t argc,
+  bool is_local
+) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
-  const char fn_name[] = "str-new";
+  const char *fn_name = is_local ? "local-str-new" : "str-new";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
@@ -451,13 +456,28 @@ Datum std_str_new(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
+  if (is_local) {
+    if (interpreter->local_scope == NULL) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) requires an active (do) scope", fn_name);
+      goto fail;
+    }
+
+    char local_name[SYMBOL_NAME_SIZE];
+    if (!local_symbol_name(interpreter->local_scope->expression_index, symbol_name, &local_name)) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) variable name is too long", fn_name);
+      goto fail;
+    }
+    memcpy(symbol_name, local_name, strlen(local_name) + 1); // +1 for the `\0`
+  }
+
   if (args[1].kind != SYM_VARIABLE || args[1].as.value.type != TYPE_U32) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a u32 length", fn_name);
     goto fail;
   }
 
-  // Do not allocate memory if the symbol is already defined.
-  if (symbol_lookup(interpreter, symbol_name) != NULL) {
+  // A local definition may replace an existing unfrozen local variable.
+  Symbol *existing_symbol = symbol_lookup(interpreter, symbol_name);
+  if (existing_symbol != NULL && !is_local) {
     snprintf(
       fail_msg,
       sizeof(fail_msg),
@@ -467,6 +487,9 @@ Datum std_str_new(Interpreter *interpreter, const Datum *args, size_t argc) {
     );
     goto fail;
   }
+
+  if (existing_symbol != NULL && !validate_symbol_mutable(existing_symbol, fn_name, &fail_msg))
+    goto fail;
 
   size_t length = args[1].as.value.as.u32;
 
@@ -493,16 +516,19 @@ Datum std_str_new(Interpreter *interpreter, const Datum *args, size_t argc) {
 
   // Allocate the string before defining its symbol, to avoid leaving
   // a partially initialized variable in case of an allocation failure.
-  Symbol *symbol = symbol_define(interpreter, symbol_name, SYM_VARIABLE);
+  Symbol *symbol = existing_symbol;
+  if (symbol == NULL) symbol = symbol_define(interpreter, symbol_name, SYM_VARIABLE);
   if (symbol == NULL) {
     extract_error_message_from_symbol_define_error(interpreter, &fail_msg, symbol_name);
     goto fail;
   }
 
+  symbol->kind = SYM_VARIABLE;
   symbol->as.variable = (Value) {
     .type = TYPE_STRING,
     .as.string = { .data = data, .length = length },
   };
+  if (is_local) register_local_symbol(interpreter, symbol);
 
   return_value = (Datum) {
     .kind = SYM_VARIABLE,
@@ -515,6 +541,14 @@ Datum std_str_new(Interpreter *interpreter, const Datum *args, size_t argc) {
     report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
+}
+
+Datum std_str_new(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_str_new_impl(interpreter, args, argc, false);
+}
+
+Datum std_local_str_new(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_str_new_impl(interpreter, args, argc, true);
 }
 
 // (str-resize) — Resize a named string variable, preserving its existing byte prefix
@@ -552,7 +586,7 @@ Datum std_str_resize(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
   if (symbol == NULL) {
     snprintf(
       fail_msg,

@@ -39,7 +39,7 @@ Datum std_get(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  const Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  const Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
   if (symbol == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) variable “%s” is not defined", fn_name, symbol_name);
     goto fail;
@@ -83,7 +83,7 @@ Datum std_reset(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
   if (symbol == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) variable “%s” is not defined", fn_name, symbol_name);
     goto fail;
@@ -130,7 +130,7 @@ Datum std_freeze(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
   if (symbol == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) symbol “%s” is not defined", fn_name, symbol_name);
     goto fail;
@@ -160,7 +160,7 @@ Datum std_is_frozen(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
   if (symbol == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) symbol “%s” is not defined", fn_name, symbol_name);
     goto fail;
@@ -178,10 +178,14 @@ Datum std_is_frozen(Interpreter *interpreter, const Datum *args, size_t argc) {
 }
 
 // (var) — Define a new variable, inferring its type from the initial value
-Datum std_var(Interpreter *interpreter, const Datum *args, size_t argc) {
+static Datum std_var_impl(
+  Interpreter *interpreter,
+  const Datum *args,
+  size_t argc,
+  const char *fn_name
+) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
-  const char fn_name[] = "var";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
@@ -385,7 +389,7 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
   }
 
   if (args[1].kind == SYM_ARRAY) {
-    Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+    Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
 
     if (symbol == NULL) {
       snprintf(
@@ -550,7 +554,7 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
 
   if (symbol == NULL) {
     snprintf(
@@ -641,10 +645,14 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
 }
 
 // (override) — Completely replace any existing symbol with a new scalar or array variable
-Datum std_override(Interpreter *interpreter, const Datum *args, size_t argc) {
+static Datum std_override_impl(
+  Interpreter *interpreter,
+  const Datum *args,
+  size_t argc,
+  const char *fn_name
+) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
-  const char fn_name[] = "override";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
@@ -815,6 +823,79 @@ Datum std_override(Interpreter *interpreter, const Datum *args, size_t argc) {
       fn_name
     );
     goto fail;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
+Datum std_var(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_var_impl(interpreter, args, argc, "var");
+}
+
+Datum std_override(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_override_impl(interpreter, args, argc, "override");
+}
+
+// (local) — Define or replace a variable in the current (do) scope.
+Datum std_local(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  char name[SYMBOL_NAME_SIZE] = {'\0'};
+  char local_name[SYMBOL_NAME_SIZE] = {'\0'};
+  const char fn_name[] = "local";
+  const size_t fixed_argc = 2;
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, fixed_argc, argc)) return return_value;
+
+  if (interpreter->local_scope == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) requires an active (do) scope", fn_name);
+    goto fail;
+  }
+
+  if (
+    !get_variable_name(&args[0], &name) ||
+    !local_symbol_name(interpreter->local_scope->expression_index, name, &local_name)
+  ) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid or too long variable name", fn_name);
+    goto fail;
+  }
+
+  Datum local_args[] = {
+    {
+      .kind = SYM_VARIABLE,
+      .as.value = {
+        .type = TYPE_STRING,
+        .as.string = { .data = local_name, .length = strlen(local_name) },
+      },
+    },
+    args[1],
+  };
+
+  Symbol *symbol = symbol_lookup(interpreter, local_name);
+
+  return_value =
+    (symbol == NULL)
+      ? std_var_impl(interpreter, local_args, fixed_argc, fn_name)
+      : std_override_impl(interpreter, local_args, fixed_argc, fn_name);
+
+  if (interpreter->eval_outcome.kind != EVAL_OK) return return_value;
+
+  symbol = symbol_lookup(interpreter, local_name);
+  if (symbol == NULL) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) local symbol “%s” is unexpectedly undefined",
+      fn_name,
+      local_name
+    );
+    goto fail;
+  }
+
+  register_local_symbol(interpreter, symbol);
+  return return_value;
 
   fail:
     report_evaluation_failure(interpreter, fail_msg);

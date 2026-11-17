@@ -73,13 +73,25 @@ typedef struct Interpreter Interpreter;
 // language that would execute arbitrary C-code (e.g. FFI bindings for IO).
 typedef Datum (*NativeFunction)(Interpreter *interpreter, const Datum *args, size_t argc);
 
-typedef struct {
+typedef struct Symbol {
   char name[SYMBOL_NAME_SIZE];
   SymbolKind kind;
 
   // Once frozen, neither the symbol nor the storage it owns may be modified
   // during this evaluation. A new evaluation starts with a clean symbol table.
   bool frozen;
+
+  // Active `(do)` activation that owns this local symbol, if any.
+  // These links do not affect the global symbol table or its probing.
+  //
+  // After leaving `(do)` scope the local variable is fully reset to
+  // `TYPE_VOID`. And these pointers are also reset to `NULL`. So after cleanup
+  // happens the `(do)` scope does not own them anymore, but the `TYPE_VOID`
+  // symbols stay in the symbols table (there are no deletions). Next `(do)`
+  // evaluation would just re-use/override them by another `(local)`/`(local-*)`
+  // call.
+  struct EvalLocalScopeFrame *local_scope_owner;
+  struct Symbol *next_local;
 
   union {
     // `kind == SYM_VARIABLE`
@@ -100,6 +112,13 @@ typedef struct {
 } Symbol;
 
 Symbol* symbol_lookup(Interpreter *interpreter, const char *name);
+Symbol* symbol_lookup_scoped(Interpreter *interpreter, const char *name);
+bool local_symbol_name(
+  uint32_t expression_index,
+  const char *name,
+  char (*result)[SYMBOL_NAME_SIZE]
+);
+void register_local_symbol(Interpreter *interpreter, Symbol *symbol);
 Symbol* symbol_define(Interpreter *interpreter, const char *name, SymbolKind kind);
 void clean_symbols(Interpreter *interpreter);
 

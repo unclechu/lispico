@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: Line 1 Column 5: (local) invalid or too long variable name
+1 | (do (local "this-name-is-too-long-for-the-generated-prefixed-symbol-name-in-the-scope" 1))
+  |     ↑

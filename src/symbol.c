@@ -1,4 +1,5 @@
 #include <string.h>
+#include <inttypes.h>
 
 #include "symbol.h"
 #include "wipe-memory.h"
@@ -62,6 +63,59 @@ Symbol* symbol_lookup(Interpreter *interpreter, const char *name) {
   }
 
   return NULL; // `Symbol` not found
+}
+
+// Build the symbol name belonging to a particular `(do)` expression.
+//
+// Names that do not fit in the symbol table cannot be defined as locals.
+//
+// This function should be the single “source of truth” for the local-scoped
+// variable name template.
+bool local_symbol_name(
+  uint32_t expression_index,
+  const char *name,
+  char (*result)[SYMBOL_NAME_SIZE]
+) {
+  if (name == NULL) return false;
+  int length = snprintf(
+    *result,
+    sizeof(*result),
+    "_LOCAL_%" PRIu32 "_%s",
+    expression_index,
+    name
+  );
+  return length > 0 && (size_t)length < sizeof(*result);
+}
+
+// Resolve a name from the innermost active `(do)` to the global namespace.
+Symbol* symbol_lookup_scoped(Interpreter *interpreter, const char *name) {
+  if (interpreter == NULL || name == NULL) return NULL;
+
+  for (
+    const EvalLocalScopeFrame *scope = interpreter->local_scope;
+    scope != NULL;
+    scope = scope->previous
+  ) {
+    char local_name[SYMBOL_NAME_SIZE] = {'\0'};
+    if (!local_symbol_name(scope->expression_index, name, &local_name)) continue;
+
+    // Regular symbol lookup using prefixed name.
+    Symbol *symbol = symbol_lookup(interpreter, local_name);
+    if (symbol != NULL) return symbol;
+  }
+
+  return symbol_lookup(interpreter, name);
+}
+
+// Register a local for cleanup when its owning `(do)` terminates.
+void register_local_symbol(Interpreter *interpreter, Symbol *symbol) {
+  EvalLocalScopeFrame *scope = interpreter->local_scope;
+  if (scope == NULL || symbol->local_scope_owner == scope) return;
+
+  // Put the `Symbol` on top of the local symbols LIFO stack.
+  symbol->next_local = scope->first_local;
+  symbol->local_scope_owner = scope;
+  scope->first_local = symbol;
 }
 
 /*

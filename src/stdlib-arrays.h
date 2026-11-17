@@ -5,6 +5,7 @@
 
 ADD_STDLIB_FN_TYPE_DEF(std_arr);
 ADD_STDLIB_FN_TYPE_DEF(std_arr_new);
+ADD_STDLIB_FN_TYPE_DEF(std_local_arr_new);
 ADD_STDLIB_FN_TYPE_DEF(std_arr_get);
 ADD_STDLIB_FN_TYPE_DEF(std_arr_set);
 ADD_STDLIB_FN_TYPE_DEF(std_arr_size);
@@ -16,6 +17,7 @@ ADD_STDLIB_FN_TYPE_DEF(std_arr_drop);
 #define POPULATE_STDLIB_ARRAYS() \
   ADD_FN_SYMBOL("arr", std_arr); \
   ADD_FN_SYMBOL("arr-new", std_arr_new); \
+  ADD_FN_SYMBOL("local-arr-new", std_local_arr_new); \
   ADD_FN_SYMBOL("arr-get", std_arr_get); \
   ADD_FN_SYMBOL("arr-set", std_arr_set); \
   ADD_FN_SYMBOL("arr-size", std_arr_size); \

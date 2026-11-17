@@ -772,9 +772,30 @@ static bool evaluate_expression_impl(
 
       // Special form: evaluate child expressions sequentially.
       if (strcmp(function_name, "do") == 0) {
+        EvalLocalScopeFrame scope = {
+          .expression_index = current_expression_index,
+          .previous = interpreter->local_scope,
+        };
+        interpreter->local_scope = &scope;
         interpreter->current_sequence_depth++;
         bool ok = evaluate_sequence(interpreter, fn->next, result, false);
+
+        // User `(defer)` expressions have run. Drop the local references
+        // without collecting memory, and unfreeze the names for the next
+        // activation.
+        Symbol *local = scope.first_local;
+        while (local != NULL) {
+          Symbol *next = local->next_local;
+          local->kind = SYM_VARIABLE;
+          local->as.variable = (Value) { .type = TYPE_VOID };
+          local->frozen = false;
+          local->local_scope_owner = NULL;
+          local->next_local = NULL;
+          local = next;
+        }
+
         interpreter->current_sequence_depth--;
+        interpreter->local_scope = scope.previous;
         return ok;
       }
 
@@ -879,7 +900,7 @@ static bool evaluate_expression_impl(
         return true;
       }
 
-      const Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+      const Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
 
       if (symbol == NULL) {
         report_evaluation_failure(interpreter, "Undefined variable");
@@ -1019,7 +1040,8 @@ void clean_evaluation(Interpreter *interpreter) {
   interpreter->resume_target_index = EXPR_NONE;
   interpreter->current_native_call_expression_index = EXPR_NONE;
 
-  // (depth)
+  // (do) scopes and (depth)
+  interpreter->local_scope = NULL;
   interpreter->current_sequence_depth = 0;
 
   // (leave)

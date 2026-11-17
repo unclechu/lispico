@@ -136,8 +136,9 @@ features:
 
 - Global state stored in a single static hash-table.
 
-  There are no lexical name scopes. If you need some level of name scoping you
-  can use name prefixes for example.
+  `(do)` provides pseudo-local name scopes using generated symbol prefixes.
+  The symbols themselves still live in the same global table, rather than
+  introducing separate lexical variable storage.
 
 - <a id="primitive-data-types"></a>Primitive data types
 
@@ -1219,44 +1220,69 @@ features:
     Unlike `(override)`, `(set)` preserves the destination’s existing type and
     storage size, including its fixed string length or array length.
 
-  * <a id="pseudo-local-scopes"></a>**TODO** Pseudo-local scopes
+  * <a id="pseudo-local-scopes"></a>Pseudo-local scopes
 
     + Only `(do)` establishes a pseudo-local scope. The top-level program does
       not provide one; attempting to define a local outside a `(do)` fails.
 
-    + Local variables still live in the existing global symbol table. For a
-      `(do)` at expression index `N`, `(local "foo" VALUE)` defines or replaces
-      `_LOCAL_N_foo`. No separate symbol table or lexical scopes are required.
-      Generated names are not reserved; they can be accessed or modified
-      explicitly like ordinary globals.
+    + Local variables live in the existing global symbol table. For a `(do)`
+      at expression index `N`, `(local "foo" VALUE)` defines or replaces the
+      symbol `_LOCAL_N_foo`. Generated names are not reserved and may also be
+      accessed explicitly, like ordinary global symbols.
 
-    + `(local "NAME" VALUE)` always defines or overrides the current scope’s
-      variable, including its type. Like `(override)`, it fails when the
-      existing symbol is frozen. There is no `(local-override)`.
+    + `(local "NAME" VALUE)` defines or replaces a variable in the innermost
+      active `(do)` scope. It accepts the same scalar and array values as
+      `(var)`, independently copying strings and arrays. Unlike `(var)`, it
+      replaces an existing unfrozen local, including its type and array size.
+      Replacing a frozen local causes an evaluation failure.
 
-    + `(local-str-new)` and `(local-arr-new)` provide scoped equivalents of
+    + `(local-str-new "NAME" LENGTH)` creates or replaces a local
+      zero-initialized string of the specified byte length.
+      `(local-arr-new "NAME" TYPE LENGTH)` similarly creates or replaces a local
+      typed array. Existing frozen locals cannot be replaced. These operations
+      allocate runtime-managed storage, just like their global counterparts
       `(str-new)` and `(arr-new)`.
 
     + Direct variable references and name-based operations such as `(get)`,
-      `(set)`, `(str-get)`, `(str-set)`, `(str-resize)`, `(arr-get)`,
+      `(set)`, `(reset)`, `(str-get)`, `(str-set)`, `(str-resize)`, `(arr-get)`,
       `(arr-set)`, `(arr-size)`, `(arr-type)`, `(freeze)`, `(is-frozen)`, and
-      `(kind-of)` search the active `(do)` scopes from innermost to outermost,
-      then fall back to the unprefixed global name. `(var)` and `(override)`
-      continue to define and replace global symbols.
+      `(kind-of)` search active `(do)` scopes from innermost to outermost, then
+      fall back to the unprefixed global name. `(var)` and `(override)` continue
+      to define and replace global symbols. Function and label definitions
+      retain their existing global naming behavior.
 
-    + Track active `(do)` expression indices and their activation lifetimes.
-      On exit, after user-defined `(defer)` expressions have run, reset local
-      values to `TYPE_VOID` and unfreeze them. Keep their symbol table entries;
-      do not run `(gc)` automatically. Unreferenced runtime allocations can be
-      reclaimed by an explicit `(gc)` call.
+    + When a `(do)` exits, its local symbols remain in the global table but
+      their values are reset to actual `TYPE_VOID` and their frozen flags are
+      cleared. Cleanup runs after user-defined `(defer)` expressions, including
+      on `(leave)`, `(goto)`, `(exit)`, and evaluation failure. Locals created
+      by deferred expressions belong to the same enclosing `(do)` scope.
 
-    + Locals defined while running a `(defer)` belong to its enclosing `(do)`
-      and are reset with that scope. Cleanup also applies to early exits and
-      evaluation failures, without invalidating values returned by `(do)`.
+    + Resetting locals does not run `(gc)` or directly free any allocations.
+      An explicit `(gc)` can reclaim the old dynamic data when no references
+      remain. Values returned by `(do)` and other active evaluated values remain
+      valid even after the corresponding local symbol is reset.
 
-    + Increase `SYMBOL_NAME_SIZE` to `64` to accommodate generated prefixes.
-      Design scope activation tracking so that reentrant execution can later
-      preserve and restore earlier local values.
+    + Local names must fit the generated prefix within `SYMBOL_NAME_SIZE`,
+      which is now `64` bytes including the terminating `\0`. Accessing a
+      local after its scope has exited is not intended; manually referencing
+      its generated name exposes the reset value as ordinary symbol data.
+
+    + Example:
+
+      ```lisp
+      (var "x" 100)
+      (do
+        (local "x" 10)
+        (do
+          (local "x" 20)
+          (assert (== x 20)))
+        (assert (== x 10)))
+      (assert (== x 100))
+      ```
+
+    + **TODO** Support preserving and restoring previous local values when
+      an identical `(do)` expression is re-entered before its earlier activation
+      exits, as needed for recursive user-defined pseudo-functions.
 
   * <a id="user-defined-pseudo-functions"></a>**TODO** User-defined pseudo-functions
 

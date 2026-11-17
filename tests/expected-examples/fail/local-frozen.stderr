@@ -1,0 +1,6 @@
+[FAIL] Evaluation failed: Line 4 Column 3: (local) symbol “_LOCAL_0_x” is frozen
+1 | (do
+2 |   (local "x" 1)
+3 |   (freeze "x")
+4 |   (local "x" 2))
+  |   ↑

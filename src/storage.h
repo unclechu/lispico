@@ -32,6 +32,20 @@ typedef struct EvalGCRootFrame {
   struct EvalGCRootFrame *previous;
 } EvalGCRootFrame;
 
+// Active `(do)` scope; frames live on the evaluator’s C stack.
+// Locals remain in the global symbol table when the frame is popped.
+typedef struct EvalLocalScopeFrame {
+  uint32_t expression_index;
+
+  // The head of the LIFO stack of local symbols defined in this scope.
+  // You can traverse the entire list of local symbols by accessing `next_local`
+  // of the `Symbol` struct. Like `first_local->next_local->next_local->…` and
+  // so on until you reach `NULL`.
+  Symbol *first_local;
+
+  struct EvalLocalScopeFrame *previous;
+} EvalLocalScopeFrame;
+
 // Storage supplied and owned by the host application.
 typedef struct {
   Expression *expressions;
@@ -87,6 +101,13 @@ typedef struct Interpreter {
   // Call site of the pending (goto), needed if the destination is unreachable.
   uint32_t pending_jump_expression_index;
   uint32_t resume_target_index;
+
+  // Pseudo-local scopes, one frame for each active `(do)`.
+  // Initially is `NULL`. When evaluator enters a `(do)` block is sets this
+  // field to the scope of that `(do)`. When leaving a `(do)` it sets it to
+  // `local_scope->previous`, so to the parent scope (either parent `(do)` or
+  // to `NULL` when no more parent `(do)`s left, when reaching top-level scope).
+  EvalLocalScopeFrame *local_scope;
 
   // (depth) and (leave)
   uint32_t current_sequence_depth;

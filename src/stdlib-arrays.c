@@ -24,7 +24,7 @@ static Symbol* get_array(
     return NULL;
   }
 
-  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
   if (symbol == NULL) {
     snprintf(*fail_msg, sizeof(*fail_msg), "(%s) array “%s” is not defined", fn_name, symbol_name);
     return NULL;
@@ -168,10 +168,15 @@ Datum std_arr(Interpreter *interpreter, const Datum *args, size_t argc) {
 }
 
 // (arr-new) — Define a new, fixed-size, zero-initialized array variable.
-Datum std_arr_new(Interpreter *interpreter, const Datum *args, size_t argc) {
+static Datum std_arr_new_impl(
+  Interpreter *interpreter,
+  const Datum *args,
+  size_t argc,
+  bool is_local
+) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
-  const char fn_name[] = "arr-new";
+  const char *fn_name = is_local ? "local-arr-new" : "arr-new";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 3, argc)) return return_value;
@@ -179,6 +184,24 @@ Datum std_arr_new(Interpreter *interpreter, const Datum *args, size_t argc) {
   if (!get_variable_name(&args[0], &symbol_name)) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid array name", fn_name);
     goto fail;
+  }
+
+  if (is_local) {
+    if (interpreter->local_scope == NULL) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) requires an active (do) scope", fn_name);
+      goto fail;
+    }
+
+    char local_name[SYMBOL_NAME_SIZE];
+    if (!local_symbol_name(
+      interpreter->local_scope->expression_index,
+      symbol_name,
+      &local_name
+    )) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) array name is too long", fn_name);
+      goto fail;
+    }
+    memcpy(symbol_name, local_name, strlen(local_name) + 1);
   }
 
   if (
@@ -209,7 +232,8 @@ Datum std_arr_new(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  if (symbol_lookup(interpreter, symbol_name) != NULL) {
+  Symbol *existing_symbol = symbol_lookup(interpreter, symbol_name);
+  if (existing_symbol != NULL && !is_local) {
     snprintf(
       fail_msg,
       sizeof(fail_msg),
@@ -219,6 +243,9 @@ Datum std_arr_new(Interpreter *interpreter, const Datum *args, size_t argc) {
     );
     goto fail;
   }
+
+  if (existing_symbol != NULL && !validate_symbol_mutable(existing_symbol, fn_name, &fail_msg))
+    goto fail;
 
   size_t size = (size_t)length * element_size;
   // allocate_runtime_data handles size == 0 by allocating one byte.
@@ -236,13 +263,16 @@ Datum std_arr_new(Interpreter *interpreter, const Datum *args, size_t argc) {
   // Initialize all elements. String entries start as empty strings.
   wipe_memory(data, size == 0 ? 1 : size);
 
-  Symbol *symbol = symbol_define(interpreter, symbol_name, SYM_ARRAY);
+  Symbol *symbol = existing_symbol;
+  if (symbol == NULL) symbol = symbol_define(interpreter, symbol_name, SYM_ARRAY);
   if (symbol == NULL) {
     extract_error_message_from_symbol_define_error(interpreter, &fail_msg, symbol_name);
     goto fail;
   }
 
+  symbol->kind = SYM_ARRAY;
   symbol->as.array = (Array) { .element_type = element_type, .length = length, .data = data };
+  if (is_local) register_local_symbol(interpreter, symbol);
   return_value = (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
   return return_value;
 
@@ -250,6 +280,14 @@ Datum std_arr_new(Interpreter *interpreter, const Datum *args, size_t argc) {
     report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
+}
+
+Datum std_arr_new(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_arr_new_impl(interpreter, args, argc, false);
+}
+
+Datum std_local_arr_new(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_arr_new_impl(interpreter, args, argc, true);
 }
 
 // (arr-get) — Read a typed array element at a zero-based index.
