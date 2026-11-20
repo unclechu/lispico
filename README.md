@@ -841,8 +841,8 @@ features:
   (assert (== (arr-type "foo") u32))
   ```
 
-- There are no conventional loops, only `(label "foo")` definitions and
-  `(goto foo)` jumps
+- There are no conventional loops, only `(label "foo")` or
+  `(local-label "foo")` definitions and `(goto foo)` jumps
 
   Note that labels are registered dynamically, during evaluation, not during
   parsing. So you can only jump backwards, not forward. This **won’t work:**
@@ -853,6 +853,32 @@ features:
   ```
 
   `foo` label is not defined/registered yet when `(goto)` is called.
+
+  `(label "NAME")` defines a global label. `(local-label "NAME")` requires
+  an active `(do)` scope and defines a label under `_LOCAL_N_NAME`, where `N`
+  is that scope’s expression index. `(goto)` resolves labels through active
+  scopes from innermost to outermost, then falls back to global labels.
+  Both kinds of labels are registered during evaluation.
+
+  For example, a loop can use a local label without interfering with a
+  global label of the same name:
+
+  ```lisp
+  (var "counter" 0)
+  (do
+    (local-label "loop")
+    (set "counter" (+ counter 1))
+    (if (< counter 3) (goto loop)))
+  (assert (== counter 3))
+  ```
+
+  Local labels remain ordinary `SYM_LABEL` symbols in the global symbol table.
+  They follow `(label)` rules when redefined or frozen. On scope exit, they
+  are reset to `TYPE_VOID` and unfrozen, like other locals, without deleting
+  their entries. Re-entering the same scope can define them again, and
+  recursive activations preserve and restore earlier label states. A label
+  does not identify a particular function activation; ordinary `(goto)`
+  reachability rules still apply.
 
   Labels inside `(if)` branches are also reachable after their branch has
   executed at least once. A `(goto)` to such a label enters that branch
@@ -1263,6 +1289,15 @@ features:
       replaces an existing unfrozen local, including its type and array size.
       Replacing a frozen local causes an evaluation failure.
 
+    + `(local-label "NAME")` defines or updates a label in the innermost
+      active `(do)` scope, using the same `_LOCAL_N_` prefix as local variables.
+      Its name can be evaluated dynamically. Existing labels can be revisited
+      and redefined following `(label)` rules, including frozen-label checks.
+      A name already used by an active non-label local causes an evaluation
+      failure. Like other locals, the label is reset and unfrozen when its
+      scope exits. `(goto)` and `(get)` already resolve such labels through
+      the active local-scope chain, falling back to the global namespace.
+
     + `(local-str-new "NAME" LENGTH)` creates or replaces a local
       zero-initialized string of the specified byte length.
       `(local-arr-new "NAME" TYPE LENGTH)` similarly creates or replaces a local
@@ -1275,8 +1310,8 @@ features:
       `(arr-set)`, `(arr-size)`, `(arr-type)`, `(freeze)`, `(is-frozen)`, and
       `(kind-of)` search active `(do)` scopes from innermost to outermost, then
       fall back to the unprefixed global name. `(var)` and `(override)` continue
-      to define and replace global symbols. Function and label definitions
-      retain their existing global naming behavior.
+      to define and replace global symbols. Function definitions and `(label)`
+      remain global, while `(local-label)` creates a scoped label.
 
     + When a `(do)` exits, its local symbols remain in the global table but
       their values are reset to actual `TYPE_VOID` and their frozen flags are
@@ -1403,7 +1438,8 @@ features:
       Exceeding the limit causes an evaluation failure instead of unbounded
       recursive calls. **TODO** Consider tail-call optimization separately.
 
-    + A `(goto)` inside a function follows the existing global-label rules.
+    + A `(goto)` inside a function follows the existing label-resolution rules,
+      including local labels visible in the function’s definition-site scopes.
       A jump to a reachable label outside the function body unwinds the function
       and any nested recursive calls, running their defers and local cleanup.
       Jumping into a function body from outside using a label defined within

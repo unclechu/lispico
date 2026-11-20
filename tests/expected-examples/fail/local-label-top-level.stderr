@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: Line 1 Column 1: (local-label) requires an active (do) scope
+1 | (local-label "loop")
+  | ↑

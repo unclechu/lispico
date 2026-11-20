@@ -6,20 +6,41 @@
 #include "evaluate.h"
 #include "storage.h"
 
-// (label) — Define or update a global label at the current expression
-Datum std_label(Interpreter *interpreter, const Datum *args, size_t argc) {
+// Define or update a global or local label at the current expression.
+static Datum std_label_impl(
+  Interpreter *interpreter,
+  const Datum *args,
+  size_t argc,
+  const char *fn_name,
+  bool is_local
+) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
-  const char fn_name[] = "label";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+  char local_name[SYMBOL_NAME_SIZE] = {'\0'};
 
-  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) goto finish;
 
   if (!get_variable_name(&args[0], &symbol_name)) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid label name", fn_name);
     goto fail;
   }
 
+  if (is_local) {
+    if (interpreter->local_scope == NULL) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) requires an active (do) scope", fn_name);
+      goto fail;
+    }
+
+    if (
+      !local_symbol_name(interpreter->local_scope->expression_index, symbol_name, &local_name)
+    ) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid or too long label name", fn_name);
+      goto fail;
+    }
+  }
+
+  const char *name = is_local ? local_name : symbol_name;
   uint32_t expression_index = get_current_native_call_expression_index(interpreter);
 
   if (expression_index == EXPR_NONE || expression_index >= interpreter->expression_count) {
@@ -27,50 +48,84 @@ Datum std_label(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  // Check first if such label already exists
-  // (and just overwrite it, replace the index where it is pointing at)
-  Symbol *symbol = symbol_lookup(interpreter, symbol_name);
+  // Look up the label in its global or generated local namespace.
+  Symbol *symbol = symbol_lookup(interpreter, name);
 
-  // If label by this name does not exist then create a new one
+  // A local label may reuse a reset `TYPE_VOID` entry from an earlier activation.
   if (symbol == NULL) {
-    symbol = symbol_define(interpreter, symbol_name, SYM_LABEL);
+    symbol = symbol_define(interpreter, name, SYM_LABEL);
 
     if (symbol == NULL) {
-      extract_error_message_from_symbol_define_error(interpreter, &fail_msg, symbol_name);
+      extract_error_message_from_symbol_define_error(interpreter, &fail_msg, name);
       goto fail;
     }
-  } else if (symbol->kind != SYM_LABEL) {
+  } else if (
+    symbol->kind != SYM_LABEL &&
+    !(
+      is_local &&
+      symbol->kind == SYM_VARIABLE &&
+      symbol->as.variable.type == TYPE_VOID &&
+      symbol->local_scope_owner == NULL
+    )
+  ) {
     snprintf(
       fail_msg,
       sizeof(fail_msg),
       "(%s) symbol “%s” already exists and is not a label",
       fn_name,
-      symbol_name
+      name
     );
     goto fail;
   }
 
   // A frozen label may be encountered again through (goto), but only at its
   // original expression. Moving the destination would change the symbol.
-  if (symbol->frozen && symbol->as.instruction_index != expression_index) {
+  if (
+    symbol->frozen &&
+    (
+      symbol->kind != SYM_LABEL ||
+      symbol->as.instruction_index != expression_index
+    )
+  ) {
     (void)validate_symbol_mutable(symbol, fn_name, &fail_msg);
     goto fail;
   }
 
-  // Global labels can be updated by executing `(label)` again unless frozen.
-  if (!symbol->frozen) symbol->as.instruction_index = expression_index;
+  // Reuse reset local entries without deleting them from the symbol table.
+  // Frozen labels remain valid only at their original expression location.
+  if (!symbol->frozen) {
+    symbol->kind = SYM_LABEL;
+    symbol->as.instruction_index = expression_index;
+  }
+
+  if (is_local) register_local_symbol(interpreter, symbol);
 
   // Defining a label preserves the previous evaluation result.
   (void)get_last_evaluation_value(interpreter, &return_value);
-  return return_value;
+  goto finish;
 
   fail:
     report_evaluation_failure(interpreter, fail_msg);
+    goto finish;
+
+  finish:
     wipe_memory(fail_msg, sizeof(fail_msg));
+    wipe_memory(symbol_name, sizeof(symbol_name));
+    wipe_memory(local_name, sizeof(local_name));
     return return_value;
 }
 
-// (goto) — Request evaluation to continue at a global label
+// (label) — Define or update a global label at the current expression.
+Datum std_label(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_label_impl(interpreter, args, argc, "label", false);
+}
+
+// (local-label) — Define or update a label in the current (do) scope.
+Datum std_local_label(Interpreter *interpreter, const Datum *args, size_t argc) {
+  return std_label_impl(interpreter, args, argc, "local-label", true);
+}
+
+// (goto) — Request evaluation to continue at a resolved label
 Datum std_goto(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};

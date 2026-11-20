@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: Line 1 Column 22: (local-label) symbol “_LOCAL_0_loop” already exists and is not a label
+1 | (do (local "loop" 5) (local-label "loop"))
+  |                      ↑
