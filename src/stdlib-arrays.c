@@ -508,6 +508,155 @@ Datum std_arr_type(Interpreter *interpreter, const Datum *args, size_t argc) {
     return return_value;
 }
 
+// (arr-concat) — Concatenate one or more arrays into an independent array value.
+Datum std_arr_concat(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "arr-concat";
+
+  if (argc == 0) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects at least 1 argument", fn_name);
+    goto fail;
+  }
+
+  if (args[0].kind != SYM_ARRAY) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects array arguments", fn_name);
+    goto fail;
+  }
+
+  ValueType element_type = args[0].as.array.element_type;
+  size_t element_size = 0;
+  size_t total_length = 0;
+
+  switch (element_type) {
+    case TYPE_U32: element_size = sizeof(uint32_t); break;
+    case TYPE_I32: element_size = sizeof(int32_t); break;
+    case TYPE_F32: element_size = sizeof(float); break;
+    case TYPE_STRING: element_size = sizeof(String); break;
+    default:
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) unsupported array element type: %s",
+        fn_name,
+        show_ValueType(element_type)
+      );
+      goto fail;
+  }
+
+  // Validate all source arrays and their elements before allocating storage.
+  for (size_t i = 0; i < argc; ++i) {
+    if (args[i].kind != SYM_ARRAY) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) expects array arguments", fn_name);
+      goto fail;
+    }
+
+    Array source = args[i].as.array;
+    if (source.element_type != element_type) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) expects arrays of the same element type (%s vs. %s)",
+        fn_name,
+        show_ValueType(element_type),
+        show_ValueType(source.element_type)
+      );
+      goto fail;
+    }
+
+    if (source.length != 0 && source.data == NULL) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid source array", fn_name);
+      goto fail;
+    }
+
+    if ((size_t)source.length > UINT32_MAX - total_length) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) concatenated array is too long", fn_name);
+      goto fail;
+    }
+    total_length += source.length;
+
+    if (element_type == TYPE_STRING) {
+      for (uint32_t j = 0; j < source.length; ++j) {
+        String string = ((const String *)source.data)[j];
+        if (
+          string.length == SIZE_MAX ||
+          (string.length != 0 && string.data == NULL)
+        ) {
+          snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string array element", fn_name);
+          goto fail;
+        }
+      }
+    }
+  }
+
+  if (total_length != 0 && element_size > (SIZE_MAX / total_length)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) array allocation size is too large", fn_name);
+    goto fail;
+  }
+
+  size_t size = total_length * element_size;
+  // `allocate_runtime_data` handles `size == 0` by allocating one byte.
+  void *data = allocate_runtime_data(interpreter, size);
+  if (data == NULL) goto allocation_failed;
+  if (size == 0) wipe_memory(data, 1);
+
+  size_t offset = 0;
+  for (size_t i = 0; i < argc; ++i) {
+    Array source = args[i].as.array;
+    if (source.element_type == TYPE_STRING) {
+      for (uint32_t j = 0; j < source.length; ++j) {
+        String string = ((const String *)source.data)[j];
+        if (string.data == NULL) {
+          // Preserve zero-initialized empty strings without allocating buffers.
+          ((String *)data)[offset + j] = (String) { .data = NULL, .length = 0 };
+          continue;
+        }
+
+        // Copy each string independently, preserving embedded NUL bytes.
+        char *string_data = allocate_runtime_data(interpreter, string.length + 1);
+        if (string_data == NULL) goto allocation_failed;
+
+        if (string.length != 0) memcpy(string_data, string.data, string.length);
+        string_data[string.length] = '\0';
+        ((String *)data)[offset + j] = (String) { .data = string_data, .length = string.length };
+      }
+    } else if (source.length != 0) {
+      // Copy numeric array elements without modifying the source arrays.
+      memcpy(
+        (char *)data + offset * element_size,
+        source.data,
+        (size_t)source.length * element_size
+      );
+    }
+    offset += source.length;
+  }
+
+  return_value = (Datum) {
+    .kind = SYM_ARRAY,
+    .as.array = {
+      .element_type = element_type,
+      .length = (uint32_t)total_length,
+      .data = data,
+    },
+  };
+
+  return return_value;
+
+  allocation_failed:
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
 // (arr-slice), (arr-take), (arr-drop) — Copy a range into an independent array value
 typedef enum {
   ARR_RANGE_SLICE,

@@ -755,6 +755,33 @@ features:
     array contents, or modifying the array. Invalid arguments and incorrect
     argument counts cause evaluation failures.
 
+  * `(arr-concat ARRAY [ARRAY…])` — Concatenate one or more evaluated arrays
+    into a new, independent array value.
+
+    + `(arr-concat (arr 1 2 3) (arr 4 5 6) (arr 7 8 9))` → `(arr 1 2 3 4 5 6 7 8 9)`
+    + `(arr-concat (arr 1 2 3))` → `(arr 1 2 3)`
+    + `(var "foo" (arr 1 2 3))`
+    + `(arr-concat foo foo)` → `(arr 1 2 3 1 2 3)`
+
+    Every argument must be an evaluated array (`SYM_ARRAY`). All arrays must
+    have the same element type (`u32`, `i32`, `f32`, or `s`), including empty
+    arrays. No implicit conversions are performed. At least one array is
+    required; the number of arguments is limited by `EVAL_ARG_CAPACITY`.
+
+    Empty input arrays are allowed, and concatenating only empty arrays returns
+    a zero-length array retaining their common element type. The resulting
+    length must fit in `u32`, and the allocation size must fit in `size_t`.
+
+    The result has independent runtime-managed array storage. Numeric elements
+    are copied directly. String elements are copied into independent buffers,
+    preserving embedded `\0` bytes. Zero-initialized empty string entries
+    remain empty without additional string allocations. The original arrays
+    are not modified, including when the same array is supplied more than once.
+
+    `(arr-concat)` does not automatically collect garbage. Its allocations
+    remain tracked until `clean_evaluation()` or an explicit `(gc)` reclaims
+    unreachable data.
+
   * Array slicing
 
     + `(arr-slice ARRAY FROM LENGTH)` — Copy `LENGTH` elements starting at the

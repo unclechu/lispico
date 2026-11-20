@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: Line 1 Column 1: (arr-concat) expects arrays of the same element type (TYPE_STRING vs. TYPE_U32)
+1 | (arr-concat (arr "hello") (arr 1)) ; String and numeric arrays cannot be joined
+  | ↑
