@@ -1,3 +1,5 @@
+#include <inttypes.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "stdlib-variables.h"
@@ -23,6 +25,171 @@ bool get_variable_name(const Datum *datum, char (*name)[SYMBOL_NAME_SIZE]) {
   memcpy(*name, string.data, string.length);
   (*name)[string.length] = '\0';
   return true;
+}
+
+// Return a symbol’s stored name when it is visible in the requested listing.
+// The global listing includes every occupied symbol-table slot. The scoped
+// listing omits inactive locals and symbols masked by nearer scopes.
+//
+// - `true` and `*result != NULL` → Symbol is visible
+// - `true` and `*result == NULL` → Symbol is not visible
+// - `false` and `*result == NULL` → Evaluation failure was reported
+static bool enumerated_symbol_name(
+  Interpreter *interpreter,
+  const Symbol *symbol,
+  bool scoped,
+  const char **result
+) {
+  *result = NULL;
+
+  // Global enumeration returns all occupied entries without scope filtering.
+  // Symbol is not visible (not defined).
+  if (symbol->kind == SYM_EMPTY) return true;
+
+  // Forward name as-is for non-scoped symbol enumeration.
+  if (!scoped) {
+    *result = symbol->name;
+    return true;
+  }
+
+  // Below code runs only for scoped `(local-variables)`.
+
+  // Global symbols are visible only when no local symbol masks them.
+  // Use the regular scoped lookup to determine which symbol takes precedence.
+  if (!symbol->defined_as_local) {
+    if (symbol_lookup_scoped(interpreter, symbol->name) == symbol) {
+      *result = symbol->name;
+    }
+    return true;
+  }
+
+  // Local symbols retain their `_LOCAL_N_` names in the returned array.
+  // Check the original unprefixed name only to determine shadowing.
+  //
+  // Traverse the visible `(do)` scopes from innermost to outermost.
+  // Inactive scopes and hidden function caller scopes are not included.
+  for (
+    const EvalLocalScopeFrame *scope = interpreter->local_scope;
+    scope != NULL;
+    scope = scope->previous
+  ) {
+    // Generate the scope-specific prefix using the shared naming convention.
+    char prefix[SYMBOL_NAME_SIZE] = {'\0'};
+    if (!local_symbol_name(scope->expression_index, "", &prefix)) {
+      wipe_memory(prefix, sizeof(prefix));
+      report_evaluation_failure(
+        interpreter,
+        "(local-variables) failed to construct local symbol prefix"
+      );
+      return false;
+    }
+
+    size_t prefix_length = strlen(prefix);
+
+    // Check whether the symbol belongs to this scope, then resolve its
+    // unprefixed name to verify that this exact symbol is visible.
+    // A nearer local symbol may mask it, even if both symbols still exist.
+    if (strncmp(symbol->name, prefix, prefix_length) == 0) {
+      const char *name = symbol->name + prefix_length;
+      bool visible = *name != '\0' && symbol_lookup_scoped(interpreter, name) == symbol;
+      wipe_memory(prefix, sizeof(prefix));
+
+      // Return the original stored name, not its unprefixed counterpart.
+      if (visible) {
+        *result = symbol->name;
+        return true;
+      }
+
+      continue;
+    }
+    wipe_memory(prefix, sizeof(prefix));
+  }
+
+  // The local symbol does not belong to any visible scope.
+  return true;
+}
+
+// (variables) and (local-variables) — Return stored symbol names.
+static Datum std_variables_impl(
+  Interpreter *interpreter,
+  size_t argc,
+  bool scoped
+) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char *fn_name = scoped ? "local-variables" : "variables";
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 0, argc)) return return_value;
+
+  // Include every defined symbol, including labels, native functions,
+  // and local entries left in the hash table after scope cleanup.
+  size_t count = 0;
+  for (uint32_t i = 0; i < interpreter->storage.symbol_capacity; ++i) {
+    const Symbol *symbol = &interpreter->storage.symbols[i];
+    const char *name = NULL;
+    if (!enumerated_symbol_name(interpreter, symbol, scoped, &name)) return return_value;
+    if (name != NULL) ++count;
+  }
+
+  if (count > UINT32_MAX || count > (SIZE_MAX / sizeof(String))) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) resulting array is too large", fn_name);
+    goto fail;
+  }
+
+  // Each name receives its own runtime allocation, as required for independent
+  // string elements and correct reachability when `(arr-get)` returns a name.
+  String *names = allocate_runtime_data(interpreter, count * sizeof(*names));
+  if (names == NULL) goto allocation_failed;
+  wipe_memory(names, count == 0 ? 1 : count * sizeof(*names));
+
+  // Allocate each name string copy for the resulting array.
+  size_t index = 0;
+  for (uint32_t i = 0; i < interpreter->storage.symbol_capacity; ++i) {
+    const Symbol *symbol = &interpreter->storage.symbols[i];
+    const char *name = NULL;
+    if (!enumerated_symbol_name(interpreter, symbol, scoped, &name)) return return_value;
+    if (name == NULL) continue;
+
+    size_t length = strlen(name);
+    char *copy = allocate_runtime_data(interpreter, length + 1); // +1 for `\0`
+    if (copy == NULL) goto allocation_failed;
+
+    memcpy(copy, name, length + 1); // +1 to also copy `\0`
+    names[index++] = (String) { .data = copy, .length = length };
+  }
+
+  return_value = (Datum) {
+    .kind = SYM_ARRAY,
+    .as.array = {
+      .element_type = TYPE_STRING,
+      .length = (uint32_t)count,
+      .data = names,
+    },
+  };
+
+  return return_value;
+
+  allocation_failed:
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
+Datum std_variables(Interpreter *interpreter, const Datum*, size_t argc) {
+  return std_variables_impl(interpreter, argc, false);
+}
+
+Datum std_local_variables(Interpreter *interpreter, const Datum*, size_t argc) {
+  return std_variables_impl(interpreter, argc, true);
 }
 
 // (get "NAME") — Read a variable by its evaluated string name.

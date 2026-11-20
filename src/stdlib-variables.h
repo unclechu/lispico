@@ -6,6 +6,8 @@
 ADD_STDLIB_FN_TYPE_DEF(std_var);
 ADD_STDLIB_FN_TYPE_DEF(std_local);
 ADD_STDLIB_FN_TYPE_DEF(std_get);
+ADD_STDLIB_FN_TYPE_DEF(std_variables);
+ADD_STDLIB_FN_TYPE_DEF(std_local_variables);
 ADD_STDLIB_FN_TYPE_DEF(std_reset);
 ADD_STDLIB_FN_TYPE_DEF(std_set);
 ADD_STDLIB_FN_TYPE_DEF(std_override);
@@ -18,6 +20,8 @@ bool get_variable_name(const Datum *datum, char (*name)[SYMBOL_NAME_SIZE]);
   ADD_FN_SYMBOL("var", std_var); \
   ADD_FN_SYMBOL("local", std_local); \
   ADD_FN_SYMBOL("get", std_get); \
+  ADD_FN_SYMBOL("variables", std_variables); \
+  ADD_FN_SYMBOL("local-variables", std_local_variables); \
   ADD_FN_SYMBOL("reset", std_reset); \
   ADD_FN_SYMBOL("set", std_set); \
   ADD_FN_SYMBOL("override", std_override); \

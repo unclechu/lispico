@@ -1212,6 +1212,9 @@ features:
     + `(var "numbers" (arr 1 2 3))` — Define an array variable with type and
       length inferred from the array value (independent copy)
     + `(get "foo")` — Read a variable by its name, evaluated at runtime
+    + `(variables)` — Return all defined symbols’ stored names
+    + `(local-variables)` —
+      Return visible symbols’ stored names without masked entries
     + `(get (str "fo" "o"))` — Resolve a variable name dynamically
     + `(reset "foo")` — Reset an existing scalar or array variable to `TYPE_VOID`
     + `(set "foo" (+ foo 3))` — Set a value to an already defined variable
@@ -1246,6 +1249,57 @@ features:
     native functions; use `(call)` for dynamic function calls.
     An invalid name, an undefined symbol, or a native function name causes an
     evaluation failure.
+
+    `(variables)` and `(local-variables)` take no arguments and return
+    independent string arrays (`s`) containing actual symbol-table names. All
+    occupied symbol-table entries are included, regardless of kind: scalar
+    variables, arrays, labels, and native functions, including frozen symbols
+    and variables reset to `TYPE_VOID`. Names are not modified or shortened for
+    display.
+
+    `(variables)` enumerates the entire global symbol hash table, including
+    generated `_LOCAL_N_…` names belonging to active or previously exited
+    `(do)` scopes. Both shadowed and shadowing symbols appear, even if one is
+    currently inaccessible through ordinary scoped lookup. Local entries
+    remain listed after cleanup because their symbol-table slots persist.
+
+    `(local-variables)` enumerates only symbols visible through the current
+    `(do)` scope chain, using their exact stored names. A visible local symbol
+    such as `_LOCAL_N_x` masks both global `x` and `x` in any outer `(do)`;
+    only the innermost visible symbol for that name is listed. Unmasked globals
+    are included. A local label also masks a global variable with the same
+    unprefixed name. Previously registered locals outside the visible scope
+    chain are excluded. At the top level, only global symbols are visible.
+    Function calls use definition-site resolution and do not expose locals
+    belonging to a hidden caller.
+
+    The results are snapshots: changing or resetting symbols does not modify
+    previously returned name arrays. Each string has independent runtime
+    storage, so repeated enumeration consumes runtime allocation slots until
+    an explicit `(gc)` or evaluation cleanup. Enumeration does not perform GC.
+    The names can be used with `(get)`, `(kind-of)`, `(is-frozen)`, and other
+    standard-library functions to implement custom filtering and debugging.
+
+    Example:
+
+    ```lisp
+    (var "x" 100)
+    (do
+      (local "x" 20)
+      (local "temporary" 42)
+      (var "global-from-do" 7)
+
+      ; Includes "x", "_LOCAL_N_x", and "_LOCAL_N_temporary".
+      (variables)
+
+      ; Includes "_LOCAL_N_x", "_LOCAL_N_temporary", and "global-from-do",
+      ; but excludes the masked global "x".
+      (local-variables)
+    )
+    ```
+
+    Here `N` denotes the corresponding `(do)` expression index. The actual
+    returned names contain that numeric index, not the literal letter `N`.
 
     `(freeze "NAME")` accepts the name of any existing symbol, including
     scalar variables, arrays, labels, and native functions. Calling it more

@@ -81,6 +81,10 @@ typedef struct Symbol {
   // during this evaluation. A new evaluation starts with a clean symbol table.
   bool frozen;
 
+  // Local symbols remain identifiable after their scope has been cleaned up.
+  // Their names may still occupy entries in the global symbol table.
+  bool defined_as_local;
+
   // Active `(do)` activation that owns this local symbol, if any.
   // These links do not affect the global symbol table or its probing.
   //

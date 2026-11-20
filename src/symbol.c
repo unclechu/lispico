@@ -117,6 +117,7 @@ void register_local_symbol(Interpreter *interpreter, Symbol *symbol) {
   if (scope == NULL || symbol->local_scope_owner == scope) return;
 
   // Put the `Symbol` on top of the local symbols LIFO stack.
+  symbol->defined_as_local = true;
   symbol->next_local = scope->first_local;
   symbol->local_scope_owner = scope;
   scope->first_local = symbol;
@@ -182,6 +183,7 @@ Symbol* symbol_define(Interpreter *interpreter, const char *name, SymbolKind kin
       memcpy(s->name, name, len + 1u);
       s->kind = kind;
       s->frozen = false;
+      s->defined_as_local = false;
       interpreter->symbol_count++;
       return s;
     }
