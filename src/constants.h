@@ -32,6 +32,9 @@ static_assert(
 // Maximum arguments limit for an expression to have
 #define EVAL_ARG_CAPACITY 16u
 
+// Maximum number of nested user-defined function calls
+#define EVAL_FUNCTION_CALL_DEPTH_LIMIT 128u
+
 // Maximum amount of dynamically allocated runtime entities
 #define EVAL_RUNTIME_ALLOCATION_CAPACITY 512u
 

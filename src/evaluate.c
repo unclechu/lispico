@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <stdlib.h>
 
 #include "evaluate.h"
 #include "symbol-error.h"
@@ -173,6 +174,119 @@ static void clean_local_scope(EvalLocalScopeFrame *scope) {
     local->next_local = NULL;
     local = next;
   }
+}
+
+// Enter a `(do)` activation. If the same expression is already active,
+// temporarily preserve its locals so recursive calls receive independent
+// values while keeping the existing global symbol table and generated names.
+static bool enter_local_scope(Interpreter *interpreter, EvalLocalScopeFrame *scope) {
+  size_t count = 0;
+
+  // The nearest previous activation may not have declared a particular
+  // local yet. Preserve symbols from every active activation of this same
+  // expression, not only from the nearest matching frame.
+  for (
+    EvalLocalScopeFrame *previous = interpreter->active_local_scope;
+    previous != NULL;
+    previous = previous->previous_active
+  ) {
+    // If it’s a different scope preservation is not needed.
+    if (previous->expression_index != scope->expression_index) continue;
+
+    // Calculate the `count`.
+    for (
+      Symbol *local = previous->first_local;
+      local != NULL && local->local_scope_owner == previous;
+      local = local->next_local
+    ) {
+      count++;
+    }
+  }
+
+  // If there’s something to preserve in the local scope.
+  if (count != 0) {
+    if (count > SIZE_MAX / sizeof(EvalSavedLocalSymbol)) {
+      report_evaluation_failure(interpreter, "(do) local activation is too large");
+      return false;
+    }
+
+    // Allocated saved local scope array.
+    EvalSavedLocalSymbol *saved = malloc(count * sizeof(*saved));
+    if (saved == NULL) {
+      report_evaluation_failure(interpreter, "(do) cannot save recursive local variables");
+      return false;
+    }
+
+    scope->saved_locals = saved;
+    scope->saved_local_count = count;
+
+    // Snapshot every prior activation before clearing any `next_local`
+    // pointers, so that earlier lists remain traversable until restored.
+    size_t i = 0;
+    for (
+      EvalLocalScopeFrame *previous = interpreter->active_local_scope;
+      previous != NULL;
+      previous = previous->previous_active
+    ) {
+      // If it’s a different scope preservation is not needed.
+      if (previous->expression_index != scope->expression_index) continue;
+
+      // Copy the local scope symbols.
+      for (
+        Symbol *local = previous->first_local;
+        local != NULL && local->local_scope_owner == previous;
+        local = local->next_local
+      ) {
+        saved[i].symbol = local; // Pointer of the symbols table entry, to restore to later.
+        memcpy(&saved[i].saved, local, sizeof(*local)); // Make a shallow symbol copy.
+        i++;
+      }
+    }
+
+    // Drop these references from the table without freeing their data.
+    // The snapshots themselves remain reachable by manual `(gc)`.
+    for (size_t i = 0; i < count; ++i) {
+      Symbol *symbol = saved[i].symbol;
+      wipe_memory(&symbol->as, sizeof(symbol->as));
+      symbol->kind = SYM_VARIABLE;
+      symbol->as.variable = (Value) { .type = TYPE_VOID };
+      symbol->frozen = false;
+      symbol->local_scope_owner = NULL;
+      symbol->next_local = NULL;
+    }
+  }
+
+  scope->previous_active = interpreter->active_local_scope;
+  interpreter->active_local_scope = scope;
+  interpreter->local_scope = scope;
+  return true;
+}
+
+// Drop this activation’s locals, then restore the suspended outer values.
+// Only the current frame is wiped: callers remain live until they return.
+static void leave_local_scope(
+  Interpreter *interpreter,
+  EvalLocalScopeFrame *scope,
+  EvalLocalScopeFrame *previous_visible_scope
+) {
+  assert(interpreter->active_local_scope == scope);
+  clean_local_scope(scope);
+
+  for (size_t i = 0; i < scope->saved_local_count; ++i) {
+    EvalSavedLocalSymbol *saved = &scope->saved_locals[i];
+    // Override symbols table entry to the preserved state.
+    *saved->symbol = saved->saved;
+  }
+
+  if (scope->saved_locals != NULL) {
+    // Wipe the preserved shallow local scope copy and free the memory.
+    wipe_memory(scope->saved_locals, scope->saved_local_count * sizeof(*scope->saved_locals));
+    free(scope->saved_locals);
+  }
+
+  interpreter->active_local_scope = scope->previous_active;
+  interpreter->local_scope = previous_visible_scope;
+  wipe_memory(scope, sizeof(*scope)); // `scope` is reset after this function call.
 }
 
 // Execute deferred expressions in reverse registration order.
@@ -679,6 +793,17 @@ bool evaluate_user_function(
   size_t argc,
   Datum *result
 ) {
+  // Bound recursive calls before consuming more of the evaluator’s C stack.
+  // Tail-call optimization is not implemented, so each call has its own frame.
+  uint32_t call_depth = interpreter->function_call == NULL
+    ? 1
+    : interpreter->function_call->call_depth + 1;
+
+  if (call_depth > EVAL_FUNCTION_CALL_DEPTH_LIMIT) {
+    report_evaluation_failure(interpreter, "(fn) maximum function call depth exceeded");
+    return false;
+  }
+
   UserFunctionDefinition definition = {0};
   if (!get_user_function_definition(interpreter, definition_expression_index, &definition)) {
     wipe_memory(&definition, sizeof(definition));
@@ -716,13 +841,26 @@ bool evaluate_user_function(
   EvalFunctionCallFrame call = {
     .definition_expression_index = definition_expression_index,
     .entry_sequence_depth = interpreter->current_sequence_depth,
+    .call_depth = call_depth,
     .arguments = args,
     .argument_count = argc,
     .previous = interpreter->function_call,
   };
 
+  // The function sees its own definition-site scope, not the caller’s locals.
+  // Reentrant activation tracking still sees every active caller scope.
+  if (!enter_local_scope(interpreter, &scope)) {
+    POP_GC_ROOT(interpreter, function_arguments_gc_root);
+    POP_GC_ROOT(interpreter, previous_result_gc_root);
+    wipe_memory(&call, sizeof(call));
+    wipe_memory(&scope, sizeof(scope));
+    wipe_memory(&previous_result, sizeof(previous_result));
+    wipe_memory(&previous_outcome, sizeof(previous_outcome));
+    wipe_memory(&definition, sizeof(definition));
+    return false;
+  }
+
   interpreter->function_call = &call;
-  interpreter->local_scope = &scope;
   interpreter->current_sequence_depth++;
   interpreter->eval_outcome.result = (Datum) { .kind = SYM_EMPTY };
 
@@ -776,11 +914,11 @@ bool evaluate_user_function(
   ok = evaluate_sequence(interpreter, definition.body_index, &function_result, false);
 
   finish:
-    // User defers have run. Reset names without invoking `(gc)`.
-    clean_local_scope(&scope);
+    // User defers have run. Restore any suspended recursive activation
+    // after dropping this invocation’s local references (without `(gc)`).
+    leave_local_scope(interpreter, &scope, previous_scope);
 
     interpreter->current_sequence_depth--;
-    interpreter->local_scope = previous_scope;
     interpreter->function_call = call.previous;
 
     if (
@@ -806,7 +944,6 @@ bool evaluate_user_function(
     wipe_memory(&previous_outcome, sizeof(previous_outcome));
     wipe_memory(&definition, sizeof(definition));
     wipe_memory(&call, sizeof(call));
-    wipe_memory(&scope, sizeof(scope));
     return ok;
 }
 
@@ -1272,18 +1409,18 @@ static bool evaluate_expression_impl(
           .expression_index = current_expression_index,
           .previous = interpreter->local_scope,
         };
-        interpreter->local_scope = &scope;
+        if (!enter_local_scope(interpreter, &scope)) {
+          wipe_memory(&scope, sizeof(scope));
+          return false;
+        }
+
         interpreter->current_sequence_depth++;
         bool ok = evaluate_sequence(interpreter, fn->next, result, false);
 
         // User `(defer)` expressions have run. Drop the local references
-        // without collecting memory, and unfreeze the names for the next
-        // activation.
-        clean_local_scope(&scope);
-
+        // without collecting memory, then restore an older activation’s locals.
         interpreter->current_sequence_depth--;
-        interpreter->local_scope = scope.previous;
-        wipe_memory(&scope, sizeof(scope));
+        leave_local_scope(interpreter, &scope, scope.previous);
         return ok;
       }
 
@@ -1573,8 +1710,10 @@ void clean_evaluation(Interpreter *interpreter) {
 
   // (do) scopes and (depth)
   wipe_memory(&interpreter->local_scope, sizeof(interpreter->local_scope));
+  wipe_memory(&interpreter->active_local_scope, sizeof(interpreter->active_local_scope));
   wipe_memory(&interpreter->function_call, sizeof(interpreter->function_call));
   interpreter->local_scope = NULL;
+  interpreter->active_local_scope = NULL;
   interpreter->function_call = NULL;
   interpreter->current_sequence_depth = 0;
 

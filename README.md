@@ -1280,9 +1280,12 @@ features:
       (assert (== x 100))
       ```
 
-    + **TODO** Support preserving and restoring previous local values when
-      an identical `(do)` expression is re-entered before its earlier activation
-      exits, as needed for recursive user-defined pseudo-functions.
+    + Recursive entry into an already active `(do)` expression temporarily
+      saves its previous local symbol values and frozen flags. The inner
+      activation receives its own values, and the outer values are restored
+      when the inner activation exits, including through `(leave)`, `(goto)`,
+      `(exit)`, or evaluation failure. Any suspended string or array references
+      remain visible to manual `(gc)`; this does not trigger automatic GC.
 
   * <a id="user-defined-pseudo-functions"></a>User-defined pseudo-functions
 
@@ -1342,12 +1345,35 @@ features:
       helper could supply the count needed to leave the function; `(return)`
       could later provide a shorthand for returning a value early.
 
+      Note that `(leave)` can leave nested function calls too:
+
+      ```lisp
+      (fn "a" (b))
+      (fn "b" (c))
+      (fn "c" (leave 3 42))
+
+      (assert (== (a) 42))
+      ```
+
     + Call frames preserve arguments, the caller’s last evaluation result,
-      and scope context. **TODO** Support recursive/reentrant invocation of
-      identical function bodies by preserving activation-specific locals,
-      including mutable strings and arrays, without replacing the global symbol
-      table. Such calls are not reliable yet. **TODO** Consider tail-call
-      optimization separately.
+      and definition-site scope context. Direct and mutual recursion are
+      supported: reentrant `(do)` activations save and restore previous local
+      symbols, including frozen flags and references to strings and arrays.
+      Named string and array arguments remain independent copies, as with
+      other function calls. Only the temporary activation snapshots are
+      automatically wiped and freed; dynamic language values remain subject
+      to explicit `(gc)` and normal evaluation cleanup.
+
+    + Recursive function calls are limited to
+      `EVAL_FUNCTION_CALL_DEPTH_LIMIT` nested invocations (currently `128`).
+      Exceeding the limit causes an evaluation failure instead of unbounded
+      recursive calls. **TODO** Consider tail-call optimization separately.
+
+    + A `(goto)` inside a function follows the existing global-label rules.
+      A jump to a reachable label outside the function body unwinds the function
+      and any nested recursive calls, running their defers and local cleanup.
+      Jumping into a function body from outside using a label defined within
+      that body remains unsupported by the existing jump-path rules.
 
   * If-conditions and comparisons:
 

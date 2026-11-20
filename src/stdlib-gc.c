@@ -41,9 +41,11 @@ static void mark_datum_runtime_data(Interpreter *interpreter, const Datum *datum
 // Mark every tracked allocation reachable from symbols or active evaluator values.
 // The hash table's entries are spread across `symbol_capacity`, not `symbol_count`.
 static void mark_reachable_runtime_data(Interpreter *interpreter) {
+  Datum value = {0};
+
   for (uint32_t i = 0; i < interpreter->storage.symbol_capacity; ++i) {
     const Symbol *symbol = &interpreter->storage.symbols[i];
-    Datum value = { .kind = SYM_EMPTY };
+    value = (Datum) { .kind = SYM_EMPTY };
 
     if (symbol->kind == SYM_VARIABLE) {
       value = (Datum) { .kind = SYM_VARIABLE, .as.value = symbol->as.variable };
@@ -54,6 +56,26 @@ static void mark_reachable_runtime_data(Interpreter *interpreter) {
     }
 
     mark_datum_runtime_data(interpreter, &value);
+    wipe_memory(&value, sizeof(value));
+  }
+
+  // Recursive `(do)` activations temporarily suspend local symbols in
+  // snapshots. Their allocations must remain reachable while suspended.
+  for (
+    const EvalLocalScopeFrame *scope = interpreter->active_local_scope;
+    scope != NULL;
+    scope = scope->previous_active
+  ) {
+    for (size_t i = 0; i < scope->saved_local_count; ++i) {
+      const Symbol *saved = &scope->saved_locals[i].saved;
+      value = (Datum) { .kind = saved->kind };
+      if (saved->kind == SYM_VARIABLE)
+        value.as.value = saved->as.variable;
+      else if (saved->kind == SYM_ARRAY)
+        value.as.array = saved->as.array;
+      mark_datum_runtime_data(interpreter, &value);
+      wipe_memory(&value, sizeof(value));
+    }
   }
 
   // Keep the most recently evaluated value alive, even if it has no symbol.

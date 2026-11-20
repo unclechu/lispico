@@ -37,6 +37,7 @@ static void check_program(
   assert(outcome.kind == expected_kind);
   assert(interpreter->gc_roots == NULL);
   assert(interpreter->local_scope == NULL);
+  assert(interpreter->active_local_scope == NULL);
   assert(interpreter->function_call == NULL);
   assert(interpreter->current_sequence_depth == 0);
   check_local_state(interpreter);
@@ -97,6 +98,7 @@ int main(void) {
   clean_evaluation(&interpreter);
   assert(interpreter.gc_roots == NULL);
   assert(interpreter.local_scope == NULL);
+  assert(interpreter.active_local_scope == NULL);
   assert(interpreter.function_call == NULL);
   clean_symbols(&interpreter);
   clean_expressions(&interpreter);

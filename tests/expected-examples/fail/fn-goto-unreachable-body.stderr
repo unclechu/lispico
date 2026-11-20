@@ -1,0 +1,6 @@
+[FAIL] Evaluation failed: Line 5 Column 1: (goto) destination is not reachable through (do)
+2 |   (label "inside-function")
+3 |   1))
+4 | (create-label)
+5 | (goto inside-function)
+  | ↑
