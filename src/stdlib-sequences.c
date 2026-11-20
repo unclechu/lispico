@@ -45,6 +45,25 @@ Datum std_depth(Interpreter *interpreter, const Datum*, size_t argc) {
   return return_value;
 }
 
+// (call-depth) — Get the current user-defined function-call nesting depth.
+Datum std_call_depth(Interpreter *interpreter, const Datum*, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "call-depth";
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 0, argc)) return return_value;
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = {
+      .type = TYPE_U32,
+      .as.u32 = interpreter->function_call == NULL ? 0 : interpreter->function_call->call_depth,
+    },
+  };
+
+  return return_value;
+}
+
 // (get-arg INDEX) — Read a zero-based argument of the active pseudo-function.
 Datum std_get_arg(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };

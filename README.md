@@ -1364,6 +1364,13 @@ features:
       automatically wiped and freed; dynamic language values remain subject
       to explicit `(gc)` and normal evaluation cleanup.
 
+    + `(call-depth)` returns the current user-defined function-call nesting
+      depth as `u32`. It returns `0` outside a user-defined function, `1`
+      inside the first call, and increases by `1` for every nested call,
+      including direct and mutual recursion. Ordinary `(do)` blocks do not
+      affect `(call-depth)`; unlike `(depth)`, it counts function invocations,
+      not sequence nesting. The result is restored when returning to a caller.
+
     + Recursive function calls are limited to
       `EVAL_FUNCTION_CALL_DEPTH_LIMIT` nested invocations (currently `128`).
       Exceeding the limit causes an evaluation failure instead of unbounded
