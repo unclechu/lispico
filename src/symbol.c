@@ -97,10 +97,14 @@ Symbol* symbol_lookup_scoped(Interpreter *interpreter, const char *name) {
     scope = scope->previous
   ) {
     char local_name[SYMBOL_NAME_SIZE] = {'\0'};
-    if (!local_symbol_name(scope->expression_index, name, &local_name)) continue;
+    if (!local_symbol_name(scope->expression_index, name, &local_name)) {
+      wipe_memory(local_name, sizeof(local_name));
+      continue;
+    }
 
     // Regular symbol lookup using prefixed name.
     Symbol *symbol = symbol_lookup(interpreter, local_name);
+    wipe_memory(local_name, sizeof(local_name));
     if (symbol != NULL) return symbol;
   }
 

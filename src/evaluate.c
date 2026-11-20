@@ -154,6 +154,7 @@ static bool evaluate_expression_impl(
 #define POP_GC_ROOT(interpreter, root_name) { \
   assert((interpreter)->gc_roots == &(root_name)); \
   (interpreter)->gc_roots = (root_name).previous; \
+  wipe_memory(&(root_name), sizeof(root_name)); \
 }
 
 // Drop a `(do)` activation’s local references after its deferred expressions.
@@ -162,6 +163,9 @@ static void clean_local_scope(EvalLocalScopeFrame *scope) {
   Symbol *local = scope->first_local;
   while (local != NULL) {
     Symbol *next = local->next_local;
+    // Drop every stale value/pointer byte, without touching its allocation.
+    // Other live references may still need that data until a later `(gc)`.
+    wipe_memory(&local->as, sizeof(local->as));
     local->kind = SYM_VARIABLE;
     local->as.variable = (Value) { .type = TYPE_VOID };
     local->frozen = false;
@@ -199,6 +203,10 @@ static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_st
 
     uint32_t expression_index =
       interpreter->storage.deferred_expression_indices[interpreter->deferred_expression_count];
+    wipe_memory(
+      &interpreter->storage.deferred_expression_indices[interpreter->deferred_expression_count],
+      sizeof(*interpreter->storage.deferred_expression_indices)
+    );
 
     // Execute each deferred expression independently of the control flow
     // that caused this sequence to terminate. Each (defer) sees its original
@@ -218,6 +226,7 @@ static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_st
     // Evaluate the (defer) expression
     Datum ignored_result = { .kind = SYM_EMPTY };
     bool ok = evaluate_expression(interpreter, expression_index, &ignored_result);
+    wipe_memory(&ignored_result, sizeof(ignored_result));
 
     // Preserve only the first (defer) failure, but continue executing all defers
     if (
@@ -282,6 +291,8 @@ static bool run_deferred_expressions(Interpreter *interpreter, uint32_t defer_st
   }
 
   POP_GC_ROOT(interpreter, saved_eval_outcome_result);
+  wipe_memory(&saved_result, sizeof(saved_result));
+  wipe_memory(&saved_outcome, sizeof(saved_outcome));
   return !deferred_failure;
 }
 
@@ -560,10 +571,15 @@ static bool get_user_function_definition(
         },
       },
     };
-    if (
-      !get_variable_name(&name_value, &symbol_name) ||
-      !local_symbol_name(definition_index, symbol_name, &local_name)
-    ) {
+    bool valid_name =
+      get_variable_name(&name_value, &symbol_name) &&
+      local_symbol_name(definition_index, symbol_name, &local_name);
+
+    wipe_memory(&name_value, sizeof(name_value));
+    wipe_memory(symbol_name, sizeof(symbol_name));
+    wipe_memory(local_name, sizeof(local_name));
+
+    if (!valid_name) {
       report_evaluation_failure(interpreter, "(fn) invalid or too long argument name");
       return false;
     }
@@ -599,6 +615,7 @@ static bool bind_user_function_argument(
   ) {
     Datum binding[] = { *name, *value };
     (void)std_local(interpreter, binding, 2);
+    wipe_memory(binding, sizeof(binding));
     return interpreter->eval_outcome.kind == EVAL_OK;
   }
 
@@ -607,15 +624,16 @@ static bool bind_user_function_argument(
   // Construct the argument’s name within the implicit function `(do)` scope.
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
   char local_name[SYMBOL_NAME_SIZE] = {'\0'};
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  bool ok = false;
+
   if (
     !get_variable_name(name, &symbol_name) ||
     !local_symbol_name(interpreter->local_scope->expression_index, symbol_name, &local_name)
   ) {
     report_evaluation_failure(interpreter, "(fn) invalid or too long argument name");
-    return false;
+    goto finish;
   }
-
-  char fail_msg[ERR_MSG_SIZE] = {'\0'};
 
   // Define the local symbol if necessary, or verify that an existing one
   // can be replaced. Repeated function calls reuse the same symbol.
@@ -625,19 +643,15 @@ static bool bind_user_function_argument(
     if (symbol == NULL) {
       extract_error_message_from_symbol_define_error(interpreter, &fail_msg, local_name);
       report_evaluation_failure(interpreter, fail_msg);
-      wipe_memory(fail_msg, sizeof(fail_msg));
-      return false;
+      goto finish;
     }
-  } else {
-    if (!validate_symbol_mutable(symbol, "fn", &fail_msg)) {
-      report_evaluation_failure(interpreter, fail_msg);
-      wipe_memory(fail_msg, sizeof(fail_msg));
-      return false;
-    }
+  } else if (!validate_symbol_mutable(symbol, "fn", &fail_msg)) {
+    report_evaluation_failure(interpreter, fail_msg);
+    goto finish;
   }
 
-  // Preserve the original datum kind and value without copying or allocating.
-  // The scope cleanup will reset the symbol regardless of its original kind.
+  // Assign labels and `TYPE_VOID` directly, preserving their original datum kind.
+  // Neither requires allocating or copying dynamic data.
   symbol->kind = value->kind;
   if (value->kind == SYM_LABEL)
     symbol->as.instruction_index = value->as.instruction_index;
@@ -646,7 +660,13 @@ static bool bind_user_function_argument(
 
   // Register the argument for automatic cleanup when the function scope exits.
   register_local_symbol(interpreter, symbol);
-  return true;
+  ok = true;
+
+  finish:
+    wipe_memory(symbol_name, sizeof(symbol_name));
+    wipe_memory(local_name, sizeof(local_name));
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return ok;
 }
 
 // Invoke an existing function definition using the normal expression evaluator.
@@ -660,8 +680,10 @@ bool evaluate_user_function(
   Datum *result
 ) {
   UserFunctionDefinition definition = {0};
-  if (!get_user_function_definition(interpreter, definition_expression_index, &definition))
+  if (!get_user_function_definition(interpreter, definition_expression_index, &definition)) {
+    wipe_memory(&definition, sizeof(definition));
     return false;
+  }
 
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
 
@@ -680,6 +702,7 @@ bool evaluate_user_function(
     );
     report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
+    wipe_memory(&definition, sizeof(definition));
     return false;
   }
 
@@ -724,6 +747,7 @@ bool evaluate_user_function(
     },
   };
   (void)std_local(interpreter, argc_binding, 2);
+  wipe_memory(argc_binding, sizeof(argc_binding));
   if (interpreter->eval_outcome.kind != EVAL_OK) goto finish;
 
   uint32_t name_index = definition.first_argument_index;
@@ -741,7 +765,9 @@ bool evaluate_user_function(
       },
     };
 
-    if (!bind_user_function_argument(interpreter, &name, &args[i])) goto finish;
+    bool bound = bind_user_function_argument(interpreter, &name, &args[i]);
+    wipe_memory(&name, sizeof(name));
+    if (!bound) goto finish;
     name_index = name_expr->next;
   }
 
@@ -772,6 +798,15 @@ bool evaluate_user_function(
     POP_GC_ROOT(interpreter, function_result_gc_root);
     POP_GC_ROOT(interpreter, function_arguments_gc_root);
     POP_GC_ROOT(interpreter, previous_result_gc_root);
+
+    // These frames only borrow references. Never recurse through `previous`
+    // or wipe argument data, returned allocations, or the caller’s frames.
+    wipe_memory(&function_result, sizeof(function_result));
+    wipe_memory(&previous_result, sizeof(previous_result));
+    wipe_memory(&previous_outcome, sizeof(previous_outcome));
+    wipe_memory(&definition, sizeof(definition));
+    wipe_memory(&call, sizeof(call));
+    wipe_memory(&scope, sizeof(scope));
     return ok;
 }
 
@@ -893,24 +928,27 @@ static bool evaluate_expression_impl(
         }
 
         UserFunctionDefinition definition = {0};
-        if (!get_user_function_definition(interpreter, current_expression_index, &definition))
+        if (!get_user_function_definition(interpreter, current_expression_index, &definition)) {
+          wipe_memory(&definition, sizeof(definition));
           return false;
+        }
 
         // Evaluate name of the function (first argument, in case it is an expression).
         Datum previous_result = interpreter->eval_outcome.result;
         PUSH_GC_ROOT(interpreter, definition_result_gc_root, &previous_result, 1);
         Datum name_value = { .kind = SYM_EMPTY };
-        bool name_ok = evaluate_expression(interpreter, definition.name_index, &name_value);
-        POP_GC_ROOT(interpreter, definition_result_gc_root);
-        if (!name_ok) return false;
-
         char name[SYMBOL_NAME_SIZE] = {'\0'};
         char label_name[SYMBOL_NAME_SIZE] = {'\0'};
+        bool definition_ok = false;
+
+        if (!evaluate_expression(interpreter, definition.name_index, &name_value)) {
+          goto fn_definition_finish;
+        }
 
         // Read function name.
         if (!get_variable_name(&name_value, &name)) {
           report_evaluation_failure(interpreter, "(fn) invalid function name");
-          return false;
+          goto fn_definition_finish;
         }
 
         // Generate a label name.
@@ -922,7 +960,7 @@ static bool evaluate_expression_impl(
         );
         if (name_length <= 0 || (size_t)name_length >= sizeof(label_name)) {
           report_evaluation_failure(interpreter, "(fn) function label name is too long");
-          return false;
+          goto fn_definition_finish;
         }
 
         Symbol *symbol = symbol_lookup(interpreter, label_name);
@@ -933,21 +971,30 @@ static bool evaluate_expression_impl(
             extract_error_message_from_symbol_define_error(interpreter, &fail_msg, label_name);
             report_evaluation_failure(interpreter, fail_msg);
             wipe_memory(fail_msg, sizeof(fail_msg));
-            return false;
+            goto fn_definition_finish;
           }
         } else if (symbol->kind != SYM_LABEL) {
           report_evaluation_failure(interpreter, "(fn) function symbol is not a label");
-          return false;
+          goto fn_definition_finish;
         }
 
         if (symbol->frozen && symbol->as.instruction_index != current_expression_index) {
           report_evaluation_failure(interpreter, "(fn) cannot redefine a frozen label");
-          return false;
+          goto fn_definition_finish;
         }
 
         if (!symbol->frozen) symbol->as.instruction_index = current_expression_index;
         *result = previous_result;
-        return true;
+        definition_ok = true;
+
+        fn_definition_finish:
+          POP_GC_ROOT(interpreter, definition_result_gc_root);
+          wipe_memory(&definition, sizeof(definition));
+          wipe_memory(&name_value, sizeof(name_value));
+          wipe_memory(&previous_result, sizeof(previous_result));
+          wipe_memory(name, sizeof(name));
+          wipe_memory(label_name, sizeof(label_name));
+          return definition_ok;
       }
 
       // Special form: boolean conjunction and disjunction with short-circuiting.
@@ -964,7 +1011,11 @@ static bool evaluate_expression_impl(
           }
 
           Datum condition = { .kind = SYM_EMPTY };
-          if (!evaluate_expression(interpreter, arg_index, &condition)) return false;
+          bool condition_ok = evaluate_expression(interpreter, arg_index, &condition);
+          if (!condition_ok) {
+            wipe_memory(&condition, sizeof(condition));
+            return false;
+          }
 
           if (condition.kind != SYM_VARIABLE) {
             report_evaluation_failure(
@@ -973,6 +1024,7 @@ static bool evaluate_expression_impl(
                 ? "(and) condition must be a numeric value"
                 : "(or) condition must be a numeric value"
             );
+            wipe_memory(&condition, sizeof(condition));
             return false;
           }
 
@@ -988,9 +1040,11 @@ static bool evaluate_expression_impl(
                   ? "(and) condition must be a numeric value"
                   : "(or) condition must be a numeric value"
               );
+              wipe_memory(&condition, sizeof(condition));
               return false;
           }
 
+          wipe_memory(&condition, sizeof(condition));
           boolean_result = is_true;
 
           // Stop at the first false for `(and)`, or first true for `(or)`.
@@ -1054,10 +1108,15 @@ static bool evaluate_expression_impl(
         // Evaluate only the condition first.
         Datum condition = { .kind = SYM_EMPTY };
 
-        if (!evaluate_expression(interpreter, condition_index, &condition)) return false;
+        bool condition_ok = evaluate_expression(interpreter, condition_index, &condition);
+        if (!condition_ok) {
+          wipe_memory(&condition, sizeof(condition));
+          return false;
+        }
 
         if (condition.kind != SYM_VARIABLE) {
           report_evaluation_failure(interpreter, "(if) condition must be a numeric value");
+          wipe_memory(&condition, sizeof(condition));
           return false;
         }
 
@@ -1069,8 +1128,11 @@ static bool evaluate_expression_impl(
           case TYPE_F32: is_true = condition.as.value.as.f32 != 0.0f; break;
           default:
             report_evaluation_failure(interpreter, "(if) condition must be a numeric value");
+            wipe_memory(&condition, sizeof(condition));
             return false;
         }
+
+        wipe_memory(&condition, sizeof(condition));
 
         // Evaluate only the selected branch, if present.
         uint32_t selected_index = is_true ? true_index : false_index;
@@ -1163,14 +1225,20 @@ static bool evaluate_expression_impl(
 
         if (arg_index != EXPR_NONE) {
           Datum arg = { .kind = SYM_EMPTY };
-          if (!evaluate_expression(interpreter, arg_index, &arg)) return false;
+          bool arg_ok = evaluate_expression(interpreter, arg_index, &arg);
+          if (!arg_ok) {
+            wipe_memory(&arg, sizeof(arg));
+            return false;
+          }
 
           if (arg.kind != SYM_VARIABLE || arg.as.value.type != TYPE_U32) {
             report_evaluation_failure(interpreter, "(leave) argument must be u32");
+            wipe_memory(&arg, sizeof(arg));
             return false;
           }
 
           leave_count = arg.as.value.as.u32;
+          wipe_memory(&arg, sizeof(arg));
         }
 
         if (leave_count == 0) {
@@ -1185,8 +1253,13 @@ static bool evaluate_expression_impl(
 
         if (value_index != EXPR_NONE) {
           Datum value = { .kind = SYM_EMPTY };
-          if (!evaluate_expression(interpreter, value_index, &value)) return false;
+          bool value_ok = evaluate_expression(interpreter, value_index, &value);
+          if (!value_ok) {
+            wipe_memory(&value, sizeof(value));
+            return false;
+          }
           interpreter->eval_outcome.result = value;
+          wipe_memory(&value, sizeof(value));
         }
 
         interpreter->pending_leave_count = leave_count;
@@ -1210,6 +1283,7 @@ static bool evaluate_expression_impl(
 
         interpreter->current_sequence_depth--;
         interpreter->local_scope = scope.previous;
+        wipe_memory(&scope, sizeof(scope));
         return ok;
       }
 
@@ -1321,6 +1395,7 @@ static bool evaluate_expression_impl(
 
       native_call_finish:
         POP_GC_ROOT(interpreter, args_gc_roots);
+        wipe_memory(args, sizeof(args));
         return native_call_ok;
     }
 
@@ -1444,9 +1519,13 @@ EvalOutcome evaluate(
   if (settings_cb != NULL) {
     snprintf(settings_ctx.fail_msg, sizeof(settings_ctx.fail_msg), "EvalSettingsCallback failed: ");
     settings_cb(&settings_interface);
-    if (settings_ctx.is_failed) goto fail;
-    wipe_memory(&settings_ctx, sizeof(settings_ctx));
+    if (settings_ctx.is_failed) {
+      wipe_memory(&settings_interface, sizeof(settings_interface));
+      goto fail;
+    }
   }
+  wipe_memory(&settings_interface, sizeof(settings_interface));
+  wipe_memory(&settings_ctx, sizeof(settings_ctx));
 
   if (interpreter->expression_count != 0) {
     Datum result_value = { .kind = SYM_EMPTY };
@@ -1458,6 +1537,7 @@ EvalOutcome evaluate(
     wipe_memory(&result_value, sizeof(result_value));
   }
 
+  wipe_memory(fail_prefix, sizeof(fail_prefix));
   return interpreter->eval_outcome;
 
   fail:
@@ -1475,10 +1555,14 @@ EvalOutcome evaluate(
       settings_ctx.fail_msg
     );
     wipe_memory(&settings_ctx, sizeof(settings_ctx));
+    wipe_memory(fail_prefix, sizeof(fail_prefix));
     return result;
 }
 
 void clean_evaluation(Interpreter *interpreter) {
+  // Active stack frames must have been popped by the evaluator already.
+  // Wipe only these borrowed pointer slots, not the frames they once linked.
+  wipe_memory(&interpreter->gc_roots, sizeof(interpreter->gc_roots));
   interpreter->gc_roots = NULL;
 
   // (label) & (goto)
@@ -1488,6 +1572,8 @@ void clean_evaluation(Interpreter *interpreter) {
   interpreter->current_native_call_expression_index = EXPR_NONE;
 
   // (do) scopes and (depth)
+  wipe_memory(&interpreter->local_scope, sizeof(interpreter->local_scope));
+  wipe_memory(&interpreter->function_call, sizeof(interpreter->function_call));
   interpreter->local_scope = NULL;
   interpreter->function_call = NULL;
   interpreter->current_sequence_depth = 0;

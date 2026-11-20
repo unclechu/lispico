@@ -2905,6 +2905,15 @@ clean_symbols(interpreter);
 clean_expressions(interpreter);
 ```
 
+Evaluator stack frames and temporary argument/value descriptors are explicitly
+wiped after they are no longer needed. Frames for `(do)` scopes, user-defined
+function calls, and GC roots link to earlier active frames, but do not own them.
+Each frame is unlinked and wiped independently when its evaluation finishes;
+following those links to wipe earlier frames would corrupt the caller’s state.
+Similarly, wiping a temporary string or array descriptor does not wipe the
+allocation it references. Referenced data remains available until an explicit
+`(gc)` reclaims it or evaluation cleanup releases it.
+
 Manual garbage collection does not replace these cleanup operations.
 In particular, `(gc)` does not free reachable allocations or reset the symbol
 table and parsed expressions.
