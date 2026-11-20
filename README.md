@@ -1409,6 +1409,90 @@ features:
       Jumping into a function body from outside using a label defined within
       that body remains unsupported by the existing jump-path rules.
 
+    + Practical examples:
+
+      Define reusable helpers and call them inside other expressions:
+
+      ```lisp
+      (fn "rectangle-area" (args "width" "height") (* width height))
+
+      (assert (== (rectangle-area 4 5) 20))
+      (assert (== (+ (rectangle-area 3 7) 10) 31))
+      ```
+
+      Return early using `(leave COUNT VALUE)`. Here, `2` leaves the explicit
+      body `(do)` and the function’s implicit `(do)` scope:
+
+      ```lisp
+      (fn "first-nonzero" (args "a" "b") (do
+        (if (!= a 0) (leave 2 a))
+        b
+      ))
+
+      (assert (== (first-nonzero 0 9) 9))
+      (assert (== (first-nonzero 7 9) 7))
+      ```
+
+      Recursive functions preserve each invocation’s argument values:
+
+      ```lisp
+      (fn "factorial" (args "n")
+        (if (<= n 1)
+          1
+          (* n (factorial (- n 1)))
+        )
+      )
+
+      (assert (== (factorial 6) 720))
+      ```
+
+      Process a variable number of arguments using `argc` and `(get-arg)`.
+      `(apply)` can supply additional arguments from a typed array:
+
+      ```lisp
+      (fn "sum-all" (var-args) (do
+        (local "total" 0)
+        (local "index" 0)
+        (label "sum-all-next")
+        (if (< index argc) (do
+          (set "total" (+ total (get-arg index)))
+          (set "index" (+ index 1))
+          (goto sum-all-next)
+        ))
+        total
+      ))
+
+      (assert (== (sum-all 10 20 30) 60))
+      (assert (== (apply "sum-all" 10 (arr 20 30)) 60))
+      ```
+
+      Named string and array arguments are copied into function-local storage.
+      Modifying a named string argument does not modify the caller’s variable:
+
+      ```lisp
+      (var "original" "hello")
+      (fn "capitalize-first" (args "text") (do
+        (str-set "text" 0 "H")
+        text
+      ))
+
+      (assert (== (capitalize-first original) "Hello"))
+      (assert (== original "hello"))
+      ```
+
+      Function names can be constructed when defining a function and resolved
+      dynamically when calling it:
+
+      ```lisp
+      (fn
+        (str "make-" "greeting")
+        (args "person")
+        (str "Hello, " person "!")
+      )
+
+      (assert (== (call (str "make-" "greeting") "Ada") "Hello, Ada!"))
+      ```
+
   * If-conditions and comparisons:
 
     + `(if (> 5 2) (println "bigger") (println "less"))`
