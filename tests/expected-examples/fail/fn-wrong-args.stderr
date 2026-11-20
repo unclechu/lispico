@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: Line 1 Column 1: (fn) has incorrect arguments declaration
+1 | (fn "wrong" 1 2)
+  | ↑

@@ -71,3 +71,19 @@ void *allocate_runtime_data(Interpreter *interpreter, size_t size);
 // `size` is the allocated capacity in bytes, not necessarily the value length.
 // The caller retains ownership if registration fails.
 bool adopt_runtime_data(Interpreter *interpreter, void *data, size_t size);
+
+// Invoke the function body stored at a public `_FN_` label’s expression index.
+// Call arguments are already evaluated in the caller’s scope.
+bool evaluate_user_function(
+  Interpreter *interpreter,
+
+  // Pointer to the `_FN_*` label
+  uint32_t definition_expression_index,
+
+  // Provided arguments for the function.
+  const Datum *args,
+  size_t argc,
+
+  // Returned value from the function (last evaluation result).
+  Datum *result
+);

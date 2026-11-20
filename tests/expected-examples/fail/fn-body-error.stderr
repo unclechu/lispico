@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: Line 2 Column 3: (/) division by zero
+1 | (fn "broken" (args "x")
+2 |   (/ x 0))
+  |   ↑

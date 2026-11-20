@@ -8,6 +8,8 @@
 #include "symbol.h"
 #include "wipe-memory.h"
 #include "storage.h"
+#include "stdlib-variables.h"
+#include "stdlib-validation-utils.h"
 
 // Intentionally private (internal evaluator initialization state)
 typedef struct {
@@ -152,6 +154,21 @@ static bool evaluate_expression_impl(
 #define POP_GC_ROOT(interpreter, root_name) { \
   assert((interpreter)->gc_roots == &(root_name)); \
   (interpreter)->gc_roots = (root_name).previous; \
+}
+
+// Drop a `(do)` activation’s local references after its deferred expressions.
+// Keep symbol-table entries so the same names can be reused on later entries.
+static void clean_local_scope(EvalLocalScopeFrame *scope) {
+  Symbol *local = scope->first_local;
+  while (local != NULL) {
+    Symbol *next = local->next_local;
+    local->kind = SYM_VARIABLE;
+    local->as.variable = (Value) { .type = TYPE_VOID };
+    local->frozen = false;
+    local->local_scope_owner = NULL;
+    local->next_local = NULL;
+    local = next;
+  }
 }
 
 // Execute deferred expressions in reverse registration order.
@@ -417,6 +434,347 @@ static bool evaluate_expression(
   return ok;
 }
 
+// Identify the existing expression nodes of a function definition.
+// No new expressions are created for the implicit function-body `(do)`.
+typedef struct {
+  uint32_t name_index;
+  uint32_t body_index;
+  uint32_t first_argument_index;
+  size_t named_argument_count;
+  bool variadic;
+} UserFunctionDefinition;
+
+static bool get_user_function_definition(
+  Interpreter *interpreter,
+  uint32_t definition_index,
+  UserFunctionDefinition *definition
+) {
+  if (definition_index >= interpreter->expression_count) goto invalid_definition;
+
+  const Expression *expr = &interpreter->storage.expressions[definition_index];
+  if (expr->kind != EXPR_LIST) goto invalid_definition;
+
+  // Function definition expression index.
+  uint32_t fn_index = expr->first_child;
+  if (fn_index == EXPR_NONE || fn_index >= interpreter->expression_count) goto invalid_definition;
+
+  const Expression *fn = &interpreter->storage.expressions[fn_index];
+  if (fn->kind != EXPR_NAME) goto invalid_definition;
+
+  const ExpressionAllocation *fn_name = get_expression_allocation(interpreter, fn->data);
+  if (fn_name == NULL || fn_name->data == NULL || strcmp(fn_name->data, "fn") != 0) {
+    goto invalid_definition;
+  }
+
+  // Get the function name expression index.
+  uint32_t name_index = fn->next;
+  if (name_index == EXPR_NONE || name_index >= interpreter->expression_count) {
+    report_evaluation_failure(interpreter, "(fn) expects a name and a body");
+    return false;
+  }
+
+  // Get the function body expression index
+  // (could be arguments, will be updated later in that case).
+  uint32_t body_index = interpreter->storage.expressions[name_index].next;
+  if (body_index == EXPR_NONE || body_index >= interpreter->expression_count) {
+    report_evaluation_failure(interpreter, "(fn) expects a name and a body");
+    return false;
+  }
+
+  *definition = (UserFunctionDefinition) {
+    .name_index = name_index,
+    .body_index = body_index,
+    .first_argument_index = EXPR_NONE,
+  };
+
+  // Check if second `(fn)` argument is arguments definition, not a function body.
+  // Shift `body_index` to third argument in this case.
+  if (interpreter->storage.expressions[body_index].next != EXPR_NONE) {
+    const Expression *possible_declarations = &interpreter->storage.expressions[body_index];
+    if (possible_declarations->kind != EXPR_LIST) goto incorrect_arguments_declaration;
+
+    uint32_t declaration_name_index = possible_declarations->first_child;
+
+    if (declaration_name_index == EXPR_NONE) goto incorrect_arguments_declaration;
+
+    if (declaration_name_index >= interpreter->expression_count) {
+      goto incorrect_arguments_declaration;
+    }
+
+    const Expression *declaration_name =
+      &interpreter->storage.expressions[declaration_name_index];
+
+    if (declaration_name->kind != EXPR_NAME) goto incorrect_arguments_declaration;
+
+    const ExpressionAllocation *name =
+      get_expression_allocation(interpreter, declaration_name->data);
+
+    if (name == NULL || name->data == NULL) goto incorrect_arguments_declaration;
+
+    if (strcmp(name->data, "args") == 0 || strcmp(name->data, "var-args") == 0) {
+      definition->variadic = strcmp(name->data, "var-args") == 0;
+      definition->first_argument_index = declaration_name->next;
+      body_index = possible_declarations->next;
+      definition->body_index = body_index;
+    } else {
+      goto incorrect_arguments_declaration;
+    }
+  }
+
+  if (
+    body_index == EXPR_NONE ||
+    body_index >= interpreter->expression_count ||
+    interpreter->storage.expressions[body_index].next != EXPR_NONE
+  ) {
+    report_evaluation_failure(interpreter, "(fn) expects exactly 1 body expression");
+    return false;
+  }
+
+  // Validate arguments definition (if it is provided) and compute `named_argument_count`.
+  uint32_t argument_index = definition->first_argument_index;
+  while (argument_index != EXPR_NONE) {
+    if (
+      argument_index >= interpreter->expression_count ||
+      definition->named_argument_count >= EVAL_ARG_CAPACITY
+    ) {
+      report_evaluation_failure(interpreter, "(fn) too many named arguments");
+      return false;
+    }
+
+    const Expression *argument = &interpreter->storage.expressions[argument_index];
+    if (argument->kind != EXPR_STRING) {
+      report_evaluation_failure(interpreter, "(fn) argument names must be string literals");
+      return false;
+    }
+
+    const ExpressionAllocation *name = get_expression_allocation(interpreter, argument->data);
+    char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+    char local_name[SYMBOL_NAME_SIZE] = {'\0'};
+    Datum name_value = {
+      .kind = SYM_VARIABLE,
+      .as.value = {
+        .type = TYPE_STRING,
+        .as.string = {
+          .data = name == NULL ? NULL : name->data,
+          .length = name == NULL ? 0 : name->length,
+        },
+      },
+    };
+    if (
+      !get_variable_name(&name_value, &symbol_name) ||
+      !local_symbol_name(definition_index, symbol_name, &local_name)
+    ) {
+      report_evaluation_failure(interpreter, "(fn) invalid or too long argument name");
+      return false;
+    }
+
+    definition->named_argument_count++;
+    argument_index = argument->next;
+  }
+
+  return true;
+
+  invalid_definition:
+    report_evaluation_failure(interpreter, "(fn) label does not point to a function definition");
+    return false;
+
+  incorrect_arguments_declaration:
+    report_evaluation_failure(interpreter, "(fn) has incorrect arguments declaration");
+    return false;
+}
+
+// Bind a declared single argument as a local in the implicit function scope.
+// Ordinary values use the existing `(local)` copy semantics. Labels and
+// `TYPE_VOID` can also be passed without adding a new symbol representation.
+static bool bind_user_function_argument(
+  Interpreter *interpreter,
+  const Datum *name,
+  const Datum *value
+) {
+  // Use `(local)` for ordinary values to preserve its existing copy semantics.
+  // Labels and `TYPE_VOID` require direct symbol assignment.
+  if (
+    value->kind != SYM_LABEL &&
+    !(value->kind == SYM_VARIABLE && value->as.value.type == TYPE_VOID)
+  ) {
+    Datum binding[] = { *name, *value };
+    (void)std_local(interpreter, binding, 2);
+    return interpreter->eval_outcome.kind == EVAL_OK;
+  }
+
+  // Below code only applies for labels and `TYPE_VOID` (no need for copying).
+
+  // Construct the argument’s name within the implicit function `(do)` scope.
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+  char local_name[SYMBOL_NAME_SIZE] = {'\0'};
+  if (
+    !get_variable_name(name, &symbol_name) ||
+    !local_symbol_name(interpreter->local_scope->expression_index, symbol_name, &local_name)
+  ) {
+    report_evaluation_failure(interpreter, "(fn) invalid or too long argument name");
+    return false;
+  }
+
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+
+  // Define the local symbol if necessary, or verify that an existing one
+  // can be replaced. Repeated function calls reuse the same symbol.
+  Symbol *symbol = symbol_lookup(interpreter, local_name);
+  if (symbol == NULL) {
+    symbol = symbol_define(interpreter, local_name, value->kind);
+    if (symbol == NULL) {
+      extract_error_message_from_symbol_define_error(interpreter, &fail_msg, local_name);
+      report_evaluation_failure(interpreter, fail_msg);
+      wipe_memory(fail_msg, sizeof(fail_msg));
+      return false;
+    }
+  } else {
+    if (!validate_symbol_mutable(symbol, "fn", &fail_msg)) {
+      report_evaluation_failure(interpreter, fail_msg);
+      wipe_memory(fail_msg, sizeof(fail_msg));
+      return false;
+    }
+  }
+
+  // Preserve the original datum kind and value without copying or allocating.
+  // The scope cleanup will reset the symbol regardless of its original kind.
+  symbol->kind = value->kind;
+  if (value->kind == SYM_LABEL)
+    symbol->as.instruction_index = value->as.instruction_index;
+  else
+    symbol->as.variable = value->as.value;
+
+  // Register the argument for automatic cleanup when the function scope exits.
+  register_local_symbol(interpreter, symbol);
+  return true;
+}
+
+// Invoke an existing function definition using the normal expression evaluator.
+// The caller’s scopes and previous evaluation result remain separate from the
+// invocation’s implicit `(do)` scope and its result history.
+bool evaluate_user_function(
+  Interpreter *interpreter,
+  uint32_t definition_expression_index,
+  const Datum *args,
+  size_t argc,
+  Datum *result
+) {
+  UserFunctionDefinition definition = {0};
+  if (!get_user_function_definition(interpreter, definition_expression_index, &definition))
+    return false;
+
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+
+  if (
+    (definition.variadic && argc < definition.named_argument_count) ||
+    (!definition.variadic && argc != definition.named_argument_count)
+  ) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      definition.variadic
+        ? "(fn) expects at least %zu arguments, got instead: %zu"
+        : "(fn) expects exactly %zu arguments, got instead: %zu",
+      definition.named_argument_count,
+      argc
+    );
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return false;
+  }
+
+  EvalOutcome previous_outcome = interpreter->eval_outcome;
+  Datum previous_result = previous_outcome.result;
+  PUSH_GC_ROOT(interpreter, previous_result_gc_root, &previous_result, 1);
+  PUSH_GC_ROOT(interpreter, function_arguments_gc_root, args, argc);
+
+  EvalLocalScopeFrame scope = { .expression_index = definition_expression_index };
+  EvalLocalScopeFrame *previous_scope = interpreter->local_scope;
+  EvalFunctionCallFrame call = {
+    .definition_expression_index = definition_expression_index,
+    .entry_sequence_depth = interpreter->current_sequence_depth,
+    .arguments = args,
+    .argument_count = argc,
+    .previous = interpreter->function_call,
+  };
+
+  interpreter->function_call = &call;
+  interpreter->local_scope = &scope;
+  interpreter->current_sequence_depth++;
+  interpreter->eval_outcome.result = (Datum) { .kind = SYM_EMPTY };
+
+  bool ok = false;
+  Datum function_result = { .kind = SYM_EMPTY };
+  PUSH_GC_ROOT(interpreter, function_result_gc_root, &function_result, 1);
+
+  // The implicit `argc` is a normal local and may be shadowed by an
+  // explicitly declared argument with the same name.
+  const char argc_name[] = "argc";
+  Datum argc_binding[] = {
+    {
+      .kind = SYM_VARIABLE,
+      .as.value = {
+        .type = TYPE_STRING,
+        .as.string = { .data = argc_name, .length = sizeof(argc_name) - 1 },
+      },
+    },
+    {
+      .kind = SYM_VARIABLE,
+      .as.value = { .type = TYPE_U32, .as.u32 = (uint32_t)argc },
+    },
+  };
+  (void)std_local(interpreter, argc_binding, 2);
+  if (interpreter->eval_outcome.kind != EVAL_OK) goto finish;
+
+  uint32_t name_index = definition.first_argument_index;
+  for (size_t i = 0; i < definition.named_argument_count; ++i) {
+    const Expression *name_expr = &interpreter->storage.expressions[name_index];
+
+    const ExpressionAllocation *allocation =
+      get_expression_allocation(interpreter, name_expr->data);
+
+    Datum name = {
+      .kind = SYM_VARIABLE,
+      .as.value = {
+        .type = TYPE_STRING,
+        .as.string = { .data = allocation->data, .length = allocation->length },
+      },
+    };
+
+    if (!bind_user_function_argument(interpreter, &name, &args[i])) goto finish;
+    name_index = name_expr->next;
+  }
+
+  // Reuse the stored body expression. `evaluate_sequence` provides the same
+  // `(leave)`, `(defer)`, `(goto)`, and return-result behavior as an ordinary `(do)`.
+  ok = evaluate_sequence(interpreter, definition.body_index, &function_result, false);
+
+  finish:
+    // User defers have run. Reset names without invoking `(gc)`.
+    clean_local_scope(&scope);
+
+    interpreter->current_sequence_depth--;
+    interpreter->local_scope = previous_scope;
+    interpreter->function_call = call.previous;
+
+    if (
+      ok &&
+      interpreter->eval_outcome.kind == EVAL_OK &&
+      interpreter->pending_leave_count == 0 &&
+      interpreter->pending_jump_index == EXPR_NONE
+    ) {
+      *result = function_result;
+      interpreter->eval_outcome = previous_outcome;
+    } else {
+      ok = false;
+    }
+
+    POP_GC_ROOT(interpreter, function_result_gc_root);
+    POP_GC_ROOT(interpreter, function_arguments_gc_root);
+    POP_GC_ROOT(interpreter, previous_result_gc_root);
+    return ok;
+}
+
 static bool evaluate_expression_impl(
   Interpreter *interpreter,
   uint32_t current_expression_index,
@@ -526,6 +884,71 @@ static bool evaluate_expression_impl(
       }
 
       const char *function_name = allocation->data;
+
+      // Special form: register a user-defined function as an ordinary label.
+      if (strcmp(function_name, "fn") == 0) {
+        if (interpreter->local_scope != NULL) {
+          report_evaluation_failure(interpreter, "(fn) requires top-level scope");
+          return false;
+        }
+
+        UserFunctionDefinition definition = {0};
+        if (!get_user_function_definition(interpreter, current_expression_index, &definition))
+          return false;
+
+        // Evaluate name of the function (first argument, in case it is an expression).
+        Datum previous_result = interpreter->eval_outcome.result;
+        PUSH_GC_ROOT(interpreter, definition_result_gc_root, &previous_result, 1);
+        Datum name_value = { .kind = SYM_EMPTY };
+        bool name_ok = evaluate_expression(interpreter, definition.name_index, &name_value);
+        POP_GC_ROOT(interpreter, definition_result_gc_root);
+        if (!name_ok) return false;
+
+        char name[SYMBOL_NAME_SIZE] = {'\0'};
+        char label_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+        // Read function name.
+        if (!get_variable_name(&name_value, &name)) {
+          report_evaluation_failure(interpreter, "(fn) invalid function name");
+          return false;
+        }
+
+        // Generate a label name.
+        int name_length = snprintf(
+          label_name,
+          sizeof(label_name),
+          EVAL_FN_LABEL_FORMAT_TEMPLATE,
+          name
+        );
+        if (name_length <= 0 || (size_t)name_length >= sizeof(label_name)) {
+          report_evaluation_failure(interpreter, "(fn) function label name is too long");
+          return false;
+        }
+
+        Symbol *symbol = symbol_lookup(interpreter, label_name);
+        if (symbol == NULL) {
+          symbol = symbol_define(interpreter, label_name, SYM_LABEL);
+          if (symbol == NULL) {
+            char fail_msg[ERR_MSG_SIZE] = {'\0'};
+            extract_error_message_from_symbol_define_error(interpreter, &fail_msg, label_name);
+            report_evaluation_failure(interpreter, fail_msg);
+            wipe_memory(fail_msg, sizeof(fail_msg));
+            return false;
+          }
+        } else if (symbol->kind != SYM_LABEL) {
+          report_evaluation_failure(interpreter, "(fn) function symbol is not a label");
+          return false;
+        }
+
+        if (symbol->frozen && symbol->as.instruction_index != current_expression_index) {
+          report_evaluation_failure(interpreter, "(fn) cannot redefine a frozen label");
+          return false;
+        }
+
+        if (!symbol->frozen) symbol->as.instruction_index = current_expression_index;
+        *result = previous_result;
+        return true;
+      }
 
       // Special form: boolean conjunction and disjunction with short-circuiting.
       if (strcmp(function_name, "and") == 0 || strcmp(function_name, "or") == 0) {
@@ -783,31 +1206,42 @@ static bool evaluate_expression_impl(
         // User `(defer)` expressions have run. Drop the local references
         // without collecting memory, and unfreeze the names for the next
         // activation.
-        Symbol *local = scope.first_local;
-        while (local != NULL) {
-          Symbol *next = local->next_local;
-          local->kind = SYM_VARIABLE;
-          local->as.variable = (Value) { .type = TYPE_VOID };
-          local->frozen = false;
-          local->local_scope_owner = NULL;
-          local->next_local = NULL;
-          local = next;
-        }
+        clean_local_scope(&scope);
 
         interpreter->current_sequence_depth--;
         interpreter->local_scope = scope.previous;
         return ok;
       }
 
-      // Resolve the function from the existing global symbol table.
-      const Symbol *symbol = symbol_lookup(interpreter, function_name);
+      // Public `_FN_` labels (user-defined functions) take precedence over native functions.
+      char label_name[SYMBOL_NAME_SIZE] = {'\0'};
+      int label_length = snprintf(
+        label_name,
+        sizeof(label_name),
+        EVAL_FN_LABEL_FORMAT_TEMPLATE,
+        function_name
+      );
 
-      if (symbol == NULL) {
-        report_evaluation_failure(interpreter, "Undefined function");
-        return false;
-      } else if (symbol->kind != SYM_NATIVE_FUNCTION) {
-        report_evaluation_failure(interpreter, "Symbol is not a native function");
-        return false;
+      // If the function name including the user-defined function label template
+      // parts exceeds the name limit it means it is not a user-defined function
+      // (since user could not define a function with a name that long).
+      const Symbol *function_label =
+        label_length > 0 && (size_t)label_length < sizeof(label_name)
+          ? symbol_lookup(interpreter, label_name)
+          : NULL;
+
+      wipe_memory(label_name, sizeof(label_name));
+      const bool is_user_function = function_label != NULL && function_label->kind == SYM_LABEL;
+      const Symbol *symbol = is_user_function ? NULL : symbol_lookup(interpreter, function_name);
+
+      if (!is_user_function) {
+        if (symbol == NULL) {
+          report_evaluation_failure(interpreter, "Undefined function");
+          return false;
+        } else if (symbol->kind != SYM_NATIVE_FUNCTION) {
+          report_evaluation_failure(interpreter, "Symbol is not a native function");
+          return false;
+        }
       }
 
       // Evaluate all arguments before calling the function.
@@ -848,8 +1282,19 @@ static bool evaluate_expression_impl(
       // Make the current expression location available to the native function.
       interpreter->current_native_call_expression_index = current_expression_index;
 
-      // Execute the native function (e.g. `std_label` reads this location).
-      *result = symbol->as.native_function(interpreter, args, argc);
+      // Invoke the stored body directly or dispatch to the native function.
+      bool call_ok = true;
+      if (is_user_function) {
+        call_ok = evaluate_user_function(
+          interpreter,
+          function_label->as.instruction_index,
+          args,
+          argc,
+          result
+        );
+      } else {
+        *result = symbol->as.native_function(interpreter, args, argc);
+      }
 
       // Restore the previous call location after the native function returns.
       interpreter->current_native_call_expression_index = previous_call_index;
@@ -868,8 +1313,10 @@ static bool evaluate_expression_impl(
       // In case of a jump this helps to avoid growing recursion.
       // Native functions report failures through the evaluation state.
       native_call_ok = (
+        call_ok &&
         interpreter->eval_outcome.kind == EVAL_OK &&
-        interpreter->pending_jump_index == EXPR_NONE
+        interpreter->pending_jump_index == EXPR_NONE &&
+        interpreter->pending_leave_count == 0
       );
 
       native_call_finish:
@@ -1042,6 +1489,7 @@ void clean_evaluation(Interpreter *interpreter) {
 
   // (do) scopes and (depth)
   interpreter->local_scope = NULL;
+  interpreter->function_call = NULL;
   interpreter->current_sequence_depth = 0;
 
   // (leave)

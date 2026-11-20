@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: Line 2 Column 1: (fn) expects exactly 2 arguments, got instead: 1
+1 | (fn "sum" (args "x" "y") (+ x y))
+2 | (sum 1)
+  | ↑

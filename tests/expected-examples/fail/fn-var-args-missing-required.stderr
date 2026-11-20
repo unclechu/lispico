@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: Line 2 Column 1: (fn) expects at least 2 arguments, got instead: 1
+1 | (fn "required" (var-args "x" "y") x)
+2 | (required 1)
+  | ↑

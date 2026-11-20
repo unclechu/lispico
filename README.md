@@ -1284,7 +1284,7 @@ features:
       an identical `(do)` expression is re-entered before its earlier activation
       exits, as needed for recursive user-defined pseudo-functions.
 
-  * <a id="user-defined-pseudo-functions"></a>**TODO** User-defined pseudo-functions
+  * <a id="user-defined-pseudo-functions"></a>User-defined pseudo-functions
 
     + `(fn "sum-fn" (args "one" "two") (+ one two))` defines a function with
       named arguments. `(sum-fn 10 20)` calls it. The argument declaration may
@@ -1296,7 +1296,7 @@ features:
       first and permits additional ones. Function arguments retain their
       individual types; no heterogeneous array type is required.
 
-    + Initially permit `(fn)` definitions only at the top level. Evaluate the
+    + `(fn)` definitions are allowed only at the top level. Evaluate the
       function name when defining it, allowing dynamically constructed names.
       Register a public, ordinary label named `_FN_<name>` in the existing
       symbol table, pointing to the original function definition expression.
@@ -1316,23 +1316,38 @@ features:
       argument bindings and cleanup. Return the function body’s evaluation
       result like an ordinary expression, including from nested calls. Preserve
       and restore the caller’s evaluation and scope context on return or
-      failure.
+      failure. Named argument values are copied into locals, so changes to
+      their strings or arrays do not modify the caller’s arguments.
 
-    + A user-defined argument named `argc` replaces the implicit function-local
-      argument count. The local `argc` shadows any global variable with the same
-      name, without modifying it. The global variable becomes accessible again
-      after leaving the function’s scope.
+    + Every call defines an implicit function-local `argc` (`u32`) containing
+      the number of supplied arguments. A user-defined argument named `argc`
+      shadows this implicit local. The function-local `argc` also shadows any
+      global variable with the same name without modifying it; the global
+      variable becomes accessible again after leaving the function’s scope.
+
+    + `(get-arg INDEX)` reads a zero-based argument from the current function
+      call, preserving its original type. `INDEX` must be `u32` and within
+      the supplied argument count. Calling it outside a function fails.
+      `(args)` and `(var-args)` are declarations only, not callable functions.
+      Names in argument declarations must be string literals.
+
+    + A function definition returns the previous evaluation result, similarly
+      to `(label)`. Calls can be nested in ordinary expressions; fixed-arity
+      functions require the declared argument count, while `(var-args)`
+      accepts any count at least as large as its required named arguments.
+      At most `EVAL_ARG_CAPACITY` arguments can be passed in a direct call.
 
     + Preserve the existing `(leave COUNT)` semantics inside functions: `COUNT`
       is the number of enclosing `(do)` scopes to exit. A future `(fn-depth)`
       helper could supply the count needed to leave the function; `(return)`
       could later provide a shorthand for returning a value early.
 
-    + Prepare function call frames to hold arguments, return state, and caller
-      context. Recursive or reentrant calls may be unreliable initially;
-      support them later by preserving activation-specific local values,
-      including mutable strings and arrays, without replacing the global
-      symbol table. Tail-call optimization can be considered separately.
+    + Call frames preserve arguments, the caller’s last evaluation result,
+      and scope context. **TODO** Support recursive/reentrant invocation of
+      identical function bodies by preserving activation-specific locals,
+      including mutable strings and arrays, without replacing the global symbol
+      table. Such calls are not reliable yet. **TODO** Consider tail-call
+      optimization separately.
 
   * If-conditions and comparisons:
 
@@ -1576,12 +1591,12 @@ features:
       The resulting string belongs to Lispico’s managed runtime allocations;
       it can be stored in a variable and later collected by `(gc)` when unused.
 
-- Dynamic native function invocation
+- Dynamic function invocation
 
   `(call FUNCTION-NAME ARG…)` evaluates `FUNCTION-NAME` to a string,
-  looks up the named function in the symbol table, and invokes it with
-  the remaining evaluated arguments. The function’s result becomes the
-  result of `(call)`:
+  looks up a user-defined `_FN_` label first, then a native function,
+  and invokes it with the remaining evaluated arguments.
+  The function’s result becomes the result of `(call)`:
 
   ```lisp
   (call "str-size" "hello") ; Returns 5
@@ -1590,11 +1605,11 @@ features:
   (call fn "Hello again!")
   ```
 
-  The name must refer to an existing native function (`SYM_NATIVE_FUNCTION`).
-  All arguments are evaluated eagerly, so `(call)` **cannot invoke the
-  evaluator’s [special forms](#special-forms)** such as `(if)` or `(do)`.
-  An undefined name or a symbol that is not a native function causes an
-  evaluation failure.
+  The name must refer to a registered user-defined pseudo-function or an
+  existing native function (`SYM_NATIVE_FUNCTION`). All arguments are evaluated
+  eagerly, so `(call)` **cannot invoke the evaluator’s
+  [special forms](#special-forms)** such as `(if)` or `(do)`.
+  An undefined or non-callable name causes an evaluation failure.
 
 - <a id="special-forms"></a>Special forms
 
@@ -1607,6 +1622,7 @@ features:
   - `(or)`
   - `(leave)`
   - `(defer)`
+  - `(fn)`
 
 - Comments
 

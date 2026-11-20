@@ -38,6 +38,9 @@ static_assert(
 // Maximum number of simultaneously registered deferred expressions
 #define EVAL_DEFER_CAPACITY 256u
 
+// User-defined functions are registered as regular labels using this template
+#define EVAL_FN_LABEL_FORMAT_TEMPLATE "_FN_%s"
+
 // *** Parsing ***
 
 // Maximum depth of nested S-expression lists

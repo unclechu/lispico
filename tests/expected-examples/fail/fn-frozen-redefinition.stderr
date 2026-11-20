@@ -1,0 +1,5 @@
+[FAIL] Evaluation failed: Line 3 Column 1: (fn) cannot redefine a frozen label
+1 | (fn "frozen" 42)
+2 | (freeze "_FN_frozen")
+3 | (fn "frozen" 100)
+  | ↑

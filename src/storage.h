@@ -46,6 +46,18 @@ typedef struct EvalLocalScopeFrame {
   struct EvalLocalScopeFrame *previous;
 } EvalLocalScopeFrame;
 
+// Evaluator call frame for a user-defined pseudo-function.
+// The argument values and the frame itself live on the evaluator’s C stack.
+typedef struct EvalFunctionCallFrame {
+  uint32_t definition_expression_index;
+  uint32_t entry_sequence_depth;
+
+  const Datum *arguments;
+  size_t argument_count;
+
+  struct EvalFunctionCallFrame *previous;
+} EvalFunctionCallFrame;
+
 // Storage supplied and owned by the host application.
 typedef struct {
   Expression *expressions;
@@ -108,6 +120,9 @@ typedef struct Interpreter {
   // `local_scope->previous`, so to the parent scope (either parent `(do)` or
   // to `NULL` when no more parent `(do)`s left, when reaching top-level scope).
   EvalLocalScopeFrame *local_scope;
+
+  // Current user-defined function invocation, if any.
+  EvalFunctionCallFrame *function_call;
 
   // (depth) and (leave)
   uint32_t current_sequence_depth;
