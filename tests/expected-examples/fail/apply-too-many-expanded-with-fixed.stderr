@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: Line 2 Column 1: (apply) too many expanded arguments (maximum is 32)
+1 | (arr-new "tail" u32 31)
+2 | (apply "+" 10 tail)
+  | ↑

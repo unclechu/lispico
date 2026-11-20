@@ -1644,6 +1644,36 @@ features:
   [special forms](#special-forms)** such as `(if)` or `(do)`.
   An undefined or non-callable name causes an evaluation failure.
 
+  `(apply FUNCTION-NAME [FIXED-ARG…] ARRAY)` invokes a function like `(call)`,
+  but expands the elements of its final array into individual arguments.
+  The final array is required; fixed arguments are optional.
+
+  ```lisp
+  (apply "+" 10 20 (arr 1 2 3)) ; Equivalent to (call "+" 10 20 1 2 3)
+  (apply "str" "hello" (arr " " "world")) ; Returns "hello world"
+
+  (arr-new "empty-tail" u32 0)
+  (apply "+" 10 20 empty-tail) ; Equivalent to (call "+" 10 20)
+  ```
+
+  The function name, fixed arguments, and final array are evaluated from
+  left to right before invocation. The array must be an evaluated `SYM_ARRAY`;
+  its elements are passed in order, preserving their element types and string
+  lengths, including embedded `\0` bytes. Fixed arguments may have different
+  types from the array elements. Only the final array is expanded; preceding
+  arrays remain ordinary arguments.
+
+  Expanded calls share `EVAL_ARG_CAPACITY` (currently `32`) with ordinary
+  calls, counting the function name as one argument. Exceeding that limit
+  causes an evaluation failure. No dynamically growing argument storage is
+  used. Empty arrays are allowed and contribute no arguments.
+
+  `(apply)` reuses `(call)` dispatch, including user-defined pseudo-functions,
+  native functions, return values, and error behavior. It cannot invoke
+  evaluator special forms. String elements are not independently copied by
+  the expansion itself; ordinary callee argument-binding semantics still
+  apply, and the expanded values remain GC-rooted during invocation.
+
 - <a id="special-forms"></a>Special forms
 
   Most stdlib functions live in a shared variable namespace, but there are a few

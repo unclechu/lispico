@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: Line 2 Column 1: (fn) expects exactly 1 arguments, got instead: 2
+1 | (fn "one" (args "value") value)
+2 | (apply "one" (arr 1 2))
+  | ↑

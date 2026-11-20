@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "stdlib-call.h"
 #include "stdlib-variables.h"
 #include "stdlib-validation-utils.h"
@@ -66,6 +68,108 @@ Datum std_call(Interpreter *interpreter, const Datum *args, size_t argc) {
   // Preserve the caller’s native-call expression index for functions like
   // (label). The evaluator also keeps the evaluated arguments GC-rooted.
   return symbol->as.native_function(interpreter, args + 1, argc - 1);
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return return_value;
+}
+
+// (apply FUNCTION-NAME [ARG…] ARRAY) — Append the final array’s elements
+// as individual arguments and dispatch through `(call)`.
+Datum std_apply(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "apply";
+
+  if (argc < 2) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects at least 2 arguments", fn_name);
+    goto fail;
+  }
+
+  const Datum *tail_arg = &args[argc - 1];
+  if (tail_arg->kind != SYM_ARRAY) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects an array as the last argument", fn_name);
+    goto fail;
+  }
+
+  const Array *tail = &tail_arg->as.array;
+  if (tail->length != 0 && tail->data == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid array data", fn_name);
+    goto fail;
+  }
+
+  // The expanded call has the same argument limit as an ordinary `(call)`,
+  // including the function name. No dynamic argument storage is needed.
+  size_t fixed_argc = argc - 1;
+  if (fixed_argc > EVAL_ARG_CAPACITY || tail->length > EVAL_ARG_CAPACITY - fixed_argc) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) too many expanded arguments (maximum is %u)",
+      fn_name,
+      EVAL_ARG_CAPACITY
+    );
+    goto fail;
+  }
+
+  switch (tail->element_type) {
+    case TYPE_U32:
+    case TYPE_I32:
+    case TYPE_F32:
+    case TYPE_STRING:
+      break;
+    default:
+      goto unsupported_array_element_type_fail;
+  }
+
+  Datum expanded_args[EVAL_ARG_CAPACITY] = {0};
+  memcpy(expanded_args, args, fixed_argc * sizeof(Datum));
+
+  // Preserve fixed arguments and append the array elements in their order.
+  // String elements retain their original length and data references.
+  for (size_t i = 0; i < tail->length; ++i) {
+    Value *value = &expanded_args[fixed_argc + i].as.value;
+    expanded_args[fixed_argc + i].kind = SYM_VARIABLE;
+    value->type = tail->element_type;
+
+    switch (tail->element_type) {
+      case TYPE_U32: value->as.u32 = ((const uint32_t *)tail->data)[i]; break;
+      case TYPE_I32: value->as.i32 = ((const int32_t *)tail->data)[i]; break;
+      case TYPE_F32: value->as.f32 = ((const float *)tail->data)[i]; break;
+      case TYPE_STRING: {
+        value->as.string = ((const String *)tail->data)[i];
+        if (value->as.string.length != 0 && value->as.string.data == NULL) {
+          snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string array element", fn_name);
+          wipe_memory(expanded_args, sizeof(expanded_args));
+          goto fail;
+        }
+        break;
+      }
+      default:
+        // Validated above (report just in case)
+        goto unsupported_array_element_type_fail;
+    }
+  }
+
+  // Keep expanded string values alive even when the called function runs `(gc)`.
+  EvalGCRootFrame roots = {
+    .values = expanded_args,
+    .count = fixed_argc + tail->length,
+    .previous = interpreter->gc_roots,
+  };
+  interpreter->gc_roots = &roots;
+
+  return_value = std_call(interpreter, expanded_args, roots.count);
+
+  interpreter->gc_roots = roots.previous;
+  wipe_memory(&roots, sizeof(roots));
+  wipe_memory(expanded_args, sizeof(expanded_args));
+  return return_value;
+
+  unsupported_array_element_type_fail:
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) unsupported array element type", fn_name);
+    goto fail;
 
   fail:
     report_evaluation_failure(interpreter, fail_msg);

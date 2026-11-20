@@ -30,7 +30,7 @@ static_assert(
 // *** Evaluation ***
 
 // Maximum arguments limit for an expression to have
-#define EVAL_ARG_CAPACITY 16u
+#define EVAL_ARG_CAPACITY 32u
 
 // Maximum number of nested user-defined function calls
 #define EVAL_FUNCTION_CALL_DEPTH_LIMIT 128u
