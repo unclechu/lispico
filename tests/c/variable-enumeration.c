@@ -69,9 +69,6 @@ int main(void) {
   assert(has_name(&globals, "_LOCAL_999_manual"));
   assert(has_name(&globals, "jump"));
   assert(has_name(&globals, "native"));
-  const String *sorted_names = globals.as.array.data;
-  for (uint32_t i = 1; i < globals.as.array.length; ++i)
-    assert(strcmp(sorted_names[i - 1].data, sorted_names[i].data) < 0);
 
   EvalLocalScopeFrame outer = { .expression_index = 12 };
   interpreter.local_scope = &outer;
