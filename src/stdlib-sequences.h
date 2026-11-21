@@ -5,6 +5,8 @@
 
 ADD_STDLIB_FN_TYPE_DEF(std_depth);
 ADD_STDLIB_FN_TYPE_DEF(std_call_depth);
+ADD_STDLIB_FN_TYPE_DEF(std_fn_depth);
+ADD_STDLIB_FN_TYPE_DEF(std_fn_return_depth);
 ADD_STDLIB_FN_TYPE_DEF(std_get_arg);
 ADD_STDLIB_FN_TYPE_DEF(std_last_val);
 
@@ -12,4 +14,6 @@ ADD_STDLIB_FN_TYPE_DEF(std_last_val);
   ADD_FN_SYMBOL("last-val", std_last_val); \
   ADD_FN_SYMBOL("depth", std_depth); \
   ADD_FN_SYMBOL("call-depth", std_call_depth); \
+  ADD_FN_SYMBOL("fn-depth", std_fn_depth); \
+  ADD_FN_SYMBOL("fn-return-depth", std_fn_return_depth); \
   ADD_FN_SYMBOL("get-arg", std_get_arg);

@@ -1457,9 +1457,10 @@ features:
       At most `EVAL_ARG_CAPACITY` arguments can be passed in a direct call.
 
     + Preserve the existing `(leave COUNT)` semantics inside functions: `COUNT`
-      is the number of enclosing `(do)` scopes to exit. A future `(fn-depth)`
-      helper could supply the count needed to leave the function; `(return)`
-      could later provide a shorthand for returning a value early.
+      is the number of enclosing `(do)` scopes to exit. Use `(fn-depth)` or
+      `(fn-return-depth)` to select the appropriate number of scopes without
+      modifying the existing `(leave)` special form. A future `(return)` could
+      provide a shorthand for returning a value early.
 
       Note that `(leave)` can leave nested function calls too:
 
@@ -1486,6 +1487,58 @@ features:
       including direct and mutual recursion. Ordinary `(do)` blocks do not
       affect `(call-depth)`; unlike `(depth)`, it counts function invocations,
       not sequence nesting. The result is restored when returning to a caller.
+
+    + `(fn-depth)` returns the **absolute** `(depth)` (`u32`) of the current
+      function invocation’s implicit `(do)` scope. It equals the caller’s
+      sequence depth at the moment of invocation plus `1`, and remains fixed
+      inside explicit `(do)` blocks within the function. Nested calls and
+      recursion each have their own absolute function depth. It returns `0`
+      outside a function, even inside ordinary top-level `(do)` blocks.
+
+    + `(fn-return-depth)` returns the number of `(do)` scopes to exit to leave
+      the **current function**, including its implicit scope. It is `1` when
+      evaluating a body with no explicit `(do)`, increases by `1` per nested
+      explicit `(do)`, and decreases as those scopes exit. It does not count
+      scopes of the caller. It returns `0` outside a function. Both functions
+      accept no arguments and return `u32`.
+
+      The two values differ when the current function was called from within
+      a `(do)` or another function. `(fn-depth)` is a fixed absolute position
+      in the program’s sequence-depth stack, **not** a count of scopes needed
+      to return from the current function. Consequently, `(leave (fn-depth))`
+      may propagate beyond the current invocation. To return reliably from
+      any nested `(do)` within the current function, use
+      `(leave (fn-return-depth) VALUE)`; ordinary `(leave)` semantics still
+      apply, including `(defer)` execution and local-scope cleanup.
+
+      For example:
+
+      ```lisp
+      (fn "direct" (do
+        (assert (== (fn-depth) 1))
+        (assert (== (fn-return-depth) 2))
+        (leave (fn-return-depth) 42)))
+      (assert (== (direct) 42))
+
+      (fn "inspect" (do
+        ; The caller below has two active `(do)` scopes, so this
+        ; function’s implicit scope has absolute depth 3.
+        (assert (== (fn-depth) 3))
+        (assert (== (fn-return-depth) 2))
+        (do
+          (assert (== (fn-depth) 3))
+          (assert (== (fn-return-depth) 3))
+          (leave (fn-return-depth) 99))))
+      (do
+        (do
+          (assert (== (inspect) 99))))
+      ```
+
+      Unlike `(call-depth)`, these functions measure `(do)` scopes rather than
+      function-call nesting. Unlike `(depth)`, `(fn-depth)` stays constant
+      during a function call and `(fn-return-depth)` excludes caller scopes.
+      See `examples/fn-depth.lisp` for nested calls, recursion, and deferred
+      cleanup.
 
     + Recursive function calls are limited to
       `EVAL_FUNCTION_CALL_DEPTH_LIMIT` nested invocations (currently `128`).

@@ -64,6 +64,52 @@ Datum std_call_depth(Interpreter *interpreter, const Datum*, size_t argc) {
   return return_value;
 }
 
+// (fn-depth) — Get the absolute `(depth)` of the current function’s implicit
+// `(do)` scope. Unlike `(fn-return-depth)`, this includes the caller’s depth
+// and stays fixed when entering explicit `(do)` scopes.
+Datum std_fn_depth(Interpreter *interpreter, const Datum*, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "fn-depth";
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 0, argc)) return return_value;
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = {
+      .type = TYPE_U32,
+      .as.u32 =
+        interpreter->function_call == NULL
+          ? 0
+          : interpreter->function_call->entry_sequence_depth + 1,
+    },
+  };
+
+  return return_value;
+}
+
+// (fn-return-depth) — Get the number of `(do)` scopes to leave the current
+// function from any nesting level, including its implicit function scope.
+Datum std_fn_return_depth(Interpreter *interpreter, const Datum*, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "fn-return-depth";
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 0, argc)) return return_value;
+
+  uint32_t depth =
+    interpreter->function_call == NULL
+      ? 0
+      : interpreter->current_sequence_depth - interpreter->function_call->entry_sequence_depth;
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = { .type = TYPE_U32, .as.u32 = depth },
+  };
+
+  return return_value;
+}
+
 // (get-arg INDEX) — Read a zero-based argument of the active pseudo-function.
 Datum std_get_arg(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
