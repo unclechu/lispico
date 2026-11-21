@@ -1403,6 +1403,47 @@ static bool evaluate_expression_impl(
         return false;
       }
 
+      // Special form: return from the current user-defined function.
+      // This uses the same scope unwinding as `(leave (fn-return-depth))`,
+      // but omitting the value explicitly returns `SYM_EMPTY`.
+      if (strcmp(function_name, "return") == 0) {
+        uint32_t value_index = fn->next;
+
+        if (
+          value_index != EXPR_NONE &&
+          (
+            value_index >= interpreter->expression_count ||
+            interpreter->storage.expressions[value_index].next != EXPR_NONE
+          )
+        ) {
+          report_evaluation_failure(interpreter, "(return) expects 0 or 1 argument");
+          return false;
+        }
+
+        if (interpreter->function_call == NULL) {
+          report_evaluation_failure(interpreter, "(return) requires an active (fn) call");
+          return false;
+        }
+
+        // Evaluate the optional value before requesting a return, so a nested
+        // control transfer or evaluation failure takes precedence.
+        Datum value = { .kind = SYM_EMPTY };
+        if (value_index != EXPR_NONE) {
+          if (!evaluate_expression(interpreter, value_index, &value)) {
+            wipe_memory(&value, sizeof(value));
+            return false;
+          }
+        }
+
+        interpreter->eval_outcome.result = value;
+        wipe_memory(&value, sizeof(value));
+
+        // The implicit function scope is included in the leave count.
+        // Do not unwind caller scopes, even during nested or recursive calls.
+        interpreter->pending_leave_count = get_current_function_return_depth(interpreter);
+        return false;
+      }
+
       // Special form: evaluate child expressions sequentially.
       if (strcmp(function_name, "do") == 0) {
         EvalLocalScopeFrame scope = {

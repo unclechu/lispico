@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: Line 1 Column 19: Undefined variable
+1 | (fn "bad" (return missing)) (bad)
+  |                   ↑

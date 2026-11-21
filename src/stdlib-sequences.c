@@ -97,10 +97,7 @@ Datum std_fn_return_depth(Interpreter *interpreter, const Datum*, size_t argc) {
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 0, argc)) return return_value;
 
-  uint32_t depth =
-    interpreter->function_call == NULL
-      ? 0
-      : interpreter->current_sequence_depth - interpreter->function_call->entry_sequence_depth;
+  uint32_t depth = get_current_function_return_depth(interpreter);
 
   return_value = (Datum) {
     .kind = SYM_VARIABLE,

@@ -1,0 +1,90 @@
+; A function returns `SYM_EMPTY` when `(return)` has no value, even after
+; evaluating an earlier nonempty expression in its own implicit `(do)`.
+(fn "return-empty" (do
+  123
+  (return)
+  (assert false)))
+(assert (== (type-of (return-empty)) void))
+
+; The function body itself may be just `(return)` without an explicit `(do)`.
+(fn "return-empty-direct" (return))
+(assert (== (type-of (return-empty-direct)) void))
+
+; An explicit value, including `empty`, replaces the preceding result.
+(fn "return-value" (return 42))
+(fn "return-explicit-empty" (return empty))
+(assert (== (return-value) 42))
+(assert (== (type-of (return-explicit-empty)) void))
+
+; Return from deeply nested `(do)` scopes without unwinding caller scopes.
+(fn "return-from-nested" (args "value") (do
+  (assert (== (fn-return-depth) 2))
+  (do
+    (assert (== (fn-return-depth) 3))
+    (do
+      (assert (== (fn-return-depth) 4))
+      (return (+ value 1))
+      (assert false)))
+  (assert false)))
+(do
+  (do
+    (assert (== (return-from-nested 9) 10))
+    (assert (== (depth) 2))))
+
+; Returning out of an expression nested inside another argument also unwinds.
+(fn "return-as-argument" (do
+  (+ 1 (return 99))
+  (assert false)))
+(assert (== (return-as-argument) 99))
+
+; Return expressions are evaluated once; a nested return takes precedence.
+(fn "nested-return" (do
+  (return (return 54))
+  (assert false)))
+(assert (== (nested-return) 54))
+
+; Deferred expressions execute from innermost to outermost, before local cleanup.
+(var "return-defer-trace" "")
+(fn "return-with-defers" (args "value") (do
+  (local "local-value" (+ value 1))
+  (defer (override "return-defer-trace" (str return-defer-trace "O")))
+  (do
+    (defer (do
+      (assert (== local-value (+ value 1)))
+      (override "return-defer-trace" (str return-defer-trace "I"))))
+    (return value)
+    (assert false))
+  (assert false)))
+(assert (== (return-with-defers 30) 30))
+(assert (== return-defer-trace "IO"))
+
+; The returned result survives a deferred GC and cleanup of a local variable.
+(fn "return-string" (args "suffix") (do
+  (local "message" (str "hello" suffix))
+  (defer (gc))
+  (return message)))
+(assert (== (return-string " world") "hello world"))
+
+; Arrays returned through an early return also remain alive across deferred GC.
+(fn "return-array" (do
+  (local "values" (arr 10 20 30))
+  (defer (gc))
+  (return values)))
+(assert (== (return-array) (arr 10 20 30)))
+
+; Recursive returns remain local to the current invocation.
+(fn "recursive-return" (args "n") (do
+  (if (== n 0) (return 1))
+  (return (* n (recursive-return (- n 1))))
+  (assert false)))
+(assert (== (recursive-return 5) 120))
+
+; An inner function's return does not interrupt its caller.
+(fn "inner-return" (return 12))
+(fn "outer-return" (do
+  (assert (== (inner-return) 12))
+  (return 34)
+  (assert false)))
+(assert (== (outer-return) 34))
+(assert (== (call-depth) 0))
+(assert (== (depth) 0))

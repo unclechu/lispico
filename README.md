@@ -1459,8 +1459,8 @@ features:
     + Preserve the existing `(leave COUNT)` semantics inside functions: `COUNT`
       is the number of enclosing `(do)` scopes to exit. Use `(fn-depth)` or
       `(fn-return-depth)` to select the appropriate number of scopes without
-      modifying the existing `(leave)` special form. A future `(return)` could
-      provide a shorthand for returning a value early.
+      modifying the existing `(leave)` special form. `(return [VALUE])`
+      terminates the current function directly, from any nesting depth.
 
       Note that `(leave)` can leave nested function calls too:
 
@@ -1510,6 +1510,43 @@ features:
       any nested `(do)` within the current function, use
       `(leave (fn-return-depth) VALUE)`; ordinary `(leave)` semantics still
       apply, including `(defer)` execution and local-scope cleanup.
+
+      `(return)` is a separate evaluator special form that exits the current
+      user-defined function, without leaving any caller scopes. It takes zero
+      or one expression argument and works from its implicit function scope,
+      within explicit `(do)` blocks, and in nested expressions. `(return)`
+      with no argument returns **`SYM_EMPTY`**, even if the function previously
+      evaluated a nonempty result; this differs from bare `(leave)`, which
+      forwards the previous result. `(return VALUE)` evaluates `VALUE` once
+      and returns that datum, including strings, arrays, labels, and `empty`.
+      A failure or a nested control transfer while evaluating `VALUE` takes
+      precedence over the outer return.
+
+      Returning unwinds the function's active `(do)` scopes, runs their
+      `(defer)` expressions from innermost to outermost, and cleans up local
+      bindings using the normal `(leave)` machinery. A return attempted
+      directly by a deferred expression cannot interrupt its enclosing
+      sequence. Calling `(return)` outside a function, or supplying more than
+      one argument, causes an evaluation failure. `(return)` does not require
+      or add an explicit body `(do)` scope.
+
+      For example:
+
+      ```lisp
+      (fn "answer" (return 42))
+      (assert (== (answer) 42))
+
+      (fn "nothing" (do
+        123
+        (return)
+        (assert false)))
+      (assert (== (type-of (nothing)) void))
+
+      (fn "nested" (do
+        (do (return "done"))
+        (assert false)))
+      (assert (== (nested) "done"))
+      ```
 
       For example:
 
@@ -1938,6 +1975,7 @@ features:
   - `(and)`
   - `(or)`
   - `(leave)`
+  - `(return)`
   - `(defer)`
   - `(fn)`
 
@@ -2223,6 +2261,19 @@ features:
     + `(leave)` terminates the requested number of enclosing `(do)` sequences.
     + `(goto)` transfers evaluation to a registered label.
     + `(exit)` terminates evaluation of the entire program.
+
+* Returning from functions
+
+  + `(return [VALUE])` — Leave the current user-defined function, unwinding
+    every scope belonging to that invocation without leaving caller scopes.
+
+  + `(return)` returns `SYM_EMPTY`, rather than forwarding a previous value.
+    `(return VALUE)` evaluates and returns the value once. Both forms run
+    pending deferred expressions and clean up locals through normal scope exit.
+
+  + `(return)` requires an active user-defined function call and accepts at
+    most one argument. It is an evaluator special form, not a native function.
+    See the user-defined function section and `examples/return.lisp`.
 
 * <a id="deferred-expressions"></a>Deferred expressions
 

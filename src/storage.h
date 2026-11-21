@@ -257,3 +257,11 @@ static inline void request_evaluation_jump(Interpreter *interpreter, uint32_t in
 static inline uint32_t get_current_sequence_depth(Interpreter *interpreter) {
   return interpreter->current_sequence_depth;
 }
+
+// Number of `(do)` scopes to leave to exit the current function, including
+// the implicit function scope. Outside functions there is no return depth.
+static inline uint32_t get_current_function_return_depth(const Interpreter *interpreter) {
+  return interpreter->function_call == NULL
+    ? 0
+    : interpreter->current_sequence_depth - interpreter->function_call->entry_sequence_depth;
+}
