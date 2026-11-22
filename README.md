@@ -29,6 +29,7 @@ See [examples](examples), they are also used as regression tests.
   * [Leaving sequences (`leave`)](#leaving-sequences)
   * [Deferred expressions (`defer`)](#deferred-expressions)
   * [Shebang support](#shebang-support)
+  * [Parse-time includes](#parse-time-includes)
   * [File I/O](#file-io)
   * [Environment variables](#environment-variables)
   * [Sleep functions](#sleep-functions)
@@ -2002,6 +2003,57 @@ features:
 
   Shebang lines count toward source line numbering for parser errors.
 
+- <a id="parse-time-includes"></a>Parse-time includes
+
+  Lispico programs can insert expressions from other source files with
+  `(include "PATH")`. The path must be a **literal string**, and the include
+  is expanded during parsing, not evaluation. For example, if
+  `lib/arguments.lisp` contains the expressions `2`, `3`, and `4`:
+
+  ```lisp
+  (+ 1 (include "lib/arguments.lisp") 5) ; Equivalent to (+ 1 2 3 4 5)
+  ```
+
+  An include contributes **zero or more sibling expressions** at its exact
+  location, anywhere the parser accepts expressions: top-level programs,
+  `(do)` bodies, nested lists, and argument lists. No wrapper expression or
+  implicit scope is introduced. An empty file contributes zero expressions;
+  an included file must contain complete, independently parseable expressions
+  (not half of an open list). Ordinary scope and evaluation rules apply to the
+  resulting expression sequence, including restrictions on where `(fn)` may
+  execute.
+
+  Relative paths are resolved against the **containing source file’s
+  directory**, including inside nested includes, regardless of the current
+  working directory. When the main source is stdin (`-` or `/dev/stdin`),
+  includes in that source are relative to the current working directory.
+  Absolute paths are also accepted. String escapes follow the normal Lispico
+  string syntax; empty paths and embedded null bytes are rejected.
+
+  Repeated includes produce repeated expressions, just like copying the same
+  source text more than once. Circular includes are parsing errors. The POSIX
+  desktop parser detects cycles in the **active include chain** using the
+  opened file’s filesystem identity (`st_dev` and `st_ino`), including cycles
+  through symbolic or hard links; an earlier, completed include does not
+  prohibit including the same file again. There are no namespaces, module
+  caches, or runtime include operations.
+
+  The interpreter invokes `parse_source_with_includes()` (declared in
+  `src/parse.h`). The original in-memory `parse_source()` remains available
+  without filesystem expansion. Both share the existing expression storage.
+  Source maps are **optional**: with source mapping enabled, each included
+  source receives its own ID and its buffer is retained in `SourceRegistry`
+  until `clean_source_registry()`. With `--no-source-map`, included buffers are
+  freed immediately after parsing and no source registry is required.
+  The parsed expressions do not store source text or paths.
+
+  Includes that cannot be opened, contain invalid syntax, exceed the source
+  capacity, or form a cycle cause a parsing failure. Errors within an included
+  file identify that file in the parse error message. A later diagnostics step
+  will add full filename display to evaluation failures and source excerpts
+  for parse failures; the optional source map already selects the right source
+  buffer for evaluation excerpts.
+
 - <a id="file-io"></a>File I/O
 
   These functions are implemented in the optional desktop module
@@ -2829,14 +2881,13 @@ Evaluation failures report the one-based source line and byte column of the
 innermost failing expression by default. Source locations are kept in an
 optional table separate from the expression storage. Each location also holds
 an ID identifying its source file. The host may register source file paths and
-buffers in a separate `SourceRegistry` (`src/source-registry.{c,h}`); the
-registry does not own or copy those buffers. The current single-file parser
-assigns source ID `0` to all expressions, and the desktop interpreter registers
-its main file under that ID. Multiple-source parsing and `(include)` are not
-implemented yet. Internally, the parser now builds each top-level or list-child
-sequence by appending expression ranges. An ordinary expression contributes one
-node; the range representation also supports empty and multiple-node results
-for future parse-time includes. No new source syntax is enabled yet.
+buffers in a separate `SourceRegistry` (`src/source-registry.{c,h}`). The
+main source remains host-owned under source ID `0`; included source paths and
+buffers are registry-owned when mapping is enabled and freed when the registry
+is cleaned. The desktop parser assigns a distinct source ID to each included
+file occurrence. Internally, top-level and list-child sequences are built by
+appending expression ranges. Ordinary expressions contribute one node;
+parse-time `(include)` expands to zero or more sibling nodes without a wrapper.
 
 Use `--no-source-map` to disable the location table and report
 `Expression Index N:` instead of `Line N Column N:`. The source registry is

@@ -53,6 +53,14 @@ static_assert(
 // for parsing and formatting numeric text.
 #define NUMBER_TEXT_CAPACITY 128u
 
+// *** Source registry ***
+
+// Initial (include) files registry dynamic capacity (when dynamic growth is enabled).
+#define SOURCE_REGISTRY_DYNAMIC_INITIAL_CAPACITY 8u
+
+// The capacity reallocation/growth formula for dynamic source registry.
+#define SOURCE_REGISTRY_DYNAMIC_CAPACITY_GROW(capacity) ((capacity) * 2u)
+
 // *** Reading contents ***
 
 // 64KiB

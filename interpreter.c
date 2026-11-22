@@ -194,6 +194,7 @@ int main(int argc, char **argv) {
   }
 
   int exit_code = 0;
+  SourceRegistry source_registry = { .dynamic = true };
 
   Array argv_as_Array = {
     .element_type = TYPE_STRING,
@@ -238,11 +239,6 @@ int main(int argc, char **argv) {
 
   // The main input is source 0. Includes will register further source buffers
   // here, but this registry is independent of the optional expression map.
-  SourceFile source_files[1] = {0};
-  SourceRegistry source_registry = {
-    .files = source_files,
-    .capacity = 1,
-  };
   if (cli.with_source_map) {
     uint32_t source_id = 0;
     if (!register_source_file(
@@ -258,7 +254,14 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (!parse_source(&interpreter, source, source_size, &parse_error)) {
+  if (!parse_source_with_includes(
+    &interpreter,
+    source,
+    source_size,
+    cli.source_file,
+    cli.with_source_map ? &source_registry : NULL,
+    &parse_error
+  )) {
     fprintf(stderr, "Parse error: %s\n", parse_error);
     exit_code = 1;
     goto done;
@@ -361,6 +364,7 @@ int main(int argc, char **argv) {
     clean_evaluation(&interpreter);
     clean_symbols(&interpreter);
     clean_expressions(&interpreter);
+    clean_source_registry(&source_registry);
     free(argv_as_Array.data);
     free(args_as_Array.data);
     clean_cli_args(&cli);

@@ -1,0 +1,10 @@
+(include "include-files/functions.lisp")
+(assert (== (square 7) 49))
+(assert (== (+ 1 (include "include-files/arguments.lisp") 5) 15))
+(do
+  (local "x" 1)
+  (include "include-files/sequence.lisp")
+  (assert (== x 5)))
+(include "include-files/empty.lisp")
+(include "include-files/functions.lisp")
+(assert (== (square 3) 9))
