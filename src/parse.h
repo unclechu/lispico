@@ -39,6 +39,7 @@ typedef struct {
   ExpressionSourceLocation location;
   char path[ERR_MSG_SIZE]; // Snapshot, valid even after unmapped includes are freed.
   char include_trace[ERR_MSG_SIZE];
+  bool include_trace_truncated; // Further outer include sites did not fit.
 } ParseDiagnostic;
 
 // Like `parse_source_with_includes()`, but additionally capture a structured

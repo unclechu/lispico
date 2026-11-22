@@ -700,11 +700,13 @@ static bool parse_include(Parser *parser, ParsedExpressions *result) {
 
   // Build the trace from the innermost include site outward, before releasing
   // the child’s source and pathname. This needs no expression source map.
+  // Keep only complete trace lines; flag omitted ancestors instead of silently
+  // returning a partial line when the diagnostic buffer is exhausted.
   if (!success && parser->diagnostic != NULL) {
     ParseDiagnostic *diagnostic = parser->diagnostic;
-    size_t used = strlen(diagnostic->include_trace);
-    if (used < sizeof(diagnostic->include_trace)) {
-      snprintf(
+    if (!diagnostic->include_trace_truncated) {
+      size_t used = strlen(diagnostic->include_trace);
+      int written = snprintf(
         diagnostic->include_trace + used,
         sizeof(diagnostic->include_trace) - used,
         "Included from %s:%zu:%zu\n",
@@ -712,6 +714,10 @@ static bool parse_include(Parser *parser, ParsedExpressions *result) {
         include_line,
         include_column
       );
+      if (written < 0 || (size_t)written >= sizeof(diagnostic->include_trace) - used) {
+        diagnostic->include_trace[used] = '\0';
+        diagnostic->include_trace_truncated = true;
+      }
     }
   }
 

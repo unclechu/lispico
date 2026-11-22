@@ -2057,6 +2057,8 @@ features:
   An error in an included file is followed by an `Included from` trace, from
   its immediate includer outward to the main script. Each include occurrence
   has its own ancestry, even when the same file is included multiple times.
+  If a parsing include chain exceeds the diagnostic buffer, Lispico retains
+  complete trace lines and reports that additional include sites were omitted.
 
   Include traces for **parsing errors** do not require source maps: they are
   collected as recursive parsing unwinds, before the included source buffers

@@ -296,6 +296,8 @@ int main(int argc, char **argv) {
         }
       }
       fputs(parse_diagnostic.include_trace, stderr);
+      if (parse_diagnostic.include_trace_truncated)
+        fputs("Additional include sites omitted (trace too long)\n", stderr);
     } else {
       fprintf(stderr, "[FAIL] Parsing failed: %s\n", parse_error);
     }
