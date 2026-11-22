@@ -1310,10 +1310,20 @@ features:
     frozen or otherwise. `(label)` may re-evaluate a frozen label only when
     the label already points to that exact expression; moving it fails.
 
+    User-defined functions may also be frozen by their public names:
+    `(fn "foo" 1) (freeze "foo")` freezes the underlying `_FN_foo` label.
+    The function remains callable, but `(fn "foo" 2)` then fails because it
+    would redefine that frozen label. `(is-frozen "foo")` reports the same
+    frozen state. When a function shares a name with a global symbol (such
+    as a native function), the user-defined function takes precedence, just
+    as with function calls. A visible local symbol takes precedence over
+    both; the underlying function label can always be named explicitly as
+    `_FN_foo`.
+
     The user may freeze standard-library symbols as well. No symbols are
     frozen by default, and a fresh evaluation starts with unfrozen symbols.
-    `(is-frozen)` works with variables, arrays, labels, and native functions
-    without changing their frozen state.
+    `(is-frozen)` works with variables, arrays, labels, user-defined
+    functions, and native functions without changing their frozen state.
 
     `(override "NAME" VALUE)` accepts the same scalar and array values as
     `(var)`, but requires the symbol name to exist already. It can replace any

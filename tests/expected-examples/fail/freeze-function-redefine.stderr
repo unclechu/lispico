@@ -1,0 +1,5 @@
+[FAIL] Evaluation failed: examples/fail/freeze-function-redefine.lisp:3:1: (fn) cannot redefine a frozen label
+1 | (fn "answer" 42)
+2 | (freeze "answer")
+3 | (fn "answer" 43)
+  | ↑
