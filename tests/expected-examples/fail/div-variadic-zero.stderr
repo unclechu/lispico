@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (div) division by zero
+[FAIL] Evaluation failed: examples/fail/div-variadic-zero.lisp:1:1: (div) division by zero
 1 | (div 100 5 0) ; Division by zero in the third argument
   | ↑

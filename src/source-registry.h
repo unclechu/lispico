@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+
+#include "expression.h"
 
 // Source text and its path must remain valid while diagnostics may reference
 // them. Main-source buffers are host-owned; included buffers can be owned by
@@ -12,6 +15,12 @@ typedef struct {
   const char *source;
   size_t length;
   bool owned; // Included source: registry owns its path and source buffers.
+
+  // The include directive that brought this occurrence into the program.
+  // Root sources have `has_include_location == false`. The parent ID and
+  // location are retained only for diagnostics, never for evaluation.
+  bool has_include_location;
+  ExpressionSourceLocation include_location;
 } SourceFile;
 
 // Optional table for resolving expression source IDs to files.
@@ -49,3 +58,18 @@ bool register_owned_source_file(
 // Release owned included sources and, if dynamic, the file table itself.
 // Source buffers registered through `register_source_file()` remain host-owned.
 void clean_source_registry(SourceRegistry *registry);
+
+// Attach the parent include site to a previously registered source occurrence.
+// Repeated includes retain distinct parent chains, even for the same path.
+bool set_source_include_location(
+  SourceRegistry *registry,
+  uint32_t source_id,
+  ExpressionSourceLocation location
+);
+
+// Print the chain from the immediate includer back to the entry source.
+void print_source_include_trace(
+  FILE *stream,
+  const SourceRegistry *registry,
+  uint32_t source_id
+);

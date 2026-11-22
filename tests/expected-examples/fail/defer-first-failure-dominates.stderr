@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 5 Column 10: (assert) assertion failed: Second registered failure
+[FAIL] Evaluation failed: examples/fail/defer-first-failure-dominates.lisp:5:10: (assert) assertion failed: Second registered failure
 2 | ; while "First registered failure" is also executed.
 3 | (do
 4 |   (defer (assert false "First registered failure"))

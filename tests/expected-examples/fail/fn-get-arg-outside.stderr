@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (get-arg) requires an active (fn) call
+[FAIL] Evaluation failed: examples/fail/fn-get-arg-outside.lisp:1:1: (get-arg) requires an active (fn) call
 1 | (get-arg 0)
   | ↑

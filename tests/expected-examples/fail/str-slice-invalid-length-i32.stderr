@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (str-slice) expects a u32 length
+[FAIL] Evaluation failed: examples/fail/str-slice-invalid-length-i32.lisp:1:1: (str-slice) expects a u32 length
 1 | (str-slice "Hello" 1 -1) ; LENGTH must be u32
   | ↑

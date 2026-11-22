@@ -11,6 +11,7 @@
 #include "../../src/evaluate.h"
 #include "../../src/parse.h"
 #include "../../src/storage.h"
+#include "../../src/source-location.h"
 #include "../../src/symbol.h"
 
 static void write_source(const char *path, const char *source) {
@@ -62,6 +63,7 @@ int main(void) {
   char empty_path[PATH_MAX];
   char bad_path[PATH_MAX];
   char alias_path[PATH_MAX];
+  char relay_path[PATH_MAX];
   snprintf(main_path, sizeof(main_path), "%s/main.lisp", directory);
   snprintf(shared_path, sizeof(shared_path), "%s/shared.lisp", directory);
   snprintf(numbers_path, sizeof(numbers_path), "%s/numbers.lisp", directory);
@@ -71,6 +73,7 @@ int main(void) {
   snprintf(empty_path, sizeof(empty_path), "%s/empty.lisp", directory);
   snprintf(bad_path, sizeof(bad_path), "%s/bad.lisp", directory);
   snprintf(alias_path, sizeof(alias_path), "%s/alias.lisp", directory);
+  snprintf(relay_path, sizeof(relay_path), "%s/sub/relay.lisp", directory);
   assert(mkdir(nested_dir, 0700) == 0);
 
   const char *main_source =
@@ -87,6 +90,7 @@ int main(void) {
   write_source(statements_path, "(set \"x\" (+ x 4))\n");
   write_source(empty_path, "; contributes zero expressions\n");
   write_source(bad_path, "(+ 1 2\n");
+  write_source(relay_path, "(include \"../bad.lisp\")\n");
 
   char error[ERR_MSG_SIZE] = {0};
   SourceRegistry registry = { .dynamic = true };
@@ -102,6 +106,25 @@ int main(void) {
     &error
   ));
   assert(registry.count == 7); // main, shared, numbers, nested, statements, empty, shared again
+  const SourceFile *nested_file = get_source_file(&registry, 3);
+  assert(nested_file != NULL && nested_file->has_include_location);
+  assert(nested_file->include_location.source_id == 2);
+  assert(nested_file->include_location.line == 3);
+  assert(nested_file->include_location.column == 1);
+  const SourceFile *repeated = get_source_file(&registry, 6);
+  assert(repeated != NULL && repeated->has_include_location);
+  assert(repeated->include_location.source_id == 0);
+  assert(repeated->include_location.line == 5);
+  assert(repeated->include_location.column == 1);
+  FILE *trace_stream = tmpfile();
+  assert(trace_stream != NULL);
+  print_source_include_trace(trace_stream, &registry, 3);
+  rewind(trace_stream);
+  char mapped_trace[PATH_MAX * 3] = {0};
+  assert(fread(mapped_trace, 1, sizeof(mapped_trace) - 1u, trace_stream) > 0);
+  assert(strstr(mapped_trace, "numbers.lisp:3:1\n") != NULL);
+  assert(strstr(mapped_trace, "main.lisp:2:16\n") != NULL);
+  fclose(trace_stream);
   assert(interpreter.expression_count > 0);
 
   bool found_nested_location = false;
@@ -187,6 +210,63 @@ int main(void) {
   assert(strstr(error, "Unterminated list") != NULL);
   assert(unmapped.expression_count == 0);
 
+  // The diagnostic API retains the deepest error site and both include sites,
+  // even without source mapping or retained included file buffers.
+  const char *relay_source = "(include \"sub/relay.lisp\")\n";
+  ParseDiagnostic diagnostic = {0};
+  assert(!parse_source_with_includes_diagnostic(
+    &unmapped,
+    relay_source,
+    strlen(relay_source),
+    main_path,
+    NULL,
+    &error,
+    &diagnostic
+  ));
+  assert(diagnostic.has_location);
+  assert(strstr(diagnostic.path, "/bad.lisp") != NULL);
+  assert(diagnostic.location.line == 2);
+  assert(diagnostic.location.column == 1);
+  assert(diagnostic.location.byte_offset == strlen("(+ 1 2\n"));
+  assert(strstr(diagnostic.include_trace, "sub/relay.lisp:1:1\n") != NULL);
+  assert(strstr(diagnostic.include_trace, "main.lisp:1:1\n") != NULL);
+  assert(strstr(error, "Unterminated list") != NULL);
+
+  SourceRegistry failure_registry = { .dynamic = true };
+  uint32_t failure_source_id = UINT32_MAX;
+  assert(register_source_file(
+    &failure_registry,
+    main_path,
+    relay_source,
+    strlen(relay_source),
+    &failure_source_id
+  ));
+  assert(!parse_source_with_includes_diagnostic(
+    &interpreter,
+    relay_source,
+    strlen(relay_source),
+    main_path,
+    &failure_registry,
+    &error,
+    &diagnostic
+  ));
+  assert(failure_registry.count == 3);
+  assert(diagnostic.location.source_id == 2);
+  const SourceFile *bad_file = get_source_file(&failure_registry, 2);
+  assert(bad_file != NULL);
+  FILE *excerpt_stream = tmpfile();
+  assert(excerpt_stream != NULL);
+  assert(print_source_location(
+    excerpt_stream,
+    bad_file->source,
+    bad_file->length,
+    &diagnostic.location,
+    3
+  ));
+  fclose(excerpt_stream);
+  clean_source_registry(&failure_registry);
+  reset_interpreter(&interpreter);
+
   // The root and its hard link are the same file, even with different names.
   write_source(main_path, "(include \"alias.lisp\")");
   assert(link(main_path, alias_path) == 0);
@@ -219,6 +299,7 @@ int main(void) {
   assert(unlink(statements_path) == 0);
   assert(unlink(empty_path) == 0);
   assert(unlink(bad_path) == 0);
+  assert(unlink(relay_path) == 0);
   assert(rmdir(nested_dir) == 0);
   assert(rmdir(directory) == 0);
 

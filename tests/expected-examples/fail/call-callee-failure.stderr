@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 2 Column 1: (/) division by zero
+[FAIL] Evaluation failed: examples/fail/call-callee-failure.lisp:2:1: (/) division by zero
 1 | ; The native callee’s evaluation failure must propagate through (call).
 2 | (call "/" 1 0)
   | ↑

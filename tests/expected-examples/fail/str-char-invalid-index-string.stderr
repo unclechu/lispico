@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (str-char) expects a u32 index as the second argument
+[FAIL] Evaluation failed: examples/fail/str-char-invalid-index-string.lisp:1:1: (str-char) expects a u32 index as the second argument
 1 | (str-char "hello" "0") ; Index must be u32
   | ↑

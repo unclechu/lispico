@@ -254,15 +254,51 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (!parse_source_with_includes(
+  ParseDiagnostic parse_diagnostic = {0};
+  if (!parse_source_with_includes_diagnostic(
     &interpreter,
     source,
     source_size,
     cli.source_file,
     cli.with_source_map ? &source_registry : NULL,
-    &parse_error
+    &parse_error,
+    &parse_diagnostic
   )) {
-    fprintf(stderr, "Parse error: %s\n", parse_error);
+    if (parse_diagnostic.has_location) {
+      fprintf(
+        stderr,
+        "[FAIL] Parsing failed: %s:%" PRIu32 ":%" PRIu32 ": %s\n",
+        parse_diagnostic.path,
+        parse_diagnostic.location.line,
+        parse_diagnostic.location.column,
+        parse_error
+      );
+
+      // Parsing diagnostics use the same renderer as evaluation failures.
+      // Without a source map, parsing and tracing still work without retaining
+      // any of the included file buffers.
+      if (cli.with_source_map) {
+        const SourceFile *source_file = get_source_file(
+          &source_registry,
+          parse_diagnostic.location.source_id
+        );
+        if (source_file != NULL) {
+          print_source_highlight(
+            stderr,
+            source_file->source,
+            source_file->length,
+            &parse_diagnostic.location,
+            cli.source_context_before,
+            "lisp",
+            source_highlight,
+            source_highlight_sh
+          );
+        }
+      }
+      fputs(parse_diagnostic.include_trace, stderr);
+    } else {
+      fprintf(stderr, "[FAIL] Parsing failed: %s\n", parse_error);
+    }
     exit_code = 1;
     goto done;
   }
@@ -320,7 +356,8 @@ int main(int argc, char **argv) {
         if (source_file != NULL) {
           fprintf(
             stderr,
-            "[FAIL] Evaluation failed: Line %" PRIu32 " Column %" PRIu32 ": %s\n",
+            "[FAIL] Evaluation failed: %s:%" PRIu32 ":%" PRIu32 ": %s\n",
+            source_file->path,
             location->line,
             location->column,
             eval_outcome.as.fail_msg
@@ -334,6 +371,11 @@ int main(int argc, char **argv) {
             "lisp",
             source_highlight,
             source_highlight_sh
+          );
+          print_source_include_trace(
+            stderr,
+            &source_registry,
+            location->source_id
           );
         } else {
           fprintf(

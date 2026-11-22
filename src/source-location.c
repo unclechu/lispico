@@ -32,11 +32,13 @@ static bool find_excerpt(
   if (
     source == NULL ||
     location == NULL ||
-    location->byte_offset >= source_length ||
+    location->byte_offset > source_length ||
     location->line == 0 ||
     location->column == 0
   ) return false;
 
+  // Parsing failures can point at EOF, including the empty line after a
+  // trailing newline. Evaluation locations normally point at source bytes.
   size_t error_offset = location->byte_offset;
   size_t error_line_start = error_offset;
   while (error_line_start > 0 && source[error_line_start - 1u] != '\n')

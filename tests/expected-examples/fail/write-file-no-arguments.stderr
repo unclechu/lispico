@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (write-file) expects exactly 2 arguments, got instead: 0
+[FAIL] Evaluation failed: examples/fail/write-file-no-arguments.lisp:1:1: (write-file) expects exactly 2 arguments, got instead: 0
 1 | (write-file) ; Filename and content are required
   | ↑

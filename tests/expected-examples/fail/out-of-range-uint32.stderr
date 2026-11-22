@@ -1,1 +1,3 @@
-Parse error: 1:11: u32 literal out of range
+[FAIL] Parsing failed: examples/fail/out-of-range-uint32.lisp:1:11: u32 literal out of range
+1 | 4294967296 ; Expected parsing failure
+  |           ↑

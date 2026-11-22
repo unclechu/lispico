@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (fn) invalid or too long argument name
+[FAIL] Evaluation failed: examples/fail/fn-argument-name-too-long.lisp:1:1: (fn) invalid or too long argument name
 1 | (fn "foo" (args "this-argument-name-is-too-long-to-fit-when-prefixed-with-the-function-index") 1)
   | ↑

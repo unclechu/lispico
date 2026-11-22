@@ -2038,21 +2038,44 @@ features:
   prohibit including the same file again. There are no namespaces, module
   caches, or runtime include operations.
 
-  The interpreter invokes `parse_source_with_includes()` (declared in
-  `src/parse.h`). The original in-memory `parse_source()` remains available
-  without filesystem expansion. Both share the existing expression storage.
-  Source maps are **optional**: with source mapping enabled, each included
-  source receives its own ID and its buffer is retained in `SourceRegistry`
-  until `clean_source_registry()`. With `--no-source-map`, included buffers are
-  freed immediately after parsing and no source registry is required.
-  The parsed expressions do not store source text or paths.
+  The desktop interpreter invokes `parse_source_with_includes_diagnostic()`
+  (declared in `src/parse.h`) for structured parsing errors. The simpler
+  `parse_source_with_includes()` entry point remains available without the
+  additional diagnostics output. The original in-memory `parse_source()` remains
+  available without filesystem expansion. Both share the existing expression
+  storage. Source maps are **optional**: with source mapping enabled, each
+  included source receives its own ID and its buffer is retained in
+  `SourceRegistry` until `clean_source_registry()`. With `--no-source-map`,
+  included buffers are freed immediately after parsing and no source registry
+  is required. The parsed expressions do not store source text or paths.
 
   Includes that cannot be opened, contain invalid syntax, exceed the source
-  capacity, or form a cycle cause a parsing failure. Errors within an included
-  file identify that file in the parse error message. A later diagnostics step
-  will add full filename display to evaluation failures and source excerpts
-  for parse failures; the optional source map already selects the right source
-  buffer for evaluation excerpts.
+  capacity, or form a cycle cause a parsing failure. With source mapping
+  enabled, both parsing and evaluation failures identify the actual source
+  path, line, and column, and render an excerpt from that file. Parsing errors
+  at end-of-file display the final line (including an empty trailing line).
+  An error in an included file is followed by an `Included from` trace, from
+  its immediate includer outward to the main script. Each include occurrence
+  has its own ancestry, even when the same file is included multiple times.
+
+  Include traces for **parsing errors** do not require source maps: they are
+  collected as recursive parsing unwinds, before the included source buffers
+  are released. With `--no-source-map`, parsing diagnostics still report the
+  source pathname, location, and include chain without an excerpt. Evaluation
+  errors without source mapping continue to report expression indices rather
+  than source locations. Include provenance and source text are diagnostic
+  metadata only and are not embedded in the expression representation.
+
+  For example, if `main.lisp` includes `lib/helpers.lisp`, which includes
+  `lib/broken.lisp`, an evaluation error in the latter is displayed as:
+
+  ```text
+  [FAIL] Evaluation failed: lib/broken.lisp:1:6: Undefined variable
+  1 | (+ 1 missing)
+    |      ↑
+  Included from lib/helpers.lisp:2:1
+  Included from main.lisp:1:1
+  ```
 
 - <a id="file-io"></a>File I/O
 

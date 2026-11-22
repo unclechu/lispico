@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 2 Column 7: Undefined variable
+[FAIL] Evaluation failed: examples/fail/local-label-scope-exited.lisp:2:7: Undefined variable
 1 | (do (local-label "inside"))
 2 | (goto inside)
   |       ↑

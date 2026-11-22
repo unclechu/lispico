@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 3 Column 1: (override) symbol “number” is frozen
+[FAIL] Evaluation failed: examples/fail/freeze-override.lisp:3:1: (override) symbol “number” is frozen
 1 | (var "number" 42)
 2 | (freeze "number")
 3 | (override "number" "changed")

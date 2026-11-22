@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (clamp) minimum exceeds maximum
+[FAIL] Evaluation failed: examples/fail/clamp-invalid-range.lisp:1:1: (clamp) minimum exceeds maximum
 1 | (clamp 5 10 0) ; Minimum exceeds maximum
   | ↑

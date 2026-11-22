@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (arr-slice) requested range is out of bounds
+[FAIL] Evaluation failed: examples/fail/arr-slice-range-out-of-bounds.lisp:1:1: (arr-slice) requested range is out of bounds
 1 | (arr-slice (arr 1 2) 1 2) ; Requested range exceeds array size
   | ↑

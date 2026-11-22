@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 2 Column 1: (fn) label does not point to a function definition
+[FAIL] Evaluation failed: examples/fail/fn-invalid-label.lisp:2:1: (fn) label does not point to a function definition
 1 | (label "_FN_invalid")
 2 | (invalid 1)
   | ↑

@@ -1,0 +1,5 @@
+[FAIL] Evaluation failed: examples/fail/../include-files/nested/deep-evaluation-error.lisp:1:6: Undefined variable
+1 | (+ 1 missing)
+  |      ↑
+Included from examples/fail/../include-files/nested/evaluation-chain.lisp:1:1
+Included from examples/fail/include-nested-evaluation.lisp:1:1

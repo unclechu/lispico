@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 19: Undefined variable
+[FAIL] Evaluation failed: examples/fail/return-invalid-value.lisp:1:19: Undefined variable
 1 | (fn "bad" (return missing)) (bad)
   |                   ↑

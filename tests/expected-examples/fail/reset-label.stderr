@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 2 Column 1: (reset) symbol “here” is not a variable or array
+[FAIL] Evaluation failed: examples/fail/reset-label.lisp:2:1: (reset) symbol “here” is not a variable or array
 1 | (label "here")
 2 | (reset "here")
   | ↑

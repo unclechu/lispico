@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 2 Column 1: (call) symbol “number” is not a native function
+[FAIL] Evaluation failed: examples/fail/call-not-function.lisp:2:1: (call) symbol “number” is not a native function
 1 | (var "number" 42)
 2 | (call "number")
   | ↑

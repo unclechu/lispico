@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 2 Column 1: (apply) too many expanded arguments (maximum is 32)
+[FAIL] Evaluation failed: examples/fail/apply-too-many-expanded.lisp:2:1: (apply) too many expanded arguments (maximum is 32)
 1 | (arr-new "large-tail" u32 32)
 2 | (apply "+" large-tail)
   | ↑

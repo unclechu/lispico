@@ -29,3 +29,27 @@ bool parse_source_with_includes(
   SourceRegistry *registry,
   char (*error)[ERR_MSG_SIZE]
 );
+
+// Structured parsing failure data for source excerpts and include traces.
+// `location` refers to the failing source occurrence when available. The
+// include trace is formatted while recursive parser frames are still alive,
+// so it works even when source mapping and source retention are disabled.
+typedef struct {
+  bool has_location;
+  ExpressionSourceLocation location;
+  char path[ERR_MSG_SIZE]; // Snapshot, valid even after unmapped includes are freed.
+  char include_trace[ERR_MSG_SIZE];
+} ParseDiagnostic;
+
+// Like `parse_source_with_includes()`, but additionally capture a structured
+// failure location and the include chain. The source registry is still optional
+// when source maps are disabled.
+bool parse_source_with_includes_diagnostic(
+  Interpreter *interpreter,
+  const char *source,
+  size_t length,
+  const char *source_path,
+  SourceRegistry *registry,
+  char (*error)[ERR_MSG_SIZE],
+  ParseDiagnostic *diagnostic
+);

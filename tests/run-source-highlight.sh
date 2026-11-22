@@ -124,7 +124,7 @@ export PATH="$TMP_DIR/bin:$PATH"
 export LISPICO_TEST_BAT_ARGS="$TMP_DIR/bat-args"
 export LISPICO_TEST_BAT_STDIN="$TMP_DIR/bat-stdin"
 
-header=$'[FAIL] Evaluation failed: Line 3 Column 7: Undefined variable\n'
+header="[FAIL] Evaluation failed: $TMP_DIR/failure.lisp:3:7: Undefined variable"$'\n'
 plain=$'2 | 20\n3 |     (+ 1 missing)\n  |          ↑\n'
 colored=$'2 | \033[35m20\033[0m\033[0m\n3 | \033[35m    (+ 1 missing)\033[0m\033[0m\n  |          ↑\n'
 

@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (assert) assertion failed: Two plus two should equal five
+[FAIL] Evaluation failed: examples/fail/assert.lisp:1:1: (assert) assertion failed: Two plus two should equal five
 1 | (assert (== (+ 2 2) 5) "Two plus two should equal five")
   | ↑

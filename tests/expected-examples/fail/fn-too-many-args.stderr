@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 2 Column 1: (fn) expects exactly 1 arguments, got instead: 2
+[FAIL] Evaluation failed: examples/fail/fn-too-many-args.lisp:2:1: (fn) expects exactly 1 arguments, got instead: 2
 1 | (fn "one" (args "x") x)
 2 | (one 1 2)
   | ↑

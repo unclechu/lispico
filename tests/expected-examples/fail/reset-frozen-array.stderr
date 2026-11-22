@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 3 Column 1: (reset) symbol “numbers” is frozen
+[FAIL] Evaluation failed: examples/fail/reset-frozen-array.lisp:3:1: (reset) symbol “numbers” is frozen
 1 | (arr-new "numbers" u32 2)
 2 | (freeze "numbers")
 3 | (reset "numbers")

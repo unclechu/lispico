@@ -1,1 +1,3 @@
-Parse error: 1:14: u32 literal out of range
+[FAIL] Parsing failed: examples/fail/number-underscore-overflow.lisp:1:14: u32 literal out of range
+1 | 4_294_967_296 ; Number overflow parsing failure
+  |              ↑

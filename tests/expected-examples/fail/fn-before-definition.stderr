@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: Undefined function
+[FAIL] Evaluation failed: examples/fail/fn-before-definition.lisp:1:1: Undefined function
 1 | (later)
   | ↑

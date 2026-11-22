@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 2 Column 1: (arr-concat) expects arrays of the same element type (TYPE_U32 vs. TYPE_I32)
+[FAIL] Evaluation failed: examples/fail/arr-concat-empty-type-mismatch.lisp:2:1: (arr-concat) expects arrays of the same element type (TYPE_U32 vs. TYPE_I32)
 1 | (arr-new "empty-input" i32 0)
 2 | (arr-concat (arr 1 2) empty-input) ; Empty arrays still have an element type
   | ↑

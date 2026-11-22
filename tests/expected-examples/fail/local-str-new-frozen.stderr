@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 4 Column 3: (local-str-new) symbol “_LOCAL_0_x” is frozen
+[FAIL] Evaluation failed: examples/fail/local-str-new-frozen.lisp:4:3: (local-str-new) symbol “_LOCAL_0_x” is frozen
 1 | (do
 2 |   (local-str-new "x" 3)
 3 |   (freeze "x")

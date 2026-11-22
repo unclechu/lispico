@@ -1,1 +1,3 @@
-Parse error: 1:5: Invalid numeric literal
+[FAIL] Parsing failed: examples/fail/number-underscore-trailing.lisp:1:5: Invalid numeric literal
+1 | 123_ ; Underscore numeric separators can only be between digits
+  |     ↑

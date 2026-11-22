@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (apply) expects at least 2 arguments
+[FAIL] Evaluation failed: examples/fail/apply-no-arguments.lisp:1:1: (apply) expects at least 2 arguments
 1 | (apply)
   | ↑

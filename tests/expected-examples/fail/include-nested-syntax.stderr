@@ -1,0 +1,6 @@
+[FAIL] Parsing failed: examples/fail/../include-files/nested/deep-parse-error.lisp:2:1: Unterminated list
+1 | (+ 1 2
+2 | 
+  | ↑
+Included from examples/fail/../include-files/nested/parse-chain.lisp:1:1
+Included from examples/fail/include-nested-syntax.lisp:1:1

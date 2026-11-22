@@ -47,6 +47,25 @@ int main(void) {
   assert(included_file->source == included_source);
   assert(included_file->length == strlen(included_source));
   assert(get_source_file(&registry, 2) == NULL);
+  ExpressionSourceLocation include_site = {
+    .source_id = 0,
+    .byte_offset = 0,
+    .line = 1,
+    .column = 1,
+  };
+  assert(set_source_include_location(&registry, 1, include_site));
+  assert(!set_source_include_location(&registry, 0, include_site));
+  assert(!set_source_include_location(&registry, 1, (ExpressionSourceLocation) {
+    .source_id = 1,
+  }));
+  FILE *trace = tmpfile();
+  assert(trace != NULL);
+  print_source_include_trace(trace, &registry, 1);
+  rewind(trace);
+  char trace_text[128] = {0};
+  assert(fread(trace_text, 1, sizeof(trace_text) - 1u, trace) > 0);
+  assert(strcmp(trace_text, "Included from scripts/main.lisp:1:1\n") == 0);
+  fclose(trace);
   assert(get_source_file(NULL, 0) == NULL);
 
   // A location with a different source ID selects that file’s original text.

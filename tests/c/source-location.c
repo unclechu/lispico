@@ -63,6 +63,10 @@ int main(void) {
     source, 5, 8, 100,
     "1 | first\n2 | second\n3 | third\n4 | fourth\n5 |   (+ 1 missing)\n  |        ↑\n"
   );
+  // Parsing failures may point at EOF, including an empty trailing line.
+  check_excerpt("(+ 1 2\n", 2, 1, 3, "1 | (+ 1 2\n2 | \n  | ↑\n");
+  check_excerpt("(+ 1 2", 1, 7, 3, "1 | (+ 1 2\n  |       ↑\n");
+  check_excerpt("", 1, 1, 3, "1 | \n  | ↑\n");
   check_excerpt(
     "(+ missing)", 1, 4, 3,
     "1 | (+ missing)\n  |    ↑\n"

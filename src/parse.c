@@ -64,6 +64,7 @@ typedef struct {
 
   // Error message pointer to report error message to
   char (*error)[ERR_MSG_SIZE];
+  ParseDiagnostic *diagnostic; // Optional, for the host’s error renderer.
 } Parser;
 
 // A sequence of sibling expressions. An empty range has both indices set to
@@ -92,7 +93,27 @@ static void append_expressions(
 
 // Report parsing failure
 static bool parser_fail(Parser *parser, const char *message) {
-  if (parser->is_included && parser->path != NULL) {
+  if (parser->diagnostic != NULL && !parser->diagnostic->has_location) {
+    // Capture the first failure; callers add include sites while unwinding.
+    parser->diagnostic->has_location = true;
+    snprintf(
+      parser->diagnostic->path,
+      sizeof(parser->diagnostic->path),
+      "%s",
+      parser->path != NULL ? parser->path : "/dev/stdin"
+    );
+    parser->diagnostic->location = (ExpressionSourceLocation) {
+      .source_id = parser->source_id,
+      .byte_offset = parser->position <= UINT32_MAX ? (uint32_t)parser->position : 0,
+      .line = parser->line <= UINT32_MAX ? (uint32_t)parser->line : 0,
+      .column = parser->column <= UINT32_MAX ? (uint32_t)parser->column : 0,
+    };
+  }
+  // The structured API returns the message separately from the location.
+  // Keep the old location-prefixed text for existing parser API callers.
+  if (parser->diagnostic != NULL) {
+    snprintf(*parser->error, sizeof(*parser->error), "%s", message);
+  } else if (parser->is_included && parser->path != NULL) {
     snprintf(
       *parser->error,
       sizeof(*parser->error),
@@ -436,11 +457,13 @@ static bool is_include(Parser *parser) {
 
 static bool include_fail_at(
   Parser *parser,
+  size_t position,
   size_t line,
   size_t column,
   const char *message
 ) {
   Parser location = *parser;
+  location.position = position;
   location.line = line;
   location.column = column;
   return parser_fail(&location, message);
@@ -511,6 +534,7 @@ static char* include_path(const Parser *parser, const char *name) {
 // Parse an included source directly into the same expression and allocation
 // tables. An included source never creates a wrapper list or a new `(do)`.
 static bool parse_include(Parser *parser, ParsedExpressions *result) {
+  size_t include_position = parser->position;
   size_t include_line = parser->line;
   size_t include_column = parser->column;
 
@@ -622,6 +646,25 @@ static bool parse_include(Parser *parser, ParsedExpressions *result) {
     }
   }
 
+  if (retain_source) {
+    ExpressionSourceLocation site = {
+      .source_id = parser->source_id,
+      .byte_offset = (uint32_t)include_position,
+      .line = (uint32_t)include_line,
+      .column = (uint32_t)include_column,
+    };
+    // The parent was registered before its included child.
+    if (!set_source_include_location(parser->includes->registry, source_id, site)) {
+      return include_fail_at(
+        parser,
+        include_position,
+        include_line,
+        include_column,
+        "Unable to record include source location"
+      );
+    }
+  }
+
   IncludeFrame frame = {
     .device = info.st_dev,
     .inode = info.st_ino,
@@ -643,6 +686,7 @@ static bool parse_include(Parser *parser, ParsedExpressions *result) {
     .column = 1,
     .depth = parser->depth,
     .error = parser->error,
+    .diagnostic = parser->diagnostic,
   };
 
   // An included script can have its own shebang, just like a main script.
@@ -653,6 +697,23 @@ static bool parse_include(Parser *parser, ParsedExpressions *result) {
 
   // Parse the included source.
   bool success = parse_sequence(&included, false, result);
+
+  // Build the trace from the innermost include site outward, before releasing
+  // the child’s source and pathname. This needs no expression source map.
+  if (!success && parser->diagnostic != NULL) {
+    ParseDiagnostic *diagnostic = parser->diagnostic;
+    size_t used = strlen(diagnostic->include_trace);
+    if (used < sizeof(diagnostic->include_trace)) {
+      snprintf(
+        diagnostic->include_trace + used,
+        sizeof(diagnostic->include_trace) - used,
+        "Included from %s:%zu:%zu\n",
+        parser->path != NULL ? parser->path : "/dev/stdin",
+        include_line,
+        include_column
+      );
+    }
+  }
 
   // If source mapping is disabled then wipe the source from memory.
   if (!retain_source) {
@@ -674,7 +735,7 @@ static bool parse_include(Parser *parser, ParsedExpressions *result) {
     goto fail;
 
   fail:
-    include_fail_at(parser, include_line, include_column, message);
+    include_fail_at(parser, include_position, include_line, include_column, message);
     wipe_memory(path, strlen(path) + 1);
     free(path);
     return false;
@@ -770,10 +831,12 @@ static bool parse_source_impl(
   size_t length,
   const char *path,
   IncludeContext *includes,
-  char (*error)[ERR_MSG_SIZE]
+  char (*error)[ERR_MSG_SIZE],
+  ParseDiagnostic *diagnostic
 ) {
   if (error == NULL) return false;
   (*error)[0] = '\0';
+  if (diagnostic != NULL) *diagnostic = (ParseDiagnostic) {0};
 
   if (
     interpreter == NULL ||
@@ -816,6 +879,7 @@ static bool parse_source_impl(
     .line = 1,
     .column = 1,
     .error = error,
+    .diagnostic = diagnostic,
   };
   if (starts_with(&parser, '#', '!')) {
     while (parser.position < parser.length && current_char(&parser) != '\n')
@@ -836,16 +900,17 @@ bool parse_source(
   size_t length,
   char (*error)[ERR_MSG_SIZE]
 ) {
-  return parse_source_impl(interpreter, source, length, NULL, NULL, error);
+  return parse_source_impl(interpreter, source, length, NULL, NULL, error, NULL);
 }
 
-bool parse_source_with_includes(
+bool parse_source_with_includes_diagnostic(
   Interpreter *interpreter,
   const char *source,
   size_t length,
   const char *source_path,
   SourceRegistry *registry,
-  char (*error)[ERR_MSG_SIZE]
+  char (*error)[ERR_MSG_SIZE],
+  ParseDiagnostic *diagnostic
 ) {
   // For stdin, relative includes resolve against the current directory.
   const char *path = source_path;
@@ -859,5 +924,24 @@ bool parse_source_with_includes(
     context.active = &root;
   }
 
-  return parse_source_impl(interpreter, source, length, path, &context, error);
+  return parse_source_impl(interpreter, source, length, path, &context, error, diagnostic);
+}
+
+bool parse_source_with_includes(
+  Interpreter *interpreter,
+  const char *source,
+  size_t length,
+  const char *source_path,
+  SourceRegistry *registry,
+  char (*error)[ERR_MSG_SIZE]
+) {
+  return parse_source_with_includes_diagnostic(
+    interpreter,
+    source,
+    length,
+    source_path,
+    registry,
+    error,
+    NULL
+  );
 }

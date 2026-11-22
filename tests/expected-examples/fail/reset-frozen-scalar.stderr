@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 3 Column 1: (reset) symbol “number” is frozen
+[FAIL] Evaluation failed: examples/fail/reset-frozen-scalar.lisp:3:1: (reset) symbol “number” is frozen
 1 | (var "number" 42)
 2 | (freeze "number")
 3 | (reset "number")

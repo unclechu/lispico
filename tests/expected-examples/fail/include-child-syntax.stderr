@@ -1,1 +1,5 @@
-Parse error: examples/fail/../include-files/invalid.lisp:2:1: Unterminated list
+[FAIL] Parsing failed: examples/fail/../include-files/invalid.lisp:2:1: Unterminated list
+1 | (+ 1 2
+2 | 
+  | ↑
+Included from examples/fail/include-child-syntax.lisp:1:1

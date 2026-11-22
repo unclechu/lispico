@@ -1,1 +1,3 @@
-Parse error: 1:1: Circular include: “examples/fail/include-self-cycle.lisp”
+[FAIL] Parsing failed: examples/fail/include-self-cycle.lisp:1:1: Circular include: “examples/fail/include-self-cycle.lisp”
+1 | (include "include-self-cycle.lisp")
+  | ↑

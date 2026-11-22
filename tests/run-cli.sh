@@ -164,13 +164,13 @@ run_help_case 'grouped help exits successfully' -ph
 
 printf '\nTesting evaluation source locations…\n'
 run_case 'source map is enabled by default' 1 '' \
-  'Line 2 Column 8: Undefined variable' "$TMP_DIR/location.lisp"
+  "$TMP_DIR/location.lisp:2:8: Undefined variable" "$TMP_DIR/location.lisp"
 run_case 'source map can be disabled' 1 '' \
   'Expression Index 3: Undefined variable' --no-source-map "$TMP_DIR/location.lisp"
 run_case 'disabled map after positional source' 1 '' \
   'Expression Index 3: Undefined variable' "$TMP_DIR/location.lisp" --no-source-map
 run_case 'deferred error retains its source location' 1 '' \
-  'Line 2 Column 10: Undefined variable' "$TMP_DIR/deferred-location.lisp"
+  "$TMP_DIR/deferred-location.lisp:2:10: Undefined variable" "$TMP_DIR/deferred-location.lisp"
 
 # Exact stderr comparison for the source excerpt and arrow placement.
 run_location_case() {
@@ -204,22 +204,26 @@ run_location_case() {
 
 printf '10\n20\n30\n40\n  (+ 1 missing)\n' > "$TMP_DIR/context.lisp"
 run_location_case 'default three preceding lines' \
-  $'[FAIL] Evaluation failed: Line 5 Column 8: Undefined variable\n2 | 20\n3 | 30\n4 | 40\n5 |   (+ 1 missing)\n  |        ↑\n' \
+  "[FAIL] Evaluation failed: $TMP_DIR/context.lisp:5:8: Undefined variable"$'\n2 | 20\n3 | 30\n4 | 40\n5 |   (+ 1 missing)\n  |        ↑\n' \
   "$TMP_DIR/context.lisp"
 run_location_case 'custom single preceding line' \
-  $'[FAIL] Evaluation failed: Line 5 Column 8: Undefined variable\n4 | 40\n5 |   (+ 1 missing)\n  |        ↑\n' \
+  "[FAIL] Evaluation failed: $TMP_DIR/context.lisp:5:8: Undefined variable"$'\n4 | 40\n5 |   (+ 1 missing)\n  |        ↑\n' \
   --source-context-before=1 "$TMP_DIR/context.lisp"
 run_location_case 'zero preceding lines with separate option value' \
-  $'[FAIL] Evaluation failed: Line 5 Column 8: Undefined variable\n5 |   (+ 1 missing)\n  |        ↑\n' \
+  "[FAIL] Evaluation failed: $TMP_DIR/context.lisp:5:8: Undefined variable"$'\n5 |   (+ 1 missing)\n  |        ↑\n' \
   --source-context-before 0 "$TMP_DIR/context.lisp"
 # Every tab is displayed as four spaces, including tabs before the error.
 printf '\t123\n\t(+ 1\tmissing)\n' > "$TMP_DIR/tab-location.lisp"
 run_location_case 'tabs use fixed-width spacing in excerpt and arrow' \
-  $'[FAIL] Evaluation failed: Line 2 Column 7: Undefined variable\n1 |     123\n2 |     (+ 1    missing)\n  |             ↑\n' \
+  "[FAIL] Evaluation failed: $TMP_DIR/tab-location.lisp:2:7: Undefined variable"$'\n1 |     123\n2 |     (+ 1    missing)\n  |             ↑\n' \
   "$TMP_DIR/tab-location.lisp"
 run_location_case 'no source map omits excerpt' \
   $'[FAIL] Evaluation failed: Expression Index 7: Undefined variable\n' \
   --no-source-map "$TMP_DIR/context.lisp"
+# Parsing include traces are preserved without expression source maps.
+run_location_case 'nested include parsing trace without source map' \
+  $'[FAIL] Parsing failed: examples/fail/../include-files/nested/deep-parse-error.lisp:2:1: Unterminated list\nIncluded from examples/fail/../include-files/nested/parse-chain.lisp:1:1\nIncluded from examples/fail/include-nested-syntax.lisp:1:1\n' \
+  --no-source-map examples/fail/include-nested-syntax.lisp
 run_case 'reject malformed source context' 1 '' 'invalid value for --source-context-before' \
   --source-context-before=oops "$TMP_DIR/context.lisp"
 run_case 'reject missing source context value' 1 '' 'requires a line count' \

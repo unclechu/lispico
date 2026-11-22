@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 3 Column 1: (==) expects both arrays to have the same element type, got instead: (TYPE_U32, TYPE_STRING)
+[FAIL] Evaluation failed: examples/fail/equal-empty-array-type-mismatch.lisp:3:1: (==) expects both arrays to have the same element type, got instead: (TYPE_U32, TYPE_STRING)
 1 | (arr-new "numbers" u32 0)
 2 | (arr-new "words" s 0)
 3 | (== numbers words)

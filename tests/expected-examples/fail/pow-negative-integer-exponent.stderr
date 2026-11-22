@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (pow) integer exponent must be non-negative
+[FAIL] Evaluation failed: examples/fail/pow-negative-integer-exponent.lisp:1:1: (pow) integer exponent must be non-negative
 1 | (pow (type i32 2) -1) ; Negative integer exponent
   | ↑

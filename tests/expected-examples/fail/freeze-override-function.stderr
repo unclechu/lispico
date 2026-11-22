@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 2 Column 1: (override) symbol “println” is frozen
+[FAIL] Evaluation failed: examples/fail/freeze-override-function.lisp:2:1: (override) symbol “println” is frozen
 1 | (freeze "println")
 2 | (override "println" 12)
   | ↑

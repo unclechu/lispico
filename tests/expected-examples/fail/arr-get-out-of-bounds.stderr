@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 2 Column 23: (arr-get) array index is out of bounds
+[FAIL] Evaluation failed: examples/fail/arr-get-out-of-bounds.lisp:2:23: (arr-get) array index is out of bounds
 1 | ; arr-get-out-of-bounds.lisp
 2 | (arr-new "foo" u32 1) (arr-get "foo" 1) ; Index is out of bounds
   |                       ↑

@@ -1,1 +1,3 @@
-Parse error: 1:10: (include) expects one literal string path
+[FAIL] Parsing failed: examples/fail/include-nonliteral.lisp:1:10: (include) expects one literal string path
+1 | (include (str "../include-files/" "functions.lisp"))
+  |          ↑

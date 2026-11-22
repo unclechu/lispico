@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (str-resize) expects exactly 2 arguments, got instead: 0
+[FAIL] Evaluation failed: examples/fail/str-resize-no-arguments.lisp:1:1: (str-resize) expects exactly 2 arguments, got instead: 0
 1 | (str-resize) ; Exactly two arguments are required
   | ↑

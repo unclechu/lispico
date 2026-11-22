@@ -1,4 +1,4 @@
-[FAIL] Evaluation failed: Line 5 Column 1: (goto) destination is not reachable through (do)
+[FAIL] Evaluation failed: examples/fail/fn-goto-unreachable-body.lisp:5:1: (goto) destination is not reachable through (do)
 2 |   (label "inside-function")
 3 |   1))
 4 | (create-label)

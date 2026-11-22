@@ -1,3 +1,3 @@
-[FAIL] Evaluation failed: Line 1 Column 1: (fn) invalid function name
+[FAIL] Evaluation failed: examples/fail/fn-name-too-long.lisp:1:1: (fn) invalid function name
 1 | (fn "this-name-is-far-too-long-for-the-prefixed-internal-function-label-that-lispico-requires" 1)
   | ↑
