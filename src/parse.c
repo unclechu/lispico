@@ -46,6 +46,30 @@ typedef struct {
   char (*error)[ERR_MSG_SIZE];
 } Parser;
 
+// A sequence of sibling expressions. An empty range has both indices set to
+// EXPR_NONE. Includes will eventually return zero or more expressions here.
+typedef struct {
+  uint32_t first;
+  uint32_t last;
+} ParsedExpressions;
+
+// Append a parsed range without introducing an additional expression or scope.
+// Empty ranges leave the existing sibling chain unchanged.
+static void append_expressions(
+  Interpreter *interpreter,
+  ParsedExpressions *sequence,
+  ParsedExpressions added
+) {
+  if (added.first == EXPR_NONE) return;
+
+  if (sequence->first == EXPR_NONE)
+    sequence->first = added.first;
+  else
+    interpreter->storage.expressions[sequence->last].next = added.first;
+
+  sequence->last = added.last;
+}
+
 // Report parsing failure
 static bool parser_fail(Parser *parser, const char *message) {
   snprintf(
@@ -192,7 +216,8 @@ static bool allocate_text(Parser *parser, const char *text, size_t length, uint3
   return true;
 }
 
-static bool parse_expression(Parser *parser, uint32_t *index);
+static bool parse_expression(Parser *parser, ParsedExpressions *result);
+static bool parse_sequence(Parser *parser, bool in_list, ParsedExpressions *result);
 
 // Recursively parse an S-expression list `(…)`
 static bool parse_list(Parser *parser, uint32_t *index) {
@@ -202,31 +227,12 @@ static bool parse_list(Parser *parser, uint32_t *index) {
   if (!new_expression(parser, EXPR_LIST, index)) return false;
   advance(parser); // Skip '('
   parser->depth++;
-  uint32_t previous_child = EXPR_NONE;
+  ParsedExpressions children = { .first = EXPR_NONE, .last = EXPR_NONE };
+  if (!parse_sequence(parser, true, &children)) return false;
 
-  for (;;) {
-    if (!skip_layout(parser)) return false;
-    if (parser->position == parser->length) return parser_fail(parser, "Unterminated list");
-
-    // Current S-expression list is closed
-    if (current_char(parser) == ')') {
-      advance(parser);
-      parser->depth--;
-      return true;
-    }
-
-    uint32_t child;
-
-    // Recursively parse children
-    if (!parse_expression(parser, &child)) return false;
-
-    if (previous_child == EXPR_NONE)
-      parser->interpreter->storage.expressions[*index].first_child = child;
-    else
-      parser->interpreter->storage.expressions[previous_child].next = child;
-
-    previous_child = child;
-  }
+  parser->interpreter->storage.expressions[*index].first_child = children.first;
+  parser->depth--;
+  return true;
 }
 
 // Parse a `String` literal
@@ -368,8 +374,9 @@ static bool parse_atom(Parser *parser, uint32_t *index) {
   );
 }
 
-// Parse an expression
-static bool parse_expression(Parser *parser, uint32_t *index) {
+// Parse an expression into a sibling range. Ordinary expressions contribute
+// one node; a future parse-time include may contribute zero or more.
+static bool parse_expression(Parser *parser, ParsedExpressions *result) {
   if (!skip_layout(parser)) return false;
 
   // Capture the start before parsing consumes the expression’s source text.
@@ -387,22 +394,25 @@ static bool parse_expression(Parser *parser, uint32_t *index) {
   uint32_t line = (uint32_t)parser->line;
   uint32_t column = (uint32_t)parser->column;
 
+  uint32_t index = EXPR_NONE;
   bool parsed = false;
   switch (current_char(parser)) {
-    case '(': parsed = parse_list(parser, index); break;
-    case '"': parsed = parse_string(parser, index); break;
+    case '(': parsed = parse_list(parser, &index); break;
+    case '"': parsed = parse_string(parser, &index); break;
     case ')': return parser_fail(parser, "Unexpected ')'");
     case '\0':
       if (parser->position >= parser->length) return parser_fail(parser, "Expected an expression");
-      parsed = parse_atom(parser, index);
+      parsed = parse_atom(parser, &index);
       break;
-    default: parsed = parse_atom(parser, index); break;
+    default: parsed = parse_atom(parser, &index); break;
   }
   if (!parsed) return false;
 
+  *result = (ParsedExpressions) { .first = index, .last = index };
+
   // A NULL map disables location tracking without changing expression storage.
   if (parser->interpreter->storage.expression_source_locations != NULL)
-    parser->interpreter->storage.expression_source_locations[*index] =
+    parser->interpreter->storage.expression_source_locations[index] =
       (ExpressionSourceLocation) {
         .source_id = 0, // Single-file parser always uses the first source entry
         .byte_offset = byte_offset,
@@ -411,6 +421,31 @@ static bool parse_expression(Parser *parser, uint32_t *index) {
       };
 
   return true;
+}
+
+// Parse a sequence at the program root or inside a list. Each member can
+// contribute an empty, single-expression, or multi-expression sibling range.
+// A list consumes its closing ')'; the program root ends at end of input.
+static bool parse_sequence(Parser *parser, bool in_list, ParsedExpressions *result) {
+  *result = (ParsedExpressions) { .first = EXPR_NONE, .last = EXPR_NONE };
+
+  for (;;) {
+    if (!skip_layout(parser)) return false;
+
+    if (parser->position == parser->length) {
+      if (in_list) return parser_fail(parser, "Unterminated list");
+      return true;
+    }
+
+    if (in_list && current_char(parser) == ')') {
+      advance(parser); // The list is closed, sequence is parsed successfully
+      return true;
+    }
+
+    ParsedExpressions member = { .first = EXPR_NONE, .last = EXPR_NONE };
+    if (!parse_expression(parser, &member)) return false;
+    append_expressions(parser->interpreter, result, member);
+  }
 }
 
 // Parse expressions from a string into
@@ -463,20 +498,9 @@ bool parse_source(
       advance(&parser);
   }
 
-  uint32_t previous_expression_index = EXPR_NONE;
-
-  for (;;) {
-    if (!skip_layout(&parser)) goto fail;
-    if (parser.position == parser.length) return true; // Done parsing
-
-    uint32_t current_expression_index;
-    if (!parse_expression(&parser, &current_expression_index)) goto fail;
-
-    if (previous_expression_index != EXPR_NONE)
-      interpreter->storage.expressions[previous_expression_index].next = current_expression_index;
-
-    previous_expression_index = current_expression_index;
-  }
+  ParsedExpressions expressions = { .first = EXPR_NONE, .last = EXPR_NONE };
+  if (!parse_sequence(&parser, false, &expressions)) goto fail;
+  return true;
 
   fail:
     clean_expressions(interpreter);

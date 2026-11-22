@@ -2833,7 +2833,10 @@ buffers in a separate `SourceRegistry` (`src/source-registry.{c,h}`); the
 registry does not own or copy those buffers. The current single-file parser
 assigns source ID `0` to all expressions, and the desktop interpreter registers
 its main file under that ID. Multiple-source parsing and `(include)` are not
-implemented yet.
+implemented yet. Internally, the parser now builds each top-level or list-child
+sequence by appending expression ranges. An ordinary expression contributes one
+node; the range representation also supports empty and multiple-node results
+for future parse-time includes. No new source syntax is enabled yet.
 
 Use `--no-source-map` to disable the location table and report
 `Expression Index N:` instead of `Line N Column N:`. The source registry is
