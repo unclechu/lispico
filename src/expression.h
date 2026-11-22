@@ -46,7 +46,8 @@ typedef struct {
 // Optional location of an expression in its original source.
 // The array index matches the corresponding `Expression` index.
 typedef struct {
-  uint32_t byte_offset; // Zero-based byte position in the source
+  uint32_t source_id; // Index in the optional host-owned source registry
+  uint32_t byte_offset; // Zero-based byte position in that source
   uint32_t line; // One-based source line
   uint32_t column; // One-based byte column
 } ExpressionSourceLocation;

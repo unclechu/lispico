@@ -17,6 +17,7 @@
 #include "src/stdlib-file-io.h"
 #include "src/parse-cli-args.h"
 #include "src/source-highlight.h"
+#include "src/source-registry.h"
 #include "src/storage.h"
 
 #define DEFAULT_EXECUTABLE_NAME "lispico"
@@ -235,6 +236,28 @@ int main(int argc, char **argv) {
     goto done;
   }
 
+  // The main input is source 0. Includes will register further source buffers
+  // here, but this registry is independent of the optional expression map.
+  SourceFile source_files[1] = {0};
+  SourceRegistry source_registry = {
+    .files = source_files,
+    .capacity = 1,
+  };
+  if (cli.with_source_map) {
+    uint32_t source_id = 0;
+    if (!register_source_file(
+      &source_registry,
+      cli.source_file,
+      source,
+      source_size,
+      &source_id
+    )) {
+      fprintf(stderr, "[FAIL] Unable to register main source file\n");
+      exit_code = 1;
+      goto done;
+    }
+  }
+
   if (!parse_source(&interpreter, source, source_size, &parse_error)) {
     fprintf(stderr, "Parse error: %s\n", parse_error);
     exit_code = 1;
@@ -287,7 +310,11 @@ int main(int argc, char **argv) {
       if (eval_outcome.failure_expression_index != EXPR_NONE) {
         const ExpressionSourceLocation *location =
           get_expression_source_location(&interpreter, eval_outcome.failure_expression_index);
-        if (location != NULL) {
+        const SourceFile *source_file =
+          location != NULL
+            ? get_source_file(&source_registry, location->source_id)
+            : NULL;
+        if (source_file != NULL) {
           fprintf(
             stderr,
             "[FAIL] Evaluation failed: Line %" PRIu32 " Column %" PRIu32 ": %s\n",
@@ -297,8 +324,8 @@ int main(int argc, char **argv) {
           );
           print_source_highlight(
             stderr,
-            source,
-            source_size,
+            source_file->source,
+            source_file->length,
             location,
             cli.source_context_before,
             "lisp",

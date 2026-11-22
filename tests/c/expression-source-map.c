@@ -19,6 +19,7 @@ static void check_location(
     get_expression_source_location(interpreter, index);
 
   assert(location != NULL);
+  assert(location->source_id == 0); // Single-file parsing always uses source ID 0.
   assert(location->byte_offset == byte_offset);
   assert(location->line == line);
   assert(location->column == column);
@@ -103,7 +104,7 @@ int main(void) {
   check_location(&interpreter, 0, 0, 1, 1);
   assert(get_expression_source_location(&interpreter, 5) == NULL);
   for (uint32_t i = 1; i < 9; ++i)
-    assert(locations[i].line == 0 && locations[i].column == 0);
+    assert(locations[i].source_id == 0 && locations[i].line == 0 && locations[i].column == 0);
 
   // A parsing failure must clear both expressions and source locations.
   source = "(+ 1 (";
@@ -111,7 +112,7 @@ int main(void) {
   assert(interpreter.expression_count == 0);
   assert(get_expression_source_location(&interpreter, 0) == NULL);
   for (uint32_t i = 0; i < 9; ++i)
-    assert(locations[i].line == 0 && locations[i].column == 0);
+    assert(locations[i].source_id == 0 && locations[i].line == 0 && locations[i].column == 0);
 
   // With no map, expression indices and evaluation remain available.
   Interpreter without_map = {0};

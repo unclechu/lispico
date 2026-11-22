@@ -2827,10 +2827,19 @@ the same usage information on stderr, then exit with code `1`.
 
 Evaluation failures report the one-based source line and byte column of the
 innermost failing expression by default. Source locations are kept in an
-optional table separate from the expression storage. Use `--no-source-map`
-to disable that table and report `Expression Index N:` instead of
-`Line N Column N:`. Failures before an expression is evaluated have no location
-prefix. Source mapping does not change evaluation behavior or parser errors.
+optional table separate from the expression storage. Each location also holds
+an ID identifying its source file. The host may register source file paths and
+buffers in a separate `SourceRegistry` (`src/source-registry.{c,h}`); the
+registry does not own or copy those buffers. The current single-file parser
+assigns source ID `0` to all expressions, and the desktop interpreter registers
+its main file under that ID. Multiple-source parsing and `(include)` are not
+implemented yet.
+
+Use `--no-source-map` to disable the location table and report
+`Expression Index N:` instead of `Line N Column N:`. The source registry is
+also unnecessary when source mapping is disabled. Failures before an expression
+is evaluated have no location prefix. Source mapping does not change evaluation
+behavior or parser errors.
 
 When source mapping is enabled, Lispico also prints the failing source line
 and up to three lines immediately preceding it, followed by an `↑` marker

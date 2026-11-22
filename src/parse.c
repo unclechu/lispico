@@ -404,6 +404,7 @@ static bool parse_expression(Parser *parser, uint32_t *index) {
   if (parser->interpreter->storage.expression_source_locations != NULL)
     parser->interpreter->storage.expression_source_locations[*index] =
       (ExpressionSourceLocation) {
+        .source_id = 0, // Single-file parser always uses the first source entry
         .byte_offset = byte_offset,
         .line = line,
         .column = column,
