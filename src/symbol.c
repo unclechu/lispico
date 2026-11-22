@@ -1,5 +1,6 @@
 #include <string.h>
 #include <inttypes.h>
+#include <stdio.h>
 
 #include "symbol.h"
 #include "wipe-memory.h"
@@ -109,6 +110,34 @@ Symbol* symbol_lookup_scoped(Interpreter *interpreter, const char *name) {
   }
 
   return symbol_lookup(interpreter, name);
+}
+
+// Resolve names used for symbol introspection. A visible local symbol takes
+// precedence; otherwise, a user-defined function’s public name refers to its
+// underlying `_FN_` label before an equally named global symbol.
+// Unlike ordinary variable lookup, this also finds user-defined functions.
+Symbol* symbol_lookup_introspection(Interpreter *interpreter, const char *name) {
+  if (interpreter == NULL || name == NULL) return NULL;
+
+  Symbol *symbol = symbol_lookup_scoped(interpreter, name);
+  if (symbol != NULL && symbol->defined_as_local) return symbol;
+
+  char label_name[SYMBOL_NAME_SIZE] = {'\0'};
+  int label_length = snprintf(
+    label_name,
+    sizeof(label_name),
+    EVAL_FN_LABEL_FORMAT_TEMPLATE,
+    name
+  );
+
+  Symbol *function =
+    (label_length > 0 && (size_t)label_length < sizeof(label_name))
+      ? symbol_lookup(interpreter, label_name)
+      : NULL;
+  wipe_memory(label_name, sizeof(label_name));
+
+  if (function != NULL && function->kind == SYM_LABEL) return function;
+  return symbol;
 }
 
 // Register a local for cleanup when its owning `(do)` terminates.

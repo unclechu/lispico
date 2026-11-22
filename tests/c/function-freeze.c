@@ -134,6 +134,61 @@ int main(void) {
     EVAL_OK, NULL, "foo", false
   );
 
+  // Symbol-kind introspection resolves user functions by their public names.
+  check_program(
+    &interpreter,
+    "(assert (== (kind-of \"foo\") empty-kind)) "
+    "(fn \"foo\" 1) "
+    "(assert (== (kind-of \"foo\") label-kind)) "
+    "(assert (== (kind-of \"_FN_foo\") label-kind)) "
+    "(freeze \"foo\") "
+    "(assert (is-frozen \"foo\"))",
+    EVAL_OK, NULL, "foo", true
+  );
+
+  // A public function name masks an equally named global for introspection,
+  // but ordinary `(get)` and `(set)` still address the global variable.
+  check_program(
+    &interpreter,
+    "(fn \"foo\" 1) (var \"foo\" 23) "
+    "(assert (== (kind-of \"foo\") label-kind)) "
+    "(assert (== (get \"foo\") 23)) "
+    "(set \"foo\" 24) "
+    "(assert (== (get \"foo\") 24)) "
+    "(assert (== (foo) 1)) "
+    "(freeze \"foo\") "
+    "(assert (is-frozen \"_FN_foo\")) "
+    "(set \"foo\" 25) "
+    "(assert (== (get \"foo\") 25))",
+    EVAL_OK, NULL, "foo", true
+  );
+
+  // A local symbol takes precedence over a user function for introspection.
+  check_program(
+    &interpreter,
+    "(fn \"foo\" 1) "
+    "(do (local \"foo\" 5) "
+    "  (assert (== (kind-of \"foo\") var-kind)) "
+    "  (assert (== (get \"foo\") 5)) "
+    "  (freeze \"foo\") "
+    "  (assert (is-frozen \"foo\")) "
+    "  (assert (== (foo) 1))) "
+    "(assert (== (kind-of \"foo\") label-kind)) "
+    "(assert (== (is-frozen \"foo\") false))",
+    EVAL_OK, NULL, "foo", false
+  );
+
+  // User functions take precedence over native functions for kind and freeze.
+  check_program(
+    &interpreter,
+    "(assert (== (kind-of \"+\") native-fn-kind)) "
+    "(fn \"+\" 7) "
+    "(assert (== (kind-of \"+\") label-kind)) "
+    "(assert (== (kind-of \"_FN_+\") label-kind)) "
+    "(assert (== (+) 7))",
+    EVAL_OK, NULL, "+", false
+  );
+
   // Ordinary globals and native functions retain their existing behavior.
   check_program(
     &interpreter,

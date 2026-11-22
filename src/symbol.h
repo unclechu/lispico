@@ -117,6 +117,7 @@ typedef struct Symbol {
 
 Symbol* symbol_lookup(Interpreter *interpreter, const char *name);
 Symbol* symbol_lookup_scoped(Interpreter *interpreter, const char *name);
+Symbol* symbol_lookup_introspection(Interpreter *interpreter, const char *name);
 bool local_symbol_name(
   uint32_t expression_index,
   const char *name,

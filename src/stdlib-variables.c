@@ -283,32 +283,6 @@ Datum std_reset(Interpreter *interpreter, const Datum *args, size_t argc) {
     return return_value;
 }
 
-// Resolve the symbol addressed by `(freeze)` and `(is-frozen)`. User-defined
-// functions are stored as global `_FN_` labels and take precedence over global
-// symbols when called. A visible local symbol still takes precedence, as with
-// ordinary scoped symbol lookup.
-static Symbol* lookup_freezable_symbol(Interpreter *interpreter, const char *name) {
-  Symbol *symbol = symbol_lookup_scoped(interpreter, name);
-  if (symbol != NULL && symbol->defined_as_local) return symbol;
-
-  char label_name[SYMBOL_NAME_SIZE] = {'\0'};
-  int label_length = snprintf(
-    label_name,
-    sizeof(label_name),
-    EVAL_FN_LABEL_FORMAT_TEMPLATE,
-    name
-  );
-
-  Symbol *function =
-    (label_length > 0 && (size_t)label_length < sizeof(label_name))
-      ? symbol_lookup(interpreter, label_name)
-      : NULL;
-  wipe_memory(label_name, sizeof(label_name));
-
-  if (function != NULL && function->kind == SYM_LABEL) return function;
-  return symbol;
-}
-
 // (freeze "NAME") — Make any existing symbol immutable for this evaluation.
 Datum std_freeze(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
@@ -323,7 +297,7 @@ Datum std_freeze(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = lookup_freezable_symbol(interpreter, symbol_name);
+  Symbol *symbol = symbol_lookup_introspection(interpreter, symbol_name);
   if (symbol == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) symbol “%s” is not defined", fn_name, symbol_name);
     goto fail;
@@ -353,7 +327,7 @@ Datum std_is_frozen(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  Symbol *symbol = lookup_freezable_symbol(interpreter, symbol_name);
+  Symbol *symbol = symbol_lookup_introspection(interpreter, symbol_name);
   if (symbol == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) symbol “%s” is not defined", fn_name, symbol_name);
     goto fail;

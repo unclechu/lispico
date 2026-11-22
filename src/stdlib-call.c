@@ -29,7 +29,7 @@ Datum std_call(Interpreter *interpreter, const Datum *args, size_t argc) {
   int label_length = snprintf(
     function_label,
     sizeof(function_label),
-    "_FN_%s",
+    EVAL_FN_LABEL_FORMAT_TEMPLATE,
     symbol_name
   );
 

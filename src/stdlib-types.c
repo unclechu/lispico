@@ -261,7 +261,7 @@ Datum std_kind_of(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  const Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
+  const Symbol *symbol = symbol_lookup_introspection(interpreter, symbol_name);
 
   return_value = (Datum) {
     .kind = SYM_VARIABLE,

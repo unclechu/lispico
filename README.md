@@ -1325,6 +1325,19 @@ features:
     `(is-frozen)` works with variables, arrays, labels, user-defined
     functions, and native functions without changing their frozen state.
 
+    `(kind-of "NAME")` uses the same function-aware name resolution as
+    `(freeze)` and `(is-frozen)`: a user-defined function’s public name
+    returns `label-kind`, since functions are stored as `_FN_` labels. A
+    visible local symbol takes precedence; otherwise, the user-defined
+    function takes precedence over an equally named global symbol. The
+    underlying `_FN_` name can also be inspected directly.
+
+    Only `(kind-of)`, `(freeze)`, and `(is-frozen)` use this function-aware
+    resolution. `(get)`, `(set)`, `(reset)`, string/array accessors, and
+    ordinary variable references still resolve actual variable or label names
+    in their normal scopes. `(variables)` and `(local-variables)` continue to
+    enumerate stored symbol-table names without translating function names.
+
     `(override "NAME" VALUE)` accepts the same scalar and array values as
     `(var)`, but requires the symbol name to exist already. It can replace any
     existing symbol, including arrays, labels, and native functions. This may
@@ -1374,9 +1387,12 @@ features:
       `(set)`, `(reset)`, `(str-get)`, `(str-set)`, `(str-resize)`, `(arr-get)`,
       `(arr-set)`, `(arr-size)`, `(arr-type)`, `(freeze)`, `(is-frozen)`, and
       `(kind-of)` search active `(do)` scopes from innermost to outermost, then
-      fall back to the unprefixed global name. `(var)` and `(override)` continue
-      to define and replace global symbols. Function definitions and `(label)`
-      remain global, while `(local-label)` creates a scoped label.
+      fall back to the unprefixed global name. For `(freeze)`, `(is-frozen)`,
+      and `(kind-of)`, a user-defined function’s `_FN_` label takes precedence
+      over an equally named global symbol, unless a visible local symbol masks
+      it. `(var)` and `(override)` continue to define and replace global
+      symbols. Function definitions and `(label)` remain global, while
+      `(local-label)` creates a scoped label.
 
     + When a `(do)` exits, its local symbols remain in the global table but
       their values are reset to actual `TYPE_VOID` and their frozen flags are
@@ -1904,6 +1920,9 @@ features:
         variables, so `(kind-of "do")` or `(kind-of "if")` would be equal to
         `empty-kind`)
       + `(label "foo") (kind-of "foo")` → equals to `label-kind`
+      + `(fn "foo" 1) (kind-of "foo")` → equals to `label-kind`
+        (a function’s public name refers to its `_FN_foo` label for
+        introspection; `(kind-of "_FN_foo")` gives the same result)
       + `(arr-new "foo" u32 16) (kind-of "foo")` → equals to `arr-kind`
         (you can check that a variable is an array of `u32`:
         `(assert (and (== (kind-of "foo") arr-kind) (== (arr-type "foo") u32)) "Must be an array of u32")`)
