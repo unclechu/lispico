@@ -22,7 +22,7 @@ static void expect_rendered(const char *label, char *actual, const char *expecte
 int main(void) {
   // `str-new` produces this exact kind of string: ten NUL bytes.
   const char zero_bytes[11] = {0};
-  String zero_string = { .data = zero_bytes, .length = 10 };
+  String zero_string = { .data = zero_bytes, .base = zero_bytes, .length = 10, .nul_terminated = true };
   expect_rendered("NUL string", show_String(zero_string), "\"\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\"");
 
   Value zero_value = { .type = TYPE_STRING, .as.string = zero_string };
@@ -34,7 +34,7 @@ int main(void) {
 
   // Escaping must not alter the underlying String, including its length.
   const char mixed_bytes[] = {'A', '\0', '\n', '\r', '\t', '\\', '"', '\x01', 'B', '\x7f', '\0'};
-  String mixed_string = { .data = mixed_bytes, .length = 10 };
+  String mixed_string = { .data = mixed_bytes, .base = mixed_bytes, .length = 10, .nul_terminated = true };
   const char *mixed_shown = "\"A\\0\\n\\r\\t\\\\\\\"\\x01B\\x7F\"";
   expect_rendered("escaped string", show_String(mixed_string), mixed_shown);
   Value mixed_value = { .type = TYPE_STRING, .as.string = mixed_string };
@@ -50,7 +50,7 @@ int main(void) {
   expect_rendered("empty value", show_Value(empty_value), "TYPE_STRING(\"\")");
 
   String elements[] = { mixed_string, empty };
-  Array array = { .element_type = TYPE_STRING, .length = 2, .data = elements };
+  Array array = { .element_type = TYPE_STRING, .length = 2, .data = elements, .base = elements };
   expect_rendered(
     "array of strings",
     show_Array(array),

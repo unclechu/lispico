@@ -541,7 +541,13 @@ Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
     .kind = SYM_VARIABLE,
     .as.value = {
       .type = TYPE_STRING,
-      .as.string = { .data = data, .length = length },
+      .as.string = {
+        .data = data,
+        .length = length,
+        .base = data,
+        .immutable_ref = false,
+        .nul_terminated = true,
+      },
     },
   };
 

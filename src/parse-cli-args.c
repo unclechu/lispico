@@ -105,7 +105,13 @@ static bool parse_cli_value(ValueType type, const char *text, Value *value) {
   *value = (Value) { .type = type };
 
   if (type == TYPE_STRING) {
-    value->as.string = (String) { .data = text, .length = strlen(text) };
+    value->as.string = (String) {
+      .data = text,
+      .length = strlen(text),
+      .base = text,
+      .immutable_ref = false,
+      .nul_terminated = true,
+    };
     return true;
   }
 
@@ -120,7 +126,13 @@ static bool parse_cli_value(ValueType type, const char *text, Value *value) {
   }
 
   return (
-    parse_number_text((String) { .data = text, .length = strlen(text) }, type, value)
+    parse_number_text((String) {
+      .data = text,
+      .length = strlen(text),
+      .base = text,
+      .immutable_ref = false,
+      .nul_terminated = true,
+    }, type, value)
     == NUMBER_PARSE_OK
   );
 }
@@ -269,6 +281,7 @@ static CliParseStatus parse_array(
     .element_type = type,
     .length = length,
     .data = data,
+    .base = data,
   };
 
   // If values are provided right away (it is `--arr …` and not `--arr-new …`)

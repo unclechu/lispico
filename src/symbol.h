@@ -24,14 +24,31 @@ typedef enum {
   TYPE_STRING,
 } ValueType;
 
-// The `data` (unless it is `NULL` when `length` is `0`) is supposed to be
-// NUL-terminated. `length` does not include the termination symbol.
-// `data` can contain NUL `\0` bytes inside as part of the string by design.
-// But there is also `\0` at `[length]` index. For compatibility with C
-// functions.
+// A byte string with optional read-only view metadata.
+//
+// `data` points to the first visible byte, while `base` identifies the
+// beginning of its backing storage. Ordinary strings have `base == data`;
+// future slices may point inside their original allocation.
+//
+// `immutable_ref` restricts writes through this view, not through other
+// references to the same backing storage. No read-only views are created yet.
+//
+// `nul_terminated` indicates that `data[length]` is known to contain '\0'.
+// Strings currently retain this guarantee whenever `data` is non-NULL;
+// future read-only slices may not. Embedded NUL bytes remain valid.
+// The termination flag is meaningful only when `data` is non-NULL.
+// A zero-initialized `String` represents an empty string with no buffer.
 typedef struct {
   const char *data;
+
+  // A reference to the original string in case `data` is an immutable-ref
+  // slice view of a string.
+  const char *base;
+
   size_t length;
+
+  bool immutable_ref;
+  bool nul_terminated;
 } String;
 
 // A value of a specific type
@@ -48,7 +65,9 @@ typedef struct {
 typedef struct {
   ValueType element_type;
   uint32_t length;
-  void *data; // An array pointer with raw C types (except `String` is used for strings)
+  void *data; // Raw C elements; string arrays contain `String` descriptors.
+  void *base; // Backing allocation start; currently equal to `data`.
+  bool immutable_ref; // Future read-only views can share backing storage.
 } Array;
 
 // A higher-level value (combining `Value` and `Array`).

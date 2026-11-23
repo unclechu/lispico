@@ -128,7 +128,13 @@ Datum std_type(Interpreter *interpreter, const Datum *args, size_t argc) {
     memcpy(data, text, (size_t)length + 1);
 
     // Converted a number to string successfully
-    converted.as.string = (String) { .data = data, .length = (size_t)length };
+    converted.as.string = (String) {
+      .data = data,
+      .length = (size_t)length,
+      .base = data,
+      .immutable_ref = false,
+      .nul_terminated = true,
+    };
     goto success;
   }
 

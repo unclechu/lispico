@@ -9,7 +9,7 @@
 static Datum array_datum(ValueType type, uint32_t length, void *data) {
   return (Datum) {
     .kind = SYM_ARRAY,
-    .as.array = { .element_type = type, .length = length, .data = data },
+    .as.array = { .element_type = type, .length = length, .data = data, .base = data },
   };
 }
 
@@ -63,7 +63,12 @@ int main(void) {
 
   // String data is copied independently, including embedded NUL bytes.
   char bytes[] = { 'a', '\0', 'b' };
-  String strings[] = { { .data = bytes, .length = sizeof(bytes) } };
+  String strings[] = {{
+    .data = bytes,
+    .base = bytes,
+    .length = sizeof(bytes),
+    .nul_terminated = false,
+  }};
   Datum string_args[] = {
     array_datum(TYPE_STRING, 1, strings),
     array_datum(TYPE_STRING, 1, strings),

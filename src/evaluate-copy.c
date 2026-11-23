@@ -12,7 +12,13 @@ bool copy_runtime_string(Interpreter *interpreter, String source, String *destin
   // Preserve an empty string represented by a NULL pointer.
   if (source.data == NULL) {
     if (source.length != 0) return false;
-    *destination = (String) { .data = NULL, .length = 0 };
+    *destination = (String) {
+      .data = NULL,
+      .length = 0,
+      .base = NULL,
+      .immutable_ref = false,
+      .nul_terminated = false,
+    };
     return true;
   }
 
@@ -21,7 +27,13 @@ bool copy_runtime_string(Interpreter *interpreter, String source, String *destin
 
   if (source.length != 0) memcpy(data, source.data, source.length);
   data[source.length] = '\0';
-  *destination = (String) { .data = data, .length = source.length };
+  *destination = (String) {
+    .data = data,
+    .length = source.length,
+    .base = data,
+    .immutable_ref = false,
+    .nul_terminated = true,
+  };
   return true;
 }
 
@@ -37,6 +49,7 @@ bool copy_runtime_array(Interpreter *interpreter, Array source, Array *destinati
       .element_type = source.element_type,
       .length = 0,
       .data = NULL,
+      .base = NULL,
     };
     return true;
   }
@@ -77,6 +90,7 @@ bool copy_runtime_array(Interpreter *interpreter, Array source, Array *destinati
     .element_type = source.element_type,
     .length = source.length,
     .data = data,
+    .base = data,
   };
   return true;
 }

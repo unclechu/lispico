@@ -153,7 +153,13 @@ Datum std_env_var_read(Interpreter *interpreter, const Datum *args, size_t argc)
   if (argc == 2 && (environment_value == NULL || environment_value[0] == '\0')) {
     result = default_value;
   } else {
-    result = (String) { .data = environment_value, .length = strlen(environment_value) };
+    result = (String) {
+      .data = environment_value,
+      .length = strlen(environment_value),
+      .base = environment_value,
+      .immutable_ref = false,
+      .nul_terminated = true,
+    };
   }
 
   if (result.length >= SIZE_MAX) {
@@ -182,7 +188,13 @@ Datum std_env_var_read(Interpreter *interpreter, const Datum *args, size_t argc)
     .kind = SYM_VARIABLE,
     .as.value = {
       .type = TYPE_STRING,
-      .as.string = { .data = data, .length = result.length },
+      .as.string = {
+        .data = data,
+        .length = result.length,
+        .base = data,
+        .immutable_ref = false,
+        .nul_terminated = true,
+      },
     },
   };
 

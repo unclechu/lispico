@@ -57,11 +57,12 @@ int main(void) {
   Symbol *global = symbol_define(&interpreter, "value", SYM_VARIABLE);
   assert(global != NULL);
   global->as.variable = (Value) { .type = TYPE_U32, .as.u32 = 10 };
+  const char *name = "value";
   Datum arg = {
     .kind = SYM_VARIABLE,
     .as.value = {
       .type = TYPE_STRING,
-      .as.string = { .data = "value", .length = 5 },
+      .as.string = { .data = name, .base = name, .length = 5, .nul_terminated = true },
     },
   };
   Datum reference = std_var_ref(&interpreter, &arg, 1);

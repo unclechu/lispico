@@ -682,6 +682,9 @@ static bool get_user_function_definition(
         .as.string = {
           .data = name == NULL ? NULL : name->data,
           .length = name == NULL ? 0 : name->length,
+          .base = name == NULL ? NULL : name->data,
+          .immutable_ref = false,
+          .nul_terminated = name != NULL && name->data != NULL,
         },
       },
     };
@@ -876,7 +879,13 @@ bool evaluate_user_function(
       .kind = SYM_VARIABLE,
       .as.value = {
         .type = TYPE_STRING,
-        .as.string = { .data = argc_name, .length = sizeof(argc_name) - 1 },
+        .as.string = {
+          .data = argc_name,
+          .length = sizeof(argc_name) - 1,
+          .base = argc_name,
+          .immutable_ref = false,
+          .nul_terminated = true,
+        },
       },
     },
     {
@@ -899,7 +908,13 @@ bool evaluate_user_function(
       .kind = SYM_VARIABLE,
       .as.value = {
         .type = TYPE_STRING,
-        .as.string = { .data = allocation->data, .length = allocation->length },
+        .as.string = {
+          .data = allocation->data,
+          .length = allocation->length,
+          .base = allocation->data,
+          .immutable_ref = false,
+          .nul_terminated = true,
+        },
       },
     };
 
@@ -1009,6 +1024,9 @@ static bool evaluate_expression_impl(
           .as.string = {
             .data = allocation->data,
             .length = allocation->length,
+            .base = allocation->data,
+            .immutable_ref = false,
+            .nul_terminated = true,
           },
         },
       };
@@ -1027,6 +1045,7 @@ static bool evaluate_expression_impl(
           .element_type = allocation->element_type,
           .length = allocation->length,
           .data = allocation->data,
+          .base = allocation->data,
         },
       };
       return true;

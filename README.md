@@ -3348,6 +3348,28 @@ hello
 SYM_EMPTY
 ```
 
+## String and array reference metadata (preparatory)
+
+`String` and `Array` now carry a `base` pointer and an `immutable_ref` flag.
+`String` also carries `nul_terminated` to distinguish strings that can be
+passed directly to NUL-terminated C interfaces from future substring views.
+The `base` pointer identifies the beginning of the backing storage; `data`
+identifies the first visible element. The immutability marker belongs to the
+reference, not to the underlying storage. An “immutable-ref” will mean a
+**read-only view**, not a permanently immutable allocation.
+
+This is a **representation-only change** for now. All currently constructed
+nonempty strings and arrays are mutable, their `base` and `data` pointers
+coincide, and non-NULL strings are NUL-terminated. Zero-initialized empty
+string-array entries still have NULL data pointers. Ordinary variable
+assignments, function arguments, and string/array construction continue to
+copy as before. The existing `(gc)` still tracks exact runtime allocation
+pointers; support for shared backing storage is the next implementation step.
+
+C hosts constructing `String` and `Array` descriptors should initialize the
+new metadata fields. As before, the host must retain borrowed source data
+for as long as the corresponding values may be used.
+
 ## Memory management and cleanup
 
 Lispico uses **evaluation-lifetime memory allocation**. Dynamically allocated

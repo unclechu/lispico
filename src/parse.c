@@ -422,7 +422,14 @@ static bool parse_atom(Parser *parser, uint32_t *index) {
   if (length == 0) return parser_fail(parser, "Expected an expression");
   text[length] = '\0';
 
-  String atom = { .data = text, .length = length };
+  String atom = {
+    .data = text,
+    .length = length,
+    .base = text,
+    .immutable_ref = false,
+    .nul_terminated = true,
+  };
+
   if (is_number_start(atom)) return parse_number(parser, atom, index);
 
   if (length >= SYMBOL_NAME_SIZE) return parser_fail(parser, "Name exceeds SYMBOL_NAME_SIZE");

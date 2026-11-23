@@ -155,7 +155,13 @@ static Datum std_variables_impl(
     if (copy == NULL) goto allocation_failed;
 
     memcpy(copy, name, length + 1); // +1 to also copy `\0`
-    names[index++] = (String) { .data = copy, .length = length };
+    names[index++] = (String) {
+      .data = copy,
+      .length = length,
+      .base = copy,
+      .immutable_ref = false,
+      .nul_terminated = true,
+    };
   }
 
   return_value = (Datum) {
@@ -164,6 +170,7 @@ static Datum std_variables_impl(
       .element_type = TYPE_STRING,
       .length = (uint32_t)count,
       .data = names,
+      .base = names,
     },
   };
 
@@ -287,7 +294,13 @@ Datum std_var_ref(Interpreter *interpreter, const Datum *args, size_t argc) {
     .kind = SYM_VARIABLE,
     .as.value = {
       .type = TYPE_STRING,
-      .as.string = { .data = name, .length = length },
+      .as.string = {
+        .data = name,
+        .length = length,
+        .base = name,
+        .immutable_ref = false,
+        .nul_terminated = true,
+      },
     },
   };
 
@@ -507,7 +520,13 @@ static Datum std_var_impl(
         if (string.length != 0) memcpy(string_data, string.data, string.length);
         string_data[string.length] = '\0';
 
-        ((String *)data)[i] = (String) { .data = string_data, .length = string.length };
+        ((String *)data)[i] = (String) {
+          .data = string_data,
+          .length = string.length,
+          .base = string_data,
+          .immutable_ref = false,
+          .nul_terminated = true,
+        };
       }
     } else if (size != 0) {
       // Numeric arrays contain only raw scalar values.
@@ -524,6 +543,7 @@ static Datum std_var_impl(
       .element_type = source.element_type,
       .length = source.length,
       .data = data,
+      .base = data,
     };
 
     return_value = (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
@@ -574,6 +594,9 @@ static Datum std_var_impl(
     data[string.length] = '\0';
 
     value.as.string.data = data;
+    value.as.string.base = data;
+    value.as.string.immutable_ref = false;
+    value.as.string.nul_terminated = true;
   }
 
   // Important: Allocate the string before calling `symbol_define`, rather than
@@ -739,7 +762,13 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
         }
 
         if (string.data == NULL) {
-          ((String *)destination.data)[i] = (String) { .data = NULL, .length = 0 };
+          ((String *)destination.data)[i] = (String) {
+            .data = NULL,
+            .length = 0,
+            .base = NULL,
+            .immutable_ref = false,
+            .nul_terminated = false,
+          };
           continue;
         }
 
@@ -753,12 +782,21 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
         ((String *)destination.data)[i] = (String) {
           .data = string_data,
           .length = string.length,
+          .base = string_data,
+          .immutable_ref = false,
+          .nul_terminated = true,
         };
       }
 
       // Clear all unused string elements without allocating empty strings.
       for (uint32_t i = source.length; i < destination.length; ++i)
-        ((String *)destination.data)[i] = (String) { .data = NULL, .length = 0 };
+        ((String *)destination.data)[i] = (String) {
+          .data = NULL,
+          .length = 0,
+          .base = NULL,
+          .immutable_ref = false,
+          .nul_terminated = false,
+        };
     } else {
       size_t copied_size = (size_t)source.length * element_size;
       size_t remaining_size = (size_t)(destination.length - source.length) * element_size;
@@ -971,7 +1009,13 @@ static Datum std_override_impl(
         if (string.length != 0) memcpy(string_data, string.data, string.length);
         string_data[string.length] = '\0';
 
-        ((String *)data)[i] = (String) { .data = string_data, .length = string.length };
+        ((String *)data)[i] = (String) {
+          .data = string_data,
+          .length = string.length,
+          .base = string_data,
+          .immutable_ref = false,
+          .nul_terminated = true,
+        };
       }
     } else if (size != 0) {
       // Numeric arrays contain raw scalar values.
@@ -985,6 +1029,7 @@ static Datum std_override_impl(
       .element_type = source.element_type,
       .length = source.length,
       .data = data,
+      .base = data,
     };
 
     return_value = (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
@@ -1037,6 +1082,9 @@ static Datum std_override_impl(
     if (string.length != 0) memcpy(data, string.data, string.length);
     data[string.length] = '\0';
     value.as.string.data = data;
+    value.as.string.base = data;
+    value.as.string.immutable_ref = false;
+    value.as.string.nul_terminated = true;
   }
 
   // The existing symbol may be a variable, array, label, or native function.
@@ -1099,7 +1147,13 @@ Datum std_local(Interpreter *interpreter, const Datum *args, size_t argc) {
       .kind = SYM_VARIABLE,
       .as.value = {
         .type = TYPE_STRING,
-        .as.string = { .data = local_name, .length = strlen(local_name) },
+        .as.string = {
+          .data = local_name,
+          .length = strlen(local_name),
+          .base = local_name,
+          .immutable_ref = false,
+          .nul_terminated = true,
+        },
       },
     },
     args[1],

@@ -200,25 +200,41 @@ int main(int argc, char **argv) {
     .element_type = TYPE_STRING,
     .length = argc,
     .data = argc > 0 ? (malloc(sizeof(String) * (size_t)argc)) : NULL,
+    .base = NULL,
   };
+  argv_as_Array.base = argv_as_Array.data;
   Array args_as_Array = {
     .element_type = TYPE_STRING,
     .length = (uint32_t)(argc - cli.raw_args_start),
     .data = NULL,
+    .base = NULL,
   };
 
   if (argc > 0 && argv_as_Array.data == NULL) goto malloc_fail;
   for (int i = 0; i < argc; ++i) {
-    String arg = { .data = argv[i], .length = strlen(argv[i]) };
+    String arg = {
+      .data = argv[i],
+      .length = strlen(argv[i]),
+      .base = argv[i],
+      .immutable_ref = false,
+      .nul_terminated = true,
+    };
     ((String*) argv_as_Array.data)[i] = arg;
   }
 
   if (args_as_Array.length > 0) {
     args_as_Array.data = malloc(sizeof(String) * args_as_Array.length);
+    args_as_Array.base = args_as_Array.data;
     if (args_as_Array.data == NULL) goto malloc_fail;
     for (uint32_t i = 0; i < args_as_Array.length; ++i) {
       const char *arg = argv[cli.raw_args_start + (int)i];
-      ((String*) args_as_Array.data)[i] = (String) { .data = arg, .length = strlen(arg) };
+      ((String*) args_as_Array.data)[i] = (String) {
+        .data = arg,
+        .length = strlen(arg),
+        .base = arg,
+        .immutable_ref = false,
+        .nul_terminated = true,
+      };
     }
   }
 

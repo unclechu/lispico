@@ -65,7 +65,13 @@ Datum std_str(Interpreter *interpreter, const Datum *args, size_t argc) {
     .kind = SYM_VARIABLE,
     .as.value = {
       .type = TYPE_STRING,
-      .as.string = { .data = data, .length = length },
+      .as.string = {
+        .data = data,
+        .length = length,
+        .base = data,
+        .immutable_ref = false,
+        .nul_terminated = true,
+      },
     },
   };
 
@@ -526,7 +532,13 @@ static Datum std_str_new_impl(
   symbol->kind = SYM_VARIABLE;
   symbol->as.variable = (Value) {
     .type = TYPE_STRING,
-    .as.string = { .data = data, .length = length },
+    .as.string = {
+      .data = data,
+      .length = length,
+      .base = data,
+      .immutable_ref = false,
+      .nul_terminated = true,
+    },
   };
   if (is_local) register_local_symbol(interpreter, symbol);
 
@@ -667,7 +679,13 @@ Datum std_str_resize(Interpreter *interpreter, const Datum *args, size_t argc) {
 
   // The previous buffer remains tracked until evaluation cleanup, so other
   // already-evaluated values referring to it remain valid.
-  symbol->as.variable.as.string = (String) { .data = data, .length = length };
+  symbol->as.variable.as.string = (String) {
+    .data = data,
+    .length = length,
+    .base = data,
+    .immutable_ref = false,
+    .nul_terminated = true,
+  };
 
   return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = symbol->as.variable };
   return return_value;
@@ -774,7 +792,13 @@ static Datum std_str_range(
     .kind = SYM_VARIABLE,
     .as.value = {
       .type = TYPE_STRING,
-      .as.string = { .data = data, .length = length },
+      .as.string = {
+        .data = data,
+        .length = length,
+        .base = data,
+        .immutable_ref = false,
+        .nul_terminated = true,
+      },
     },
   };
 

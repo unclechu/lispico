@@ -132,7 +132,13 @@ Datum std_arr(Interpreter *interpreter, const Datum *args, size_t argc) {
         if (source.length != 0) memcpy(string_data, source.data, source.length);
         string_data[source.length] = '\0';
 
-        ((String *)data)[i] = (String) { .data = string_data, .length = source.length };
+        ((String *)data)[i] = (String) {
+          .data = string_data,
+          .length = source.length,
+          .base = string_data,
+          .immutable_ref = false,
+          .nul_terminated = true,
+        };
         break;
       }
       default:
@@ -147,6 +153,7 @@ Datum std_arr(Interpreter *interpreter, const Datum *args, size_t argc) {
       .element_type = element_type,
       .length = (uint32_t)argc, // argc is bounded by EVAL_ARG_CAPACITY.
       .data = data,
+      .base = data,
     },
   };
 
@@ -271,7 +278,12 @@ static Datum std_arr_new_impl(
   }
 
   symbol->kind = SYM_ARRAY;
-  symbol->as.array = (Array) { .element_type = element_type, .length = length, .data = data };
+  symbol->as.array = (Array) {
+    .element_type = element_type,
+    .length = length,
+    .data = data,
+    .base = data,
+  };
   if (is_local) register_local_symbol(interpreter, symbol);
   return_value = (Datum) { .kind = SYM_ARRAY, .as.array = symbol->as.array };
   return return_value;
@@ -345,7 +357,11 @@ Datum std_arr_get(Interpreter *interpreter, const Datum *args, size_t argc) {
       // result reader (host) must account for this when reading arrays from the
       // `EvalOutcome` (do proper NULL-checks for array strings with
       // `String::length == 0`).
-      if (string.data == NULL) string.data = "";
+      if (string.data == NULL) {
+        string.data = "";
+        string.base = string.data;
+        string.nul_terminated = true;
+      }
 
       value.as.string = string;
       break;
@@ -424,6 +440,9 @@ Datum std_arr_set(Interpreter *interpreter, const Datum *args, size_t argc) {
       ((String *)array.data)[index] = (String) {
         .data = data,
         .length = source.length,
+        .base = data,
+        .immutable_ref = false,
+        .nul_terminated = true,
       };
       // Return the stored copy instead of the original string.
       value.as.string = ((String *)array.data)[index];
@@ -608,7 +627,13 @@ Datum std_arr_concat(Interpreter *interpreter, const Datum *args, size_t argc) {
         String string = ((const String *)source.data)[j];
         if (string.data == NULL) {
           // Preserve zero-initialized empty strings without allocating buffers.
-          ((String *)data)[offset + j] = (String) { .data = NULL, .length = 0 };
+          ((String *)data)[offset + j] = (String) {
+            .data = NULL,
+            .length = 0,
+            .base = NULL,
+            .immutable_ref = false,
+            .nul_terminated = false,
+          };
           continue;
         }
 
@@ -618,7 +643,13 @@ Datum std_arr_concat(Interpreter *interpreter, const Datum *args, size_t argc) {
 
         if (string.length != 0) memcpy(string_data, string.data, string.length);
         string_data[string.length] = '\0';
-        ((String *)data)[offset + j] = (String) { .data = string_data, .length = string.length };
+        ((String *)data)[offset + j] = (String) {
+          .data = string_data,
+          .length = string.length,
+          .base = string_data,
+          .immutable_ref = false,
+          .nul_terminated = true,
+        };
       }
     } else if (source.length != 0) {
       // Copy numeric array elements without modifying the source arrays.
@@ -637,6 +668,7 @@ Datum std_arr_concat(Interpreter *interpreter, const Datum *args, size_t argc) {
       .element_type = element_type,
       .length = (uint32_t)total_length,
       .data = data,
+      .base = data,
     },
   };
 
@@ -792,7 +824,13 @@ static Datum std_arr_range(
 
       if (string.data == NULL) {
         // Preserve an empty entry without allocating an individual string.
-        ((String *)data)[i] = (String) { .data = NULL, .length = 0 };
+        ((String *)data)[i] = (String) {
+          .data = NULL,
+          .length = 0,
+          .base = NULL,
+          .immutable_ref = false,
+          .nul_terminated = false,
+        };
         continue;
       }
 
@@ -802,7 +840,13 @@ static Datum std_arr_range(
 
       if (string.length != 0) memcpy(string_data, string.data, string.length);
       string_data[string.length] = '\0';
-      ((String *)data)[i] = (String) { .data = string_data, .length = string.length };
+      ((String *)data)[i] = (String) {
+        .data = string_data,
+        .length = string.length,
+        .base = string_data,
+        .immutable_ref = false,
+        .nul_terminated = true,
+      };
     }
   } else if (size != 0) {
     // Numeric elements are raw scalar values and can be copied at once.
@@ -812,7 +856,12 @@ static Datum std_arr_range(
 
   return_value = (Datum) {
     .kind = SYM_ARRAY,
-    .as.array = { .element_type = source.element_type, .length = length, .data = data },
+    .as.array = {
+      .element_type = source.element_type,
+      .length = length,
+      .data = data,
+      .base = data,
+    },
   };
 
   return return_value;
