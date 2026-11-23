@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: examples/fail/var-ref-local-label.lisp:2:27: (var-ref) symbol “value” is not a variable or array
+1 | (var "value" 7)
+2 | (do (local-label "value") (var-ref "value"))
+  |                           ↑

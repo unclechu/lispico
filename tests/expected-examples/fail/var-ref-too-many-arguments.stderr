@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/var-ref-too-many-arguments.lisp:1:1: (var-ref) expects exactly 1 argument, got instead: 2
+1 | (var-ref "foo" "bar")
+  | ↑

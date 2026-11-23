@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/var-ref-native.lisp:1:1: (var-ref) symbol “+” is not a variable or array
+1 | (var-ref "+")
+  | ↑

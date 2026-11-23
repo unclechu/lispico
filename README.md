@@ -1213,6 +1213,8 @@ features:
     + `(var "numbers" (arr 1 2 3))` — Define an array variable with type and
       length inferred from the array value (independent copy)
     + `(get "foo")` — Read a variable by its name, evaluated at runtime
+    + `(var-ref "foo")` — Return a variable’s resolved stored name as a string,
+      suitable for passing to name-based operations in other functions
     + `(variables)` — Return all defined symbols’ stored names
     + `(local-variables)` —
       Return visible symbols’ stored names without masked entries
@@ -1227,6 +1229,72 @@ features:
       ends
     + `(is-frozen "foo")` — Return `1` (`u32`) if an existing symbol is frozen,
       otherwise `0` (`u32`); fail if its name is not defined
+
+    `(var-ref "NAME")` resolves an evaluated string using ordinary scoped
+    variable lookup and returns an independently allocated string containing
+    the variable’s actual stored name. A global variable such as `foo` yields
+    `"foo"`; a local `foo` in a `(do)` at expression index `N` yields
+    `"_LOCAL_N_foo"`. Local shadowing is respected. The target must be an
+    existing scalar or array symbol (including a variable reset to `TYPE_VOID`);
+    labels, native functions, and user-defined function labels are not valid
+    targets. Frozen variables can be referenced, but remain immutable.
+
+    A `(var-ref)` result is an ordinary string, **not a distinct reference
+    type or a pointer to an array/string allocation**. Name-based operations
+    such as `(str-set)`, `(arr-set)`, `(set)`, and `(get)` can use that string
+    to access the original variable, even when a called function does not
+    inherit the caller’s local scope. Only the name is copied when passing the
+    reference; the referenced string or array contents are not copied.
+    For example:
+
+    ```lisp
+    (fn "replace-first" (args "target") (do
+      (str-set target 0 (str-char "x"))))
+
+    (fn "replace-first-element" (args "target") (do
+      (arr-set target 0 42)))
+
+    (do
+      (local "text" "hello")
+      (local "numbers" (arr 1 2 3))
+      (replace-first (var-ref "text"))
+      (replace-first-element (var-ref "numbers"))
+      (assert (== text "xello"))
+      (assert (== numbers (arr 42 2 3))))
+    ```
+
+    **Reference lifetime and recursion limitations:** `(var-ref)` does not
+    keep its target scope alive or capture a specific activation of that
+    scope. When a `(do)` exits, its local symbol is reset to `TYPE_VOID`; a
+    saved reference string can still name that reset table entry, and a later
+    re-entry can reuse it for a different value. It is the caller’s
+    responsibility not to use such a stale reference as if it still named the
+    original local. This is analogous to managing a borrowed handle manually.
+
+    Also, recursive re-entry into the *same* `(do)` expression reuses the
+    same `_LOCAL_N_` names. While the inner activation runs, a reference
+    obtained from the outer activation can resolve to the inner activation’s
+    local instead. Once recursion unwinds, the outer local is restored.
+    Locals in distinct, non-reentered scopes do not have this particular
+    collision. For example:
+
+    ```lisp
+    (var "saved" "")
+    (fn "walk" (args "n") (do
+      (local "item" n)
+      (if (== n 1) (do
+        (override "saved" (var-ref "item"))
+        (walk 0)))
+      (if (== n 0)
+        (assert (== (get saved) 0))))) ; Resolves to the inner `item`.
+    (walk 1)
+    (assert (== (type-of (get saved)) void)) ; Scope has exited.
+    ```
+
+    Returning or passing a reference never makes the referenced variable
+    immutable or automatically prolongs its lifetime. The reference string
+    itself is runtime-managed and can be reclaimed by manual `(gc)` when
+    unreachable; `(var-ref)` does not perform GC.
 
     `(reset "NAME")` sets an existing scalar or array variable’s value to
     actual `TYPE_VOID`, regardless of its previous type. For arrays, the symbol

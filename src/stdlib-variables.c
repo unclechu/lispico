@@ -236,6 +236,71 @@ Datum std_get(Interpreter *interpreter, const Datum *args, size_t argc) {
     return return_value;
 }
 
+// (var-ref "NAME") — Return the stored name of a visible scalar or array variable.
+// This is a name-based reference, not an activation-aware reference value.
+Datum std_var_ref(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum return_value = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "var-ref";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
+
+  if (!get_variable_name(&args[0], &symbol_name)) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
+    goto fail;
+  }
+
+  // Use ordinary scoped variable lookup, not function-aware introspection.
+  const Symbol *symbol = symbol_lookup_scoped(interpreter, symbol_name);
+  if (symbol == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) variable “%s” is not defined", fn_name, symbol_name);
+    goto fail;
+  }
+
+  if (symbol->kind != SYM_VARIABLE && symbol->kind != SYM_ARRAY) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) symbol “%s” is not a variable or array",
+      fn_name,
+      symbol_name
+    );
+    goto fail;
+  }
+
+  // Copy the stored name, not the variable’s string or array contents.
+  size_t length = strlen(symbol->name);
+  char *name = allocate_runtime_data(interpreter, length + 1); // +1 for '\0'
+  if (name == NULL) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
+  }
+  memcpy(name, symbol->name, length + 1); // Include the terminator.
+
+  return_value = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = {
+      .type = TYPE_STRING,
+      .as.string = { .data = name, .length = length },
+    },
+  };
+
+  wipe_memory(symbol_name, sizeof(symbol_name));
+  return return_value;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    wipe_memory(symbol_name, sizeof(symbol_name));
+    return return_value;
+}
+
 // (reset "NAME") — Drop a scalar or array variable’s value without collecting memory.
 Datum std_reset(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };

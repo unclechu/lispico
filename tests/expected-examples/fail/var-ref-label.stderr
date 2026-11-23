@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: examples/fail/var-ref-label.lisp:2:1: (var-ref) symbol “marker” is not a variable or array
+1 | (label "marker")
+2 | (var-ref "marker")
+  | ↑

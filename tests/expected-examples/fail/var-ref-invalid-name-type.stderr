@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/var-ref-invalid-name-type.lisp:1:1: (var-ref) invalid variable name
+1 | (var-ref 42)
+  | ↑

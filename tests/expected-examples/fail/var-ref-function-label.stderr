@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: examples/fail/var-ref-function-label.lisp:2:1: (var-ref) variable “foo” is not defined
+1 | (fn "foo" 1)
+2 | (var-ref "foo")
+  | ↑

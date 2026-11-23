@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/var-ref-undefined.lisp:1:1: (var-ref) variable “missing” is not defined
+1 | (var-ref "missing")
+  | ↑
