@@ -6,34 +6,37 @@
 #include "storage.h"
 #include "wipe-memory.h"
 
-// Mark a runtime allocation if its data pointer is referenced by a live value.
-// Parser allocations, static strings, and host-owned data are not runtime-owned.
-static void mark_runtime_data(Interpreter *interpreter, const void *data) {
-  if (data == NULL) return;
+// Mark the runtime allocation that owns a value’s backing storage.
+// Views may begin inside that allocation, so callers must pass `base`, not
+// their visible `data` pointer. Parser, symbol, and host-owned buffers are not
+// in the runtime allocation table and are intentionally left untouched.
+static void mark_runtime_backing_data(Interpreter *interpreter, const void *base) {
+  if (base == NULL) return;
 
   for (uint32_t i = 0; i < interpreter->runtime_allocation_count; ++i) {
     EvalRuntimeAllocation *allocation = &interpreter->storage.runtime_allocations[i];
-    if (allocation->data == data) {
+    if (allocation->data == base) {
       allocation->marked = true;
       return;
     }
   }
 }
 
-// Mark the runtime allocations reachable through one scalar or array value.
-// Arrays are one-dimensional; only arrays of strings contain further pointers.
+// Mark runtime storage reachable through a string or array descriptor.
+// String-array elements each have their own backing storage, independent of
+// the array of `String` descriptors. Only visible elements need to be traced.
 static void mark_datum_runtime_data(Interpreter *interpreter, const Datum *datum) {
   if (datum->kind == SYM_VARIABLE) {
     if (datum->as.value.type == TYPE_STRING)
-      mark_runtime_data(interpreter, datum->as.value.as.string.data);
+      mark_runtime_backing_data(interpreter, datum->as.value.as.string.base);
   } else if (datum->kind == SYM_ARRAY) {
-    Array array = datum->as.array;
-    mark_runtime_data(interpreter, array.data);
+    const Array *array = &datum->as.array;
+    mark_runtime_backing_data(interpreter, array->base);
 
-    if (array.element_type == TYPE_STRING && array.data != NULL) {
-      const String *strings = array.data;
-      for (uint32_t i = 0; i < array.length; ++i)
-        mark_runtime_data(interpreter, strings[i].data);
+    if (array->element_type == TYPE_STRING && array->data != NULL) {
+      const String *strings = array->data;
+      for (uint32_t i = 0; i < array->length; ++i)
+        mark_runtime_backing_data(interpreter, strings[i].base);
     }
   }
 }

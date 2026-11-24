@@ -3348,7 +3348,7 @@ hello
 SYM_EMPTY
 ```
 
-## String and array reference metadata (preparatory)
+## String and array reference metadata and GC backing storage
 
 `String` and `Array` now carry a `base` pointer and an `immutable_ref` flag.
 `String` also carries `nul_terminated` to distinguish strings that can be
@@ -3358,17 +3358,35 @@ identifies the first visible element. The immutability marker belongs to the
 reference, not to the underlying storage. An “immutable-ref” will mean a
 **read-only view**, not a permanently immutable allocation.
 
-This is a **representation-only change** for now. All currently constructed
-nonempty strings and arrays are mutable, their `base` and `data` pointers
-coincide, and non-NULL strings are NUL-terminated. Zero-initialized empty
-string-array entries still have NULL data pointers. Ordinary variable
-assignments, function arguments, and string/array construction continue to
-copy as before. The existing `(gc)` still tracks exact runtime allocation
-pointers; support for shared backing storage is the next implementation step.
+These fields do not introduce new **language-level immutable references** yet.
+All currently constructed nonempty strings and arrays are mutable, their
+`base` and `data` pointers coincide, and non-NULL strings are NUL-terminated.
+Zero-initialized empty string-array entries still have NULL data pointers.
+Ordinary variable assignments, function arguments, and string/array
+construction continue to copy as before. Value-level immutable-reference
+functions and zero-copy slices are not implemented yet.
+
+The collector now marks runtime allocations by each reachable value’s **`base`**
+pointer rather than its visible `data` pointer. This also works for views whose
+`data` points into an allocation, including nested string elements inside
+string arrays. GC roots include symbols, evaluation results, temporary evaluator
+root frames, and suspended recursive local bindings. Unreachable allocations
+are still wiped and freed only when `(gc)` is called; no reference counting or
+copy-on-write was introduced.
+
+The `base` pointer must identify the start of the original backing allocation,
+even for an empty or interior view. For string arrays, the array’s `base`
+identifies its descriptor storage, while each `String` element has its own
+backing pointer. Runtime-owned allocations are found by exact **base-pointer**
+identity; parser allocations, host-provided buffers, and symbol names remain
+outside the runtime allocation table. A read-only view does not by itself
+extend the lifetime of borrowed host-owned memory.
 
 C hosts constructing `String` and `Array` descriptors should initialize the
 new metadata fields. As before, the host must retain borrowed source data
-for as long as the corresponding values may be used.
+for as long as the corresponding values may be used. CLI-provided strings and
+arrays are not immutable references yet; that optimization is planned for the
+immutable-reference integration step.
 
 ## Memory management and cleanup
 
@@ -3408,13 +3426,19 @@ The following values are considered GC roots:
 - **Temporary evaluator values:** Values registered through active
   `EvalGCRootFrame` instances, including native-function arguments, sequence
   results, and values preserved during deferred evaluation.
+- **Suspended local bindings:** Saved symbols in recursive `(do)` scope
+  activations, including function scopes hidden from normal name lookup.
 
-For scalar strings, the collector marks their runtime-allocated data buffers.
+For scalar strings, the collector marks the runtime allocation identified by
+the `String.base` pointer. A string view can start inside that allocation;
+its visible `data` pointer does not have to match the allocation start.
 
-For arrays, the collector marks the array’s backing storage. String arrays
-additionally require marking each string element’s independently allocated
-data buffer. Zero-initialized string elements with NULL data pointers do not
-reference any runtime allocations.
+For arrays, the collector marks `Array.base`, which identifies the backing
+storage for its elements. String arrays additionally mark each visible
+`String.base` pointer, even when an element is an interior view of another
+allocation. Zero-initialized string elements with NULL backing pointers do
+not reference any runtime allocations. The collector does not trace string
+elements outside an array view’s visible range.
 
 The return value counts **freed runtime allocations**, not Lispico variables
 or array elements. For example, a string array containing two independently

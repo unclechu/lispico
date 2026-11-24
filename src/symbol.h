@@ -28,10 +28,10 @@ typedef enum {
 //
 // `data` points to the first visible byte, while `base` identifies the
 // beginning of its backing storage. Ordinary strings have `base == data`;
-// future slices may point inside their original allocation.
+// read-only views may point inside their original allocation.
 //
 // `immutable_ref` restricts writes through this view, not through other
-// references to the same backing storage. No read-only views are created yet.
+// references to the same backing storage. No Lispico read-only views exist yet.
 //
 // `nul_terminated` indicates that `data[length]` is known to contain '\0'.
 // Strings currently retain this guarantee whenever `data` is non-NULL;
@@ -41,8 +41,8 @@ typedef enum {
 typedef struct {
   const char *data;
 
-  // A reference to the original string in case `data` is an immutable-ref
-  // slice view of a string.
+  // Backing allocation start, used by GC even when `data` is an interior
+  // view. Non-runtime-owned buffers are not freed by GC.
   const char *base;
 
   size_t length;
@@ -66,7 +66,7 @@ typedef struct {
   ValueType element_type;
   uint32_t length;
   void *data; // Raw C elements; string arrays contain `String` descriptors.
-  void *base; // Backing allocation start; currently equal to `data`.
+  void *base; // Backing allocation start, used by GC for interior views.
   bool immutable_ref; // Future read-only views can share backing storage.
 } Array;
 
