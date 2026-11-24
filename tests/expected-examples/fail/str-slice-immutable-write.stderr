@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: examples/fail/str-slice-immutable-write.lisp:2:1: (str-set) cannot modify an immutable string reference
+1 | (var "part" (str-slice "Hello" 1 3))
+2 | (str-set "part" 0 (str-char "X")) ; Cannot write through a read-only view
+  | ↑

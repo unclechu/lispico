@@ -507,8 +507,8 @@ features:
     + String slicing
 
       + `(str-slice STRING FROM LENGTH)` —
-        Creates an independent string containing exactly `LENGTH` bytes starting
-        at zero-based byte index `FROM` (allocates).
+        Returns an immutable reference (read-only view) of exactly `LENGTH`
+        bytes starting at zero-based byte index `FROM` (no allocation).
 
         + `(str-slice "Hello world" 6 5)` → `"world"`
         + `(str-slice "Hello" 1 3)` → `"ell"`
@@ -516,16 +516,16 @@ features:
         + `(str-slice "Hello" 4 2)` → Evaluation failure (out of bounds)
 
       + `(str-take STRING N)` —
-        Creates an independent string containing exactly the first `N` bytes
-        of `STRING` (allocates).
+        Returns an immutable reference to the first `N` bytes of `STRING`
+        (no allocation).
 
         + `(str-take "Hello" 3)` → `"Hel"`
         + `(str-take "Hello" 0)` → `""`
         + `(str-take "Hello" 6)` → Evaluation failure (out of bounds)
 
       + `(str-drop STRING N)` —
-        Creates an independent string containing all bytes after the first
-        `N` bytes of `STRING` (allocates).
+        Returns an immutable reference to the bytes after the first `N`
+        bytes of `STRING` (no allocation).
 
         + `(str-drop "Hello" 2)` → `"llo"`
         + `(str-drop "Hello" 5)` → `""`
@@ -538,6 +538,24 @@ features:
       All indices and lengths must evaluate to `u32`. Bounds checking is strict:
       requests outside `String::length` cause evaluation failures rather than
       clamping or silently truncating the result.
+
+      These operations return **immutable references**: read-only views of the
+      original backing bytes, not independent copies. `(is-immutable-ref)`
+      returns `true` for every slice, including empty ones. In-place writes
+      through another mutable reference remain visible in the view. Rebinding
+      or resizing the source variable does not retarget the view; its original
+      runtime backing allocation is retained while it is reachable by `(gc)`.
+      Nested slices preserve the same `base` pointer. For a mutable,
+      independently allocated result, use `(copy)` or `(str)`.
+
+      A substring ending before the source’s logical end is generally **not
+      NUL-terminated**, even if the source is. `String::length` is authoritative
+      for comparisons, printing, numeric conversions, and other byte-oriented
+      operations. C-facing file and environment APIs currently require a
+      known NUL-terminated string; they reject unterminated views safely.
+      Borrow-or-allocate C-string conversion is planned for the next step.
+      A view reaching the source’s logical end inherits its known terminator.
+      Embedded `\0` bytes remain ordinary string data.
 
       A zero-length slice is valid, including at the end of a string.
 
@@ -3485,8 +3503,11 @@ and element writes through `(arr-set)`, reject immutable views.
 `String` and `Array` carry `base` and `immutable_ref` fields; `String` also
 carries `nul_terminated`. `data` identifies the first visible byte or element,
 whereas `base` identifies the beginning of the original backing allocation.
-For this stage, both pointers coincide; interior-pointer zero-copy slices are
-planned for a later stage. Non-NULL strings are still NUL-terminated.
+For ordinary allocated strings and arrays, `data` and `base` coincide.
+`(str-slice)`, `(str-take)`, and `(str-drop)` now produce immutable views,
+which may point into the interior of the original allocation (`data != base`).
+Their visible end is not necessarily NUL-terminated; `nul_terminated` records
+whether a trailing NUL is known to be present at `data[length]`.
 
 The existing manual collector uses each live value’s **`base`** pointer to
 mark runtime allocations. It also traces individual string elements in arrays,

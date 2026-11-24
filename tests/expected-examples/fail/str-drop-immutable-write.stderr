@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: examples/fail/str-drop-immutable-write.lisp:2:1: (set) cannot modify an immutable string reference
+1 | (var "part" (str-drop "Hello" 1))
+2 | (set "part" "ello") ; Cannot write through a read-only view
+  | ↑

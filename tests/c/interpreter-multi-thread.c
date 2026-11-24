@@ -93,7 +93,7 @@ static void *run_worker(void *argument) {
       "(var \"value\" %" PRIu32 ") "
       "(var \"fraction\" 1.5) "
       "(set \"fraction\" (* fraction 2.0)) "
-      "(var \"message\" (str-take \"abcdef\" 3)) "
+      "(var \"message\" (copy (str-take \"abcdef\" 3))) "
       "(str-set \"message\" 2 (str-char \"!\")) "
       "(str-new \"scratch\" 6) "
       "(str-set \"scratch\" \"XY\") "

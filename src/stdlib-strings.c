@@ -706,7 +706,7 @@ Datum std_str_resize(Interpreter *interpreter, const Datum *args, size_t argc) {
     return return_value;
 }
 
-// (str-slice), (str-take), (str-drop) — Copy a range of bytes into an independent string
+// (str-slice), (str-take), (str-drop) — Borrow a read-only view of a byte range
 typedef enum {
   STR_RANGE_SLICE,
   STR_RANGE_TAKE,
@@ -776,27 +776,24 @@ static Datum std_str_range(
   // Validate the entire range without overflowing `from + length`.
   if (from > source.length || length > source.length - from) goto out_of_bounds;
 
-  if (length >= SIZE_MAX) {
-    snprintf(fail_msg, sizeof(fail_msg), "(%s) resulting string is too large", fn_name);
+  // A view retains the original backing pointer, even when its visible data
+  // begins inside that allocation. GC uses `base` to preserve runtime storage.
+  // An unallocated empty string has no backing data to retain.
+  if (source.data != NULL && source.base == NULL) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid source backing storage", fn_name);
     goto fail;
   }
 
-  // +1 for the final string `\0` terminator.
-  char *data = allocate_runtime_data(interpreter, length + 1);
-  if (data == NULL) {
-    snprintf(
-      fail_msg,
-      sizeof(fail_msg),
-      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
-      fn_name
-    );
-    goto fail;
-  }
+  // Pointer arithmetic is valid through the end of the source, including
+  // an empty range at its end. Never perform arithmetic on a NULL pointer.
+  const char *data = source.data == NULL ? NULL : source.data + from;
 
-  // Copy exactly `length` bytes, including potentially present `\0` bytes at
-  // any place within the string length.
-  if (length != 0) memcpy(data, source.data + from, length);
-  data[length] = '\0';
+  // Only a view reaching the source’s logical end can inherit its known
+  // terminator. A prefix or middle slice must not assume `data[length]` is NUL.
+  bool nul_terminated =
+    data != NULL &&
+    source.nul_terminated &&
+    length == source.length - from;
 
   return_value = (Datum) {
     .kind = SYM_VARIABLE,
@@ -805,9 +802,9 @@ static Datum std_str_range(
       .as.string = {
         .data = data,
         .length = length,
-        .base = data,
-        .immutable_ref = false,
-        .nul_terminated = true,
+        .base = source.base,
+        .immutable_ref = true,
+        .nul_terminated = nul_terminated,
       },
     },
   };
@@ -824,17 +821,17 @@ static Datum std_str_range(
     return return_value;
 }
 
-// (str-slice) — Copy LENGTH bytes starting at FROM
+// (str-slice) — Return a read-only view of LENGTH bytes starting at FROM
 Datum std_str_slice(Interpreter *interpreter, const Datum *args, size_t argc) {
   return std_str_range(interpreter, args, argc, "str-slice", STR_RANGE_SLICE);
 }
 
-// (str-take) — Copy the first N bytes
+// (str-take) — Return a read-only view of the first N bytes
 Datum std_str_take(Interpreter *interpreter, const Datum *args, size_t argc) {
   return std_str_range(interpreter, args, argc, "str-take", STR_RANGE_TAKE);
 }
 
-// (str-drop) — Skip the first N bytes and copy the remainder
+// (str-drop) — Return a read-only view after skipping the first N bytes
 Datum std_str_drop(Interpreter *interpreter, const Datum *args, size_t argc) {
   return std_str_range(interpreter, args, argc, "str-drop", STR_RANGE_DROP);
 }

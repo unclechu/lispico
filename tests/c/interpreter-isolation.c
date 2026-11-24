@@ -90,9 +90,10 @@ int main(void) {
   assert(symbol_lookup(&second, "only_b") != NULL);
   assert(result_b.result.as.value.as.u32 == 456);
 
-  // Allocate independent string data in both interpreters.
-  source_a = "(var \"text_a\" (str-take \"ABCDEF\" 3)) text_a";
-  source_b = "(var \"text_b\" (str-take \"abcdef\" 3)) text_b";
+  // Request independent mutable string data in both interpreters. Slices
+  // themselves now borrow read-only storage, so explicitly copy each view.
+  source_a = "(var \"text_a\" (copy (str-take \"ABCDEF\" 3))) text_a";
+  source_b = "(var \"text_b\" (copy (str-take \"abcdef\" 3))) text_b";
   assert(parse_source(&first, source_a, strlen(source_a), &error));
   assert(parse_source(&second, source_b, strlen(source_b), &error));
 

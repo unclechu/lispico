@@ -24,10 +24,17 @@
 (arr-set "words" 0 "Hello world")
 (assert (== (str-slice (arr-get words 0) 6 5) "world"))
 
-; The returned string is independent of the original
+; A read-only view observes writes through a writable alias.
 (var "message" "Hello world")
 (var "middle" (str-slice message 1 4))
-(str-set "message" "Hi")
-(assert (== middle "ello"))
+(assert (is-immutable-ref middle))
+(str-set "message" 1 (str-char "E"))
+(assert (== middle "Ello"))
 (assert (== (str-size middle) 4))
 (assert (== (str-size message) 11))
+
+; Replacement storage does not retarget an existing view.
+(str-resize "message" 3)
+(gc)
+(assert (== middle "Ello"))
+(assert (== (str-slice middle 1 2) "ll"))

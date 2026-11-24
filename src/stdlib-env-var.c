@@ -48,7 +48,7 @@ static bool validate_environment_variable_name(
     string.data == NULL ||
     memchr(string.data, '\0', string.length) != NULL ||
     memchr(string.data, '=', string.length) != NULL ||
-    string.data[string.length] != '\0'
+    !string.nul_terminated
   ) {
     snprintf(
       *fail_msg,

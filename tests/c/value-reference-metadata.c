@@ -60,8 +60,8 @@ int main(void) {
   clean_symbols(&interpreter);
   clean_expressions(&interpreter);
 
-  // Mutable variables, string arrays, array elements, and string slices still
-  // contain independently allocated, NUL-terminated strings in this stage.
+  // Mutable variables and array elements own independent copies, while
+  // string slices now borrow immutable views of their source’s backing data.
   const char *program =
     "(var \"text\" \"hello\") "
     "(var \"words\" (arr \"first\" \"second\")) "
@@ -77,7 +77,13 @@ int main(void) {
   const Symbol *words = symbol_lookup(&interpreter, "words");
   assert(text != NULL && cut != NULL && words != NULL);
   check_string(text->as.variable.as.string, "hello", 5);
-  check_string(cut->as.variable.as.string, "ell", 3);
+  String cut_string = cut->as.variable.as.string;
+  assert(cut_string.immutable_ref);
+  assert(!cut_string.nul_terminated);
+  assert(cut_string.base == text->as.variable.as.string.base);
+  assert(cut_string.data == text->as.variable.as.string.data + 1);
+  assert(cut_string.length == 3);
+  assert(memcmp(cut_string.data, "ell", 3) == 0);
   check_array(words->as.array, TYPE_STRING, 2);
   const String *elements = words->as.array.data;
   check_string(elements[0], "first", 5);

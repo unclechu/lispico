@@ -51,7 +51,7 @@ static bool validate_file_name(
     string.length == 0 ||
     string.data == NULL ||
     memchr(string.data, '\0', string.length) != NULL ||
-    string.data[string.length] != '\0'
+    !string.nul_terminated
   ) {
     snprintf(*fail_msg, ERR_MSG_SIZE, "(%s) invalid filename", fn_name);
     return false;
