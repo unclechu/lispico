@@ -463,7 +463,7 @@ features:
       (assert (== (str-len buffer) 2))
 
       ; Create a shorter independent string
-      (var "short" (str-copy buffer (str-len buffer)))
+      (var "short" (copy (str-take buffer (str-len buffer))))
       (assert (== (str-size short) 2))
       (assert (== short "Hi"))
       ```
@@ -641,9 +641,10 @@ features:
     passed directly to `(arr-get)`, `(arr-size)`, or `(arr-type)`, for example
     `(arr-get (arr 10 20 30) 1)` returns `20`.
 
-    The elements cannot themselves be arrays. String elements are copied into
-    independent runtime storage, preserving their exact lengths and embedded
-    `\0` bytes. The array and its string contents are tracked until
+    The elements cannot themselves be arrays. Mutable string elements are
+    copied into independent runtime storage, preserving their exact lengths
+    and embedded `\0` bytes. Immutable string references are stored without
+    copying their byte buffers. The array descriptor storage is tracked until
     `clean_evaluation()`. As with other native calls, the number of arguments
     is limited by `EVAL_ARG_CAPACITY`.
 
@@ -660,11 +661,13 @@ features:
     + `(var "numbers-copy" numbers)` —
       Independently copies the existing `numbers` array.
 
-    String array elements are copied into independent runtime storage,
-    preserving their lengths and embedded `\0` bytes. Zero-initialized empty
-    string elements (`NULL` data, zero length) remain empty without allocating
-    individual string buffers. Zero-length array values can also be copied;
-    the new variable retains the source element type and length of zero.
+    Mutable string array elements are copied into independent runtime storage,
+    preserving their lengths and embedded `\0` bytes. Immutable string
+    elements retain their read-only references without copying byte buffers.
+    Zero-initialized empty string elements (`NULL` data, zero length) remain
+    empty without allocating individual string buffers. Zero-length array values
+    can also be copied; the new variable retains the source element type and
+    length of zero.
 
     The new array is a separate variable, so modifying its elements with
     `(arr-set)` does not affect the source array. The new name must not already
@@ -686,11 +689,19 @@ features:
     the copied prefix are zero-filled, as if they had just been allocated by
     `(arr-new)`.
 
-    For string arrays, every copied string receives independent runtime
-    storage, preserving its length and embedded `\0` bytes. Unused trailing
-    elements are reset to empty strings with `NULL` data and zero length,
-    without allocating additional string buffers. Previously allocated
-    string buffers remain tracked until `clean_evaluation()`.
+    For string arrays, mutable source strings receive independent runtime
+    storage, preserving lengths and embedded `\0` bytes, while immutable
+    source strings retain their read-only references. The operation stages
+    all string elements and commits them together: invalid elements and
+    allocation failures leave the destination unchanged. This also handles
+    overlapping source/destination descriptor ranges. Up to eight elements
+    use temporary C-stack storage; larger updates use one temporary host
+    allocation, wiped and freed before returning. That temporary allocation
+    does not consume an evaluator runtime allocation slot. Unused trailing
+    elements are reset to empty strings with `NULL` data and zero length.
+    Previously allocated string buffers remain tracked until `(gc)` or
+    `clean_evaluation()`; allocations made during a failed update may also
+    remain tracked until then.
 
     The function returns the destination array value (`SYM_ARRAY`). It does
     not allocate replacement array storage and preserves the destination’s
@@ -735,11 +746,12 @@ features:
     + `(arr-set "floats" 0 1.5)` → `1.5` (`f32`)
     + `(arr-set "words" 0 "Hello")` → `"Hello"` (`s`)
 
-    For string arrays, `(arr-set)` allocates an independent copy of the
-    assigned string, including embedded `\0` bytes. Its return value
-    describes the stored string, not the original source string. Replacing
-    a string element doesn’t immediately release the previous buffer;
-    allocations remain tracked until evaluation cleanup.
+    For string arrays, `(arr-set)` copies mutable string sources into
+    independent runtime storage, including embedded `\0` bytes. Immutable
+    string references are stored without copying their bytes. Its return
+    value describes the stored string, not a second copy. Replacing a string
+    element does not immediately release the previous buffer; unreachable
+    runtime allocations remain tracked until `(gc)` or evaluation cleanup.
 
     Unlike `(arr-get)`, `(arr-size)`, and `(arr-type)`, which can accept an
     evaluated array value or a name, `(arr-set)` requires a named array.
@@ -851,8 +863,9 @@ features:
   allocator. The data is released during `clean_evaluation()`; the host-owned
   allocation tracking table is not freed.
 
-  String array elements are initially empty strings. Assigning a string copies
-  its bytes, including embedded `\0` bytes, into independent runtime storage.
+  String array elements are initially empty strings. Assigning a mutable
+  string copies its bytes, including embedded `\0` bytes, into independent
+  runtime storage; assigning an immutable reference borrows its byte buffer.
   Overwriting an element does not immediately free its previous string buffer,
   because existing evaluated values may still reference it. Repeated writes
   therefore consume runtime allocation entries until cleanup.
@@ -3564,6 +3577,36 @@ remain ordinary mutable numbers. CLI `--arr-set` initialization still works
 *before* evaluation, but attempting to mutate these array or string views from
 a Lispico script fails. Their symbol bindings can still be replaced using
 `(override)` unless explicitly frozen using `--freeze`.
+
+### Immutable-reference standard-library and allocation audit
+
+`tests/c/immutable-reference-audit.c` checks the final reference-propagation
+rules and allocation counts without relying on timing-sensitive performance
+thresholds. The measured values below are **runtime allocation-table entry
+increases for one operation** (with input storage already available; copied
+strings are nonempty and have non-NULL data pointers):
+
+| Operation                                         | Runtime allocations | Storage behavior                                   |
+| ---                                               | ---:                | ---                                                |
+| `(immutable-ref STRING)`                          | 0                   | Borrow existing byte storage                       |
+| `(str-slice STRING FROM LENGTH)`                  | 0                   | Interior read-only view                            |
+| `(var-ref "NAME")`                                | 0                   | Borrow a symbol-table name                         |
+| `(variables)` with two defined symbols            | 1                   | Mutable descriptor array; borrowed names           |
+| `(copy STRING)`                                   | 1                   | Independent, writable byte buffer                  |
+| `(arr-concat A B)` with immutable string elements | 1                   | New descriptor array; borrowed string bytes        |
+| `(copy ARRAY)` with two string elements           | 3                   | New array storage and two independent byte buffers |
+
+Runtime allocation counts are distinct from system allocation calls, number
+of bytes copied, and elapsed time. Copying a nonempty string duplicates
+`String.length` bytes plus a terminator; immutable views duplicate no string
+bytes. These checks do **not** establish an end-to-end speedup or a historical
+before/after timing comparison. The standard example-measurement suite still
+provides per-program timing and memory observations.
+
+A separate regression in the same C test verifies that string-array `(set)`
+remains atomic on allocation-capacity failures and handles source/destination
+descriptor aliasing. It also verifies that mutable items are copied, immutable
+items remain shared, and empty elements retain their zero-initialized state.
 
 ## Memory management and cleanup
 

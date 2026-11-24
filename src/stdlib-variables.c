@@ -640,6 +640,14 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
   const char fn_name[] = "set";
   char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
 
+  // Stage small string-array updates on the C stack, avoiding a temporary
+  // heap allocation in the common case. Larger arrays use one host allocation.
+  // The destination is updated only after every element is ready.
+  String staged_stack[8] = {0};
+  String *staged_strings = staged_stack;
+  size_t staged_size = 0;
+  bool staged_heap_allocated = false;
+
   if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
 
   if (!get_variable_name(&args[0], &symbol_name)) {
@@ -754,63 +762,65 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
     }
 
     if (destination.element_type == TYPE_STRING) {
-      // Validate and copy each source string in one traversal. The old string
-      // buffers remain tracked until `clean_evaluation()`, just like `(arr-set)`.
+      // Validate the entire source before allocating or modifying anything.
+      // The source may itself refer to a portion of the destination array.
       for (uint32_t i = 0; i < source.length; ++i) {
         String string = ((const String *)source.data)[i];
-
-        // NULL data is valid only for a zero-initialized empty string.
-        if (string.length >= SIZE_MAX || (string.length != 0 && string.data == NULL)) {
-          snprintf(
-            fail_msg,
-            sizeof(fail_msg),
-            "(%s) invalid string array element",
-            fn_name
-          );
+        if (string.length == SIZE_MAX || (string.length != 0 && string.data == NULL)) {
+          snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string array element", fn_name);
           goto fail;
         }
+      }
 
+      staged_size = (size_t)source.length * sizeof(*staged_strings);
+      if (source.length > sizeof(staged_stack) / sizeof(*staged_stack)) {
+        staged_strings = malloc(staged_size);
+        if (staged_strings == NULL) goto array_allocation_failed;
+        staged_heap_allocated = true;
+        wipe_memory(staged_strings, staged_size);
+      }
+
+      // Preserve immutable elements without copying their bytes. Mutable
+      // elements get independent, tracked storage. Do not touch the target
+      // until the whole replacement has been prepared successfully.
+      for (uint32_t i = 0; i < source.length; ++i) {
+        String string = ((const String *)source.data)[i];
         if (string.immutable_ref) {
-          ((String *)destination.data)[i] = string;
+          staged_strings[i] = string;
           continue;
         }
+        if (string.data == NULL) continue;
 
-        if (string.data == NULL) {
-          ((String *)destination.data)[i] = (String) {
-            .data = NULL,
-            .length = 0,
-            .base = NULL,
-            .immutable_ref = false,
-            .nul_terminated = false,
-          };
-          continue;
-        }
+        char *data = allocate_runtime_data(interpreter, string.length + 1);
+        if (data == NULL) goto array_allocation_failed;
+        if (string.length != 0) memcpy(data, string.data, string.length);
+        data[string.length] = '\0';
 
-        // +1 for the final `\0` terminator, preserving embedded NUL bytes.
-        char *string_data = allocate_runtime_data(interpreter, string.length + 1);
-        if (string_data == NULL) goto array_allocation_failed;
-
-        if (string.length != 0) memcpy(string_data, string.data, string.length);
-        string_data[string.length] = '\0';
-
-        ((String *)destination.data)[i] = (String) {
-          .data = string_data,
+        staged_strings[i] = (String) {
+          .data = data,
           .length = string.length,
-          .base = string_data,
+          .base = data,
           .immutable_ref = false,
           .nul_terminated = true,
         };
       }
 
-      // Clear all unused string elements without allocating empty strings.
-      for (uint32_t i = source.length; i < destination.length; ++i)
-        ((String *)destination.data)[i] = (String) {
-          .data = NULL,
-          .length = 0,
-          .base = NULL,
-          .immutable_ref = false,
-          .nul_terminated = false,
-        };
+      // Commit all descriptors at once. Staging also handles overlapping
+      // source/destination ranges, while preserving the destination capacity.
+      if (staged_size != 0) memcpy(destination.data, staged_strings, staged_size);
+      size_t remaining = (size_t)(destination.length - source.length) * sizeof(String);
+      if (remaining != 0)
+        wipe_memory((String *)destination.data + source.length, remaining);
+
+      // Only temporary descriptors are wiped here; the string buffers belong
+      // to the interpreter and remain reachable through the destination.
+      if (staged_heap_allocated) {
+        wipe_memory(staged_strings, staged_size);
+        free(staged_strings);
+        staged_strings = staged_stack;
+        staged_heap_allocated = false;
+      }
+      wipe_memory(staged_stack, sizeof(staged_stack));
     } else {
       size_t copied_size = (size_t)source.length * element_size;
       size_t remaining_size = (size_t)(destination.length - source.length) * element_size;
@@ -928,6 +938,11 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
 
   fail:
+    if (staged_heap_allocated) {
+      wipe_memory(staged_strings, staged_size);
+      free(staged_strings);
+    }
+    wipe_memory(staged_stack, sizeof(staged_stack));
     report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
