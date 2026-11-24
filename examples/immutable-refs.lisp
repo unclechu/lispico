@@ -38,7 +38,7 @@
 
 ; A variable holding an immutable view can still be rebound.
 (override "view" "new")
-(assert (== (is-immutable-ref view) 0))
+(assert (== (is-immutable-ref view) false))
 
 ; A function can return an immutable view of runtime-owned local storage.
 ; The view keeps the backing allocation reachable after the scope exits.

@@ -12,3 +12,8 @@ bool copy_runtime_string(Interpreter *interpreter, String source, String *destin
 // descriptor/data storage; their immutable string elements remain borrowed,
 // while mutable string elements receive independent copies.
 bool copy_runtime_array(Interpreter *interpreter, Array source, Array *destination);
+
+// Force independent mutable storage, regardless of immutable-reference flags.
+// String arrays are deep-copied, including formerly immutable elements.
+bool copy_runtime_string_mutable(Interpreter *interpreter, String source, String *destination);
+bool copy_runtime_array_mutable(Interpreter *interpreter, Array source, Array *destination);

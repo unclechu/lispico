@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: examples/fail/copy-label.lisp:2:1: (copy) expects a string or array
+1 | (label "place")
+2 | (copy place)
+  | ↑

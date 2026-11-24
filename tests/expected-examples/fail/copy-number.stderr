@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/copy-number.lisp:1:1: (copy) expects a string or array
+1 | (copy 123)
+  | ↑

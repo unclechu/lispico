@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: examples/fail/copy-void.lisp:2:1: (copy) expects a string or array
+1 | (fn "empty-result" (return))
+2 | (copy (empty-result))
+  | ↑

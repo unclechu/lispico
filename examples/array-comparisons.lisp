@@ -25,13 +25,13 @@
 
 ; Named arrays, anonymous values, and independent copies compare by contents
 (var "original" (arr 10 20 30))
-(var "copy" original)
-(assert (== original copy))
+(var "independent-copy" original)
+(assert (== original independent-copy))
 (assert (== original (arr 10 20 30)))
-(arr-set "copy" 1 21)
-(assert (!= original copy))
+(arr-set "independent-copy" 1 21)
+(assert (!= original independent-copy))
 (assert (== original (arr 10 20 30)))
-(assert (== (== original copy) false))
+(assert (== (== original independent-copy) false))
 
 ; Zero-length arrays compare equal only when their element types match
 (arr-new "empty-u32" u32 0)

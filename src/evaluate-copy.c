@@ -5,10 +5,15 @@
 
 // Some helpers for copying values into evaluator GC-owned runtime allocated data.
 
-// Copy a `String` from process arguments into evaluator-owned runtime data.
-bool copy_runtime_string(Interpreter *interpreter, String source, String *destination) {
-  if (source.length >= SIZE_MAX) return false;
-  if (source.immutable_ref) {
+// Copy a string into runtime storage, optionally preserving a read-only view.
+static bool copy_runtime_string_impl(
+  Interpreter *interpreter,
+  String source,
+  String *destination,
+  bool preserve_immutable
+) {
+  if (source.length == SIZE_MAX) return false;
+  if (preserve_immutable && source.immutable_ref) {
     if (source.length != 0 && source.data == NULL) return false;
     *destination = source;
     return true;
@@ -42,12 +47,15 @@ bool copy_runtime_string(Interpreter *interpreter, String source, String *destin
   return true;
 }
 
-// Copy an `Array` into runtime-managed storage.
-//
-// Zero-initialized string elements are left empty.
-// Supplied strings each get their own copy.
-bool copy_runtime_array(Interpreter *interpreter, Array source, Array *destination) {
-  if (source.immutable_ref) {
+// Copy an array, optionally preserving read-only views of the array and its
+// string elements. Forced copies always create independent writable storage.
+static bool copy_runtime_array_impl(
+  Interpreter *interpreter,
+  Array source,
+  Array *destination,
+  bool preserve_immutable
+) {
+  if (preserve_immutable && source.immutable_ref) {
     if (source.length != 0 && source.data == NULL) return false;
     *destination = source;
     return true;
@@ -90,15 +98,15 @@ bool copy_runtime_array(Interpreter *interpreter, Array source, Array *destinati
       String string = ((const String *)source.data)[i];
       if (string.length == SIZE_MAX || (string.length != 0 && string.data == NULL))
         return false;
-      // Preserve even empty immutable elements, including a NULL-backed view.
-      if (string.immutable_ref) {
+      // Preserve immutable elements only for ordinary copy-by-default binding.
+      if (preserve_immutable && string.immutable_ref) {
         ((String *)data)[i] = string;
         continue;
       }
       if (string.data == NULL && string.length == 0) continue;
 
       String copied = {0};
-      if (!copy_runtime_string(interpreter, string, &copied)) return false;
+      if (!copy_runtime_string_impl(interpreter, string, &copied, false)) return false;
       ((String *)data)[i] = copied;
     }
   }
@@ -110,4 +118,22 @@ bool copy_runtime_array(Interpreter *interpreter, Array source, Array *destinati
     .base = data,
   };
   return true;
+}
+
+// Normal bindings keep immutable references and copy mutable data.
+bool copy_runtime_string(Interpreter *interpreter, String source, String *destination) {
+  return copy_runtime_string_impl(interpreter, source, destination, true);
+}
+
+bool copy_runtime_array(Interpreter *interpreter, Array source, Array *destination) {
+  return copy_runtime_array_impl(interpreter, source, destination, true);
+}
+
+// `(copy)` always makes mutable, independent storage, including string elements.
+bool copy_runtime_string_mutable(Interpreter *interpreter, String source, String *destination) {
+  return copy_runtime_string_impl(interpreter, source, destination, false);
+}
+
+bool copy_runtime_array_mutable(Interpreter *interpreter, Array source, Array *destination) {
+  return copy_runtime_array_impl(interpreter, source, destination, false);
 }

@@ -3,6 +3,7 @@
 #include "stdlib-immutable-refs.h"
 #include "stdlib-validation-utils.h"
 #include "evaluate.h"
+#include "evaluate-copy.h"
 #include "wipe-memory.h"
 
 // An immutable reference is a read-only view, not immutable underlying storage.
@@ -78,4 +79,54 @@ Datum std_has_immutable_refs(Interpreter *interpreter, const Datum *args, size_t
     .kind = SYM_VARIABLE,
     .as.value = { .type = TYPE_U32, .as.u32 = found ? 1u : 0u },
   };
+}
+
+// (copy) — Make an independent, mutable copy of a string or array.
+// String-array elements are copied deeply, including immutable references.
+Datum std_copy(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum result = { .kind = SYM_EMPTY };
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  const char fn_name[] = "copy";
+
+  if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return result;
+
+  if (args[0].kind == SYM_VARIABLE && args[0].as.value.type == TYPE_STRING) {
+    String string = {0};
+    if (!copy_runtime_string_mutable(
+      interpreter,
+      args[0].as.value.as.string,
+      &string
+    )) goto allocation_failed;
+
+    result = args[0];
+    result.as.value.as.string = string;
+    return result;
+  }
+
+  if (args[0].kind == SYM_ARRAY) {
+    Array array = {0};
+    if (!copy_runtime_array_mutable(interpreter, args[0].as.array, &array))
+      goto allocation_failed;
+
+    result = args[0];
+    result.as.array = array;
+    return result;
+  }
+
+  snprintf(fail_msg, sizeof(fail_msg), "(%s) expects a string or array", fn_name);
+  goto fail;
+
+  allocation_failed:
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) failed to copy value (invalid storage, OOM, or allocation capacity reached)",
+      fn_name
+    );
+    goto fail;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return result;
 }

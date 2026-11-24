@@ -1,0 +1,2 @@
+(label "place")
+(copy place)

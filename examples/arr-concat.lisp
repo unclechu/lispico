@@ -8,10 +8,10 @@
 ; The same source can be concatenated repeatedly
 (var "foo" (arr 1 2 3))
 (assert (== (arr-concat foo foo) (arr 1 2 3 1 2 3)))
-(var "copy" (arr-concat foo foo))
+(var "concat-copy" (arr-concat foo foo))
 (arr-set "foo" 0 99)
-(assert (== copy (arr 1 2 3 1 2 3)))
-(arr-set "copy" 1 77)
+(assert (== concat-copy (arr 1 2 3 1 2 3)))
+(arr-set "concat-copy" 1 77)
 (assert (== foo (arr 99 2 3)))
 
 ; Signed and floating-point arrays preserve their element types

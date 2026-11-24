@@ -77,10 +77,10 @@ int main(void) {
   run_program(
     &interpreter,
     "(var \"words\" (arr (immutable-ref \"first\") \"second\")) "
-    "(assert (== (is-immutable-ref words) 0)) "
+    "(assert (== (is-immutable-ref words) false)) "
     "(assert (has-immutable-refs words)) "
     "(assert (is-immutable-ref (arr-get words 0))) "
-    "(assert (== (is-immutable-ref (arr-get words 1)) 0))",
+    "(assert (== (is-immutable-ref (arr-get words 1)) false))",
     true
   );
   const Symbol *words = symbol_lookup(&interpreter, "words");

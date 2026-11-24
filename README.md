@@ -633,9 +633,14 @@ features:
     type and length from an evaluated array value. This allocates independent
     writable array storage and copies all elements without changing their type.
 
-    + `(var "numbers" (arr 10 20 30))` — Creates a named array of three `u32` values.
-    + `(var "words" (arr "Hello" "World"))` — Creates a named array of two strings.
-    + `(var "copy" numbers)` — Independently copies the existing `numbers` array.
+    + `(var "numbers" (arr 10 20 30))` —
+      Creates a named array of three `u32` values.
+
+    + `(var "words" (arr "Hello" "World"))` —
+      Creates a named array of two strings.
+
+    + `(var "numbers-copy" numbers)` —
+      Independently copies the existing `numbers` array.
 
     String array elements are copied into independent runtime storage,
     preserving their lengths and embedded `\0` bytes. Zero-initialized empty
@@ -1235,6 +1240,8 @@ features:
       is an immutable reference, otherwise `0` (including numbers and void)
     + `(has-immutable-refs VALUE)` — Return `1` when a value is an immutable
       reference or a string array contains any immutable string references
+    + `(copy VALUE)` — Make an independent mutable copy of a string or array,
+      including deep copies of all string-array elements
 
     `(var-ref "NAME")` resolves an evaluated string using ordinary scoped
     variable lookup and returns an independently allocated string containing
@@ -3374,6 +3381,10 @@ snapshot, copy-on-write, or a frozen symbol.
   elements inside an array. Non-string/non-array values return `false`.
 - `(has-immutable-refs VALUE)` checks the value and any string elements inside
   an array. Non-string/non-array values return `false`.
+- `(copy STRING/ARRAY)` creates a **new, independent mutable value**, even when
+  the source is an immutable reference. All string elements are copied deeply
+  into writable, NUL-terminated storage. Numbers, `TYPE_VOID`, and other kinds
+  are rejected rather than silently returned unchanged.
 
 Arrays can be mutable while individual string elements contain immutable
 references. The containing array can still replace those elements using
@@ -3399,12 +3410,48 @@ references. The containing array can still replace those elements using
 (assert (== (has-immutable-refs words) false))
 ```
 
+### Explicit mutable copies
+
+`(copy)` takes exactly one string or array. It never returns an immutable
+reference. Unlike ordinary variable assignment, which preserves immutable
+references without copying, `(copy)` always constructs independent mutable
+storage (apart from the ordinary NULL-backed representation of an empty value).
+For string arrays, every string element receives its own mutable copy,
+regardless of whether that element was an immutable reference. The returned
+array and all its string elements therefore report `false` for
+`(is-immutable-ref)` and `(has-immutable-refs)`.
+
+```lisp
+(var "text" "hello")
+(var "view" (immutable-ref text))
+(var "independent" (copy view))
+
+(str-set "text" 0 (str-char "H"))
+(assert (== view "Hello")) ; The read-only view sees the source’s write.
+(assert (== independent "hello")) ; The copy does not share the data.
+(str-set "independent" 0 (str-char "w"))
+(assert (== independent "wello"))
+
+(var "words" (arr (immutable-ref "first") "second"))
+(var "writable-words" (copy (immutable-ref words)))
+(assert (== (is-immutable-ref writable-words) false))
+(assert (== (has-immutable-refs writable-words) false))
+(arr-set "writable-words" 0 "replacement")
+(assert (== (arr-get words 0) "first"))
+```
+
+Copies are length-based: a string may contain embedded `\0` bytes, and a
+non-NUL-terminated read-only view is copied with a new trailing `\0` byte.
+`(copy)` uses runtime-managed allocations and does not trigger `(gc)`.
+Assigning the resulting mutable value to another variable still follows the
+existing **copy-by-default** rules, so that assignment can create another copy.
+
 Mutable string and array values continue to receive independent copies when
 bound to variables or user-function parameters. **Immutable references share
 storage**, preserving their flags, backing pointers, and nested string-element
 flags through assignments, argument binding, and array-element access.
 Constructors such as `(str)` still create new mutable string data; the
-explicit deep-copy operation `(copy)` is planned for the next stage.
+explicit `(copy)` operation makes an independent mutable value on demand.
 String-array constructors allocate their descriptor array but preserve any
 immutable string-element references without allocating their byte buffers.
 
