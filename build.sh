@@ -4,13 +4,16 @@ set -o errexit || exit; set -o errtrace; set -o nounset; set -o pipefail
 : "${MAIN_SOURCE_FILE:=interpreter.c}"
 : "${OUTPUT_EXECUTABLE_NAME:=lispico}"
 
+: "${DO_NOT_ADD_SOURCES:=0}"
+
 : "${CC:=cc}"
 : "${CFLAGS:=}"
 : "${LIBS:=-lm}"
 
 # Include all C modules from src/, if any.
 shopt -s nullglob
-SOURCE_FILES=("$MAIN_SOURCE_FILE" src/*.c)
+SOURCE_FILES=("$MAIN_SOURCE_FILE")
+if (( DO_NOT_ADD_SOURCES == 0 )); then SOURCE_FILES+=(src/*.c); fi
 
 # The variables substitution is intentionally preserving arguments splitting.
 # shellcheck disable=SC2206
