@@ -551,9 +551,9 @@ features:
       A substring ending before the source’s logical end is generally **not
       NUL-terminated**, even if the source is. `String::length` is authoritative
       for comparisons, printing, numeric conversions, and other byte-oriented
-      operations. C-facing file and environment APIs currently require a
-      known NUL-terminated string; they reject unterminated views safely.
-      Borrow-or-allocate C-string conversion is planned for the next step.
+      operations. Filesystem and environment-variable APIs also accept
+      unterminated views, creating a temporary terminated host string only
+      when needed. Embedded NUL bytes in names remain invalid.
       A view reaching the source’s logical end inherits its known terminator.
       Embedded `\0` bytes remain ordinary string data.
 
@@ -2310,8 +2310,9 @@ features:
     + Returns an empty evaluation result (`SYM_EMPTY`) on success, like the
       printing functions.
 
-  All these functions require a nonempty, NUL-terminated string filename without
-  embedded NUL bytes. File I/O is not sandboxed: filesystem permissions and
+  All these functions require a nonempty string filename without embedded NUL
+  bytes. Non-NUL-terminated slices are accepted through the host-side `CString`
+  conversion helper. File I/O is not sandboxed: filesystem permissions and
   accessible paths are determined by the host process.
 
   Examples:
@@ -2352,6 +2353,7 @@ features:
     + This matches Bash `${NAME:-default}` behavior, without modifying the
       process environment (unlike `${NAME:=default}`).
     + The name must be a nonempty string without `=` or embedded NUL bytes.
+      String slices are accepted even when they are not NUL-terminated.
       The default, when provided, must be a string, including when it is not
       needed. Returned strings are copied into interpreter-owned storage.
 
@@ -2361,6 +2363,36 @@ features:
   (env-var-has "HOME")
   (var "home" (env-var-read "HOME" "/"))
   (var "editor" (env-var-read "EDITOR" "vi"))
+  ```
+
+  ### C-string conversion for host applications
+
+  The host-side `src/c-string.{c,h}` module defines `CString`, a
+  NUL-terminated pointer with `length` and an `owned` marker. Its functions
+  operate on a Lispico `String`, not a new Lispico value kind:
+
+  - `string_to_c_string(source, &result)` borrows the original pointer when
+    `nul_terminated` is true, or allocates `length + 1` bytes and appends a
+    terminator when the visible slice is not terminated. A zero-initialized
+    empty string borrows the empty C string. Conversion failure returns false.
+  - `clean_c_string(&result)` wipes and frees only host-owned buffers, then
+    clears the descriptor. It is safe to call for borrowed strings.
+
+  A borrowed pointer remains valid only while the source’s backing storage
+  remains alive. A caller-owned conversion must be cleaned up, including on
+  failure paths. This temporary host allocation is **not** registered with
+  Lispico’s runtime GC. Embedded NUL bytes are preserved by conversion, so
+  filenames and environment variable names must still be validated separately
+  before being passed to the corresponding C APIs.
+
+  ```c
+  CString converted = {0};
+  if (!string_to_c_string(value.as.string, &converted)) {
+    // Handle invalid storage or allocation failure.
+  } else {
+    // Use `converted.data` while its backing memory is valid.
+    clean_c_string(&converted);
+  }
   ```
 
 - <a id="sleep-functions"></a>Sleep functions

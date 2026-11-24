@@ -2,20 +2,20 @@
 #include <string.h>
 
 #include "stdlib-env-var.h"
+#include "c-string.h"
 #include "stdlib-validation-utils.h"
 #include "symbol-print.h"
 #include "symbol-error.h"
 #include "evaluate.h"
 #include "wipe-memory.h"
 
-// Validate an environment variable name to be a non-empty NUL-terminated string
-// that is safe to be used for C’s `getenv()` call.
-// Lispico strings have explicit lengths and can contain embedded NUL bytes as
-// part of their normal value. Such strings will be rejected.
+// Validate an environment variable name for `getenv()` and obtain a
+// terminated host string. Embedded NUL bytes and equal signs are rejected.
 static bool validate_environment_variable_name(
   const Datum *arg,
   const char *fn_name,
-  char (*fail_msg)[ERR_MSG_SIZE]
+  char (*fail_msg)[ERR_MSG_SIZE],
+  CString *result
 ) {
   if (arg->kind != SYM_VARIABLE) {
     snprintf(
@@ -47,13 +47,22 @@ static bool validate_environment_variable_name(
     string.length == 0 ||
     string.data == NULL ||
     memchr(string.data, '\0', string.length) != NULL ||
-    memchr(string.data, '=', string.length) != NULL ||
-    !string.nul_terminated
+    memchr(string.data, '=', string.length) != NULL
   ) {
     snprintf(
       *fail_msg,
       ERR_MSG_SIZE,
       "(%s) invalid environment variable name",
+      fn_name
+    );
+    return false;
+  }
+
+  if (!string_to_c_string(string, result)) {
+    snprintf(
+      *fail_msg,
+      ERR_MSG_SIZE,
+      "(%s) unable to prepare environment variable name (invalid storage or OOM)",
       fn_name
     );
     return false;
@@ -66,23 +75,26 @@ static bool validate_environment_variable_name(
 Datum std_env_var_has(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  CString name_string = {0};
   const char fn_name[] = "env-var-has";
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
 
-  if (!validate_environment_variable_name(&args[0], fn_name, &fail_msg)) goto fail;
+  if (!validate_environment_variable_name(&args[0], fn_name, &fail_msg, &name_string)) goto fail;
 
   // getenv() returns NULL only when the variable is absent; "" is still set.
-  bool is_set = getenv(args[0].as.value.as.string.data) != NULL;
+  bool is_set = getenv(name_string.data) != NULL;
 
   return_value = (Datum) {
     .kind = SYM_VARIABLE,
     .as.value = { .type = TYPE_U32, .as.u32 = is_set ? 1 : 0 },
   };
 
+  clean_c_string(&name_string);
   return return_value;
 
   fail:
+    clean_c_string(&name_string);
     report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
@@ -92,6 +104,7 @@ Datum std_env_var_has(Interpreter *interpreter, const Datum *args, size_t argc) 
 Datum std_env_var_read(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  CString name_string = {0};
   const char fn_name[] = "env-var-read";
 
   if (argc < 1 || argc > 2) {
@@ -133,16 +146,16 @@ Datum std_env_var_read(Interpreter *interpreter, const Datum *args, size_t argc)
     }
   }
 
-  if (!validate_environment_variable_name(&args[0], fn_name, &fail_msg)) goto fail;
+  if (!validate_environment_variable_name(&args[0], fn_name, &fail_msg, &name_string)) goto fail;
 
-  const char *environment_value = getenv(args[0].as.value.as.string.data);
+  const char *environment_value = getenv(name_string.data);
   if (environment_value == NULL && argc == 1) {
     snprintf(
       fail_msg,
       sizeof(fail_msg),
       "(%s) environment variable “%s” is not set",
       fn_name,
-      args[0].as.value.as.string.data
+      name_string.data
     );
     goto fail;
   }
@@ -198,9 +211,11 @@ Datum std_env_var_read(Interpreter *interpreter, const Datum *args, size_t argc)
     },
   };
 
+  clean_c_string(&name_string);
   return return_value;
 
   fail:
+    clean_c_string(&name_string);
     report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;

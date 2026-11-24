@@ -1,0 +1,19 @@
+; Host filesystem and environment functions accept non-NUL-terminated views.
+; The temporary C-string is not a Lispico runtime allocation.
+(assert (file-exists (str-take "README.md-more" 9)))
+(assert (== (file-type (str-take "README.md-more" 9)) file-type-file))
+(assert (==
+  (read-file (str-take "tests/fixtures/file-io-input.txt-suffix" 32))
+  "Hello from a file\nSecond line\n"))
+(write-file (str-take "/dev/null-more" 9) "ignored")
+
+(assert (env-var-has (str-take "LISPICO_TEST_ENV_PRESENT-more" 24)))
+(assert (==
+  (env-var-read (str-take "LISPICO_TEST_ENV_PRESENT-more" 24))
+  "Hello from environment"))
+(assert (==
+  (env-var-read (str-take "LISPICO_TEST_ENV_EMPTY-more" 22) "fallback")
+  "fallback"))
+
+; Suffix slices already known to end with NUL are borrowed by the C helper.
+(assert (file-exists (str-drop "prefix/README.md" 7)))

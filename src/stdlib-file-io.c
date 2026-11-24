@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "stdlib-file-io.h"
+#include "c-string.h"
 #include "stdlib-validation-utils.h"
 #include "symbol-print.h"
 #include "symbol-error.h"
@@ -17,12 +18,13 @@
 
 #define FILE_IO_CHUNK_SIZE 4096 /* 4 KiB */
 
-// Validate a filename as a nonempty, NUL-terminated Lispico string.
-// Embedded NUL bytes cannot be passed to the C file APIs as pathnames.
+// Validate a filename and prepare a host C-string. A read-only slice may
+// need a temporary terminated copy; embedded NUL bytes are always invalid.
 static bool validate_file_name(
   const Datum *arg,
   const char *fn_name,
-  char (*fail_msg)[ERR_MSG_SIZE]
+  char (*fail_msg)[ERR_MSG_SIZE],
+  CString *result
 ) {
   if (arg->kind != SYM_VARIABLE) {
     snprintf(
@@ -50,10 +52,19 @@ static bool validate_file_name(
   if (
     string.length == 0 ||
     string.data == NULL ||
-    memchr(string.data, '\0', string.length) != NULL ||
-    !string.nul_terminated
+    memchr(string.data, '\0', string.length) != NULL
   ) {
     snprintf(*fail_msg, ERR_MSG_SIZE, "(%s) invalid filename", fn_name);
+    return false;
+  }
+
+  if (!string_to_c_string(string, result)) {
+    snprintf(
+      *fail_msg,
+      ERR_MSG_SIZE,
+      "(%s) unable to prepare filename (invalid storage or OOM)",
+      fn_name
+    );
     return false;
   }
 
@@ -64,24 +75,27 @@ static bool validate_file_name(
 Datum std_file_exists(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  CString filename_string = {0};
   const char fn_name[] = "file-exists";
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
-  if (!validate_file_name(&args[0], fn_name, &fail_msg)) goto fail;
+  if (!validate_file_name(&args[0], fn_name, &fail_msg, &filename_string)) goto fail;
 
   // stat() follows symbolic links and succeeds for files and directories.
   // A failure, including a missing or inaccessible path, is reported as false.
   struct stat metadata;
-  bool exists = stat(args[0].as.value.as.string.data, &metadata) == 0;
+  bool exists = stat(filename_string.data, &metadata) == 0;
 
   return_value = (Datum) {
     .kind = SYM_VARIABLE,
     .as.value = { .type = TYPE_U32, .as.u32 = exists ? 1 : 0 },
   };
 
+  clean_c_string(&filename_string);
   return return_value;
 
   fail:
+    clean_c_string(&filename_string);
     report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
@@ -143,13 +157,14 @@ static bool provide_file_type_constants(Interpreter *interpreter, char (*fail_ms
 Datum std_file_type(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  CString filename_string = {0};
   const char fn_name[] = "file-type";
   FileType file_type = FILE_TYPE_OTHER;
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 1, argc)) return return_value;
-  if (!validate_file_name(&args[0], fn_name, &fail_msg)) goto fail;
+  if (!validate_file_name(&args[0], fn_name, &fail_msg, &filename_string)) goto fail;
 
-  const char *filename = args[0].as.value.as.string.data;
+  const char *filename = filename_string.data;
   struct stat metadata;
 
   // `lstat()` inspects the path itself instead of following symbolic links.
@@ -209,9 +224,11 @@ Datum std_file_type(Interpreter *interpreter, const Datum *args, size_t argc) {
     .as.value = { .type = TYPE_U32, .as.u32 = (uint32_t)file_type },
   };
 
+  clean_c_string(&filename_string);
   return return_value;
 
   fail:
+    clean_c_string(&filename_string);
     report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
@@ -318,6 +335,7 @@ static bool report_read_file_status(
 Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  CString filename_string = {0};
   const char fn_name[] = "read-file";
   FILE *file = NULL;
   bool borrowed_stream = false;
@@ -339,7 +357,7 @@ Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
     );
     goto fail;
   }
-  if (!validate_file_name(&args[0], fn_name, &fail_msg)) goto fail;
+  if (!validate_file_name(&args[0], fn_name, &fail_msg, &filename_string)) goto fail;
 
   if (has_max_bytes) {
     if (args[1].kind != SYM_VARIABLE) {
@@ -365,7 +383,7 @@ Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
     max_bytes = (size_t)args[1].as.value.as.u32;
   }
 
-  const char *filename = args[0].as.value.as.string.data;
+  const char *filename = filename_string.data;
   // Use the existing stdin stream, even on hosts without a `/dev/stdin` node.
   // Do not close the host’s standard stream when this function finishes.
   if (strcmp(filename, "/dev/stdin") == 0) {
@@ -551,6 +569,7 @@ Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
     },
   };
 
+  clean_c_string(&filename_string);
   return return_value;
 
   allocation_failed:
@@ -574,6 +593,7 @@ Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
 
   fail:
+    clean_c_string(&filename_string);
     if (file != NULL && !borrowed_stream) fclose(file);
     if (data != NULL && !data_adopted) {
       // The evaluator owns the buffer only after `adopt_runtime_data` succeeds.
@@ -589,12 +609,13 @@ Datum std_read_file(Interpreter *interpreter, const Datum *args, size_t argc) {
 Datum std_write_file(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  CString filename_string = {0};
   const char fn_name[] = "write-file";
   FILE *file = NULL;
   bool borrowed_stream = false;
 
   if (!validate_argc(interpreter, fn_name, &fail_msg, 2, argc)) return return_value;
-  if (!validate_file_name(&args[0], fn_name, &fail_msg)) goto fail;
+  if (!validate_file_name(&args[0], fn_name, &fail_msg, &filename_string)) goto fail;
 
   if (args[1].kind != SYM_VARIABLE) {
     snprintf(
@@ -623,7 +644,7 @@ Datum std_write_file(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  const char *filename = args[0].as.value.as.string.data;
+  const char *filename = filename_string.data;
   // Directly use the standard output streams for `/dev/stdout` and `/dev/stderr`.
   // This also works on hosts that do not expose these as filesystem paths.
   if (strcmp(filename, "/dev/stdout") == 0) {
@@ -673,6 +694,7 @@ Datum std_write_file(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
+  clean_c_string(&filename_string);
   return return_value;
 
   write_failed:
@@ -687,6 +709,7 @@ Datum std_write_file(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
 
   fail:
+    clean_c_string(&filename_string);
     if (file != NULL && !borrowed_stream) fclose(file);
     report_evaluation_failure(interpreter, fail_msg);
     wipe_memory(fail_msg, sizeof(fail_msg));
