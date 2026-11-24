@@ -1229,6 +1229,12 @@ features:
       ends
     + `(is-frozen "foo")` — Return `1` (`u32`) if an existing symbol is frozen,
       otherwise `0` (`u32`); fail if its name is not defined
+    + `(immutable-ref VALUE)` — Borrow a string or array as a read-only view;
+      the underlying storage remains writable through other mutable owners
+    + `(is-immutable-ref VALUE)` — Return `1` when the string or array itself
+      is an immutable reference, otherwise `0` (including numbers and void)
+    + `(has-immutable-refs VALUE)` — Return `1` when a value is an immutable
+      reference or a string array contains any immutable string references
 
     `(var-ref "NAME")` resolves an evaluated string using ordinary scoped
     variable lookup and returns an independently allocated string containing
@@ -1617,7 +1623,7 @@ features:
       A failure or a nested control transfer while evaluating `VALUE` takes
       precedence over the outer return.
 
-      Returning unwinds the function's active `(do)` scopes, runs their
+      Returning unwinds the function’s active `(do)` scopes, runs their
       `(defer)` expressions from innermost to outermost, and cleans up local
       bindings using the normal `(leave)` machinery. A return attempted
       directly by a deferred expression cannot interrupt its enclosing
@@ -3140,8 +3146,10 @@ The flag does not change the program’s exit status or evaluation error output.
 
 ### Initial variables
 
-Use `--var NAME TYPE:VALUE` to define mutable variables before evaluation.
-Use `--freeze NAME` after a definition to make the variable immutable before
+Use `--var NAME TYPE:VALUE` to define variables before evaluation. Numbers
+are mutable; CLI-provided strings and arrays are borrowed immutable references
+rather than runtime copies. Variable bindings remain replaceable using
+`(override)`. Use `--freeze NAME` to prevent rebinding a symbol before
 the script runs, using the same rules as `(freeze "NAME")`.
 
 ```sh
@@ -3245,7 +3253,9 @@ lispico \
 
 ### Freezing command-line definitions
 
-`--freeze NAME` marks a previously declared CLI scalar or array immutable.
+`--freeze NAME` freezes the **symbol binding** of a previously declared CLI
+scalar or array. This is distinct from the immutable-reference flag on
+borrowed CLI string and array values.
 Option order matters: freezing a name before its `--var`, `--arr` or `--arr-new`
 definition fails. Once frozen, the array cannot be modified by later
 `--arr-set` options, and the script cannot change it either.
@@ -3260,9 +3270,10 @@ lispico \
   program.lisp
 ```
 
-Only definitions made on the command line can be targeted by `--freeze`; it does
-not look up built-in symbols. Just as for scalar values, array values are copied
-to evaluator-owned storage before script evaluation.
+Only definitions made on the command line can be targeted by `--freeze`; it
+does not look up built-in symbols. CLI strings and arrays are borrowed without
+copying their underlying data; this is independent of `--freeze` and prevents
+in-place mutation through the borrowed values during evaluation.
 
 ### Original arguments and script arguments
 
@@ -3291,8 +3302,10 @@ args = ["--debug", "two words"]
 
 Everything following `--` is passed through unchanged and never interpreted
 as an executable option. Source-file selection must therefore happen before
-`--`. These arrays are independent, so replacing an element in one does not
-replace that element in the other.
+`--`. These arrays use separate descriptor storage but borrow their string
+contents from the process arguments. Both arrays and their string elements are
+**immutable references** during Lispico evaluation; use `(override)` with a new
+array to replace a binding rather than modifying the borrowed storage.
 
 ## Usage examples
 
@@ -3348,45 +3361,90 @@ hello
 SYM_EMPTY
 ```
 
-## String and array reference metadata and GC backing storage
+## Immutable references and shared backing storage
 
-`String` and `Array` now carry a `base` pointer and an `immutable_ref` flag.
-`String` also carries `nul_terminated` to distinguish strings that can be
-passed directly to NUL-terminated C interfaces from future substring views.
-The `base` pointer identifies the beginning of the backing storage; `data`
-identifies the first visible element. The immutability marker belongs to the
-reference, not to the underlying storage. An “immutable-ref” will mean a
-**read-only view**, not a permanently immutable allocation.
+An **immutable reference** is a **read-only view** of existing string or array
+storage. The view may not be modified through its own variable, but the
+original mutable owner may modify the same storage. This is *not* an immutable
+snapshot, copy-on-write, or a frozen symbol.
 
-These fields do not introduce new **language-level immutable references** yet.
-All currently constructed nonempty strings and arrays are mutable, their
-`base` and `data` pointers coincide, and non-NULL strings are NUL-terminated.
-Zero-initialized empty string-array entries still have NULL data pointers.
-Ordinary variable assignments, function arguments, and string/array
-construction continue to copy as before. Value-level immutable-reference
-functions and zero-copy slices are not implemented yet.
+- `(immutable-ref STRING/ARRAY)` returns an immutable view **without allocating**.
+  Numbers, `TYPE_VOID`, labels, and unsupported kinds are rejected.
+- `(is-immutable-ref VALUE)` checks **only the value itself**, not string
+  elements inside an array. Non-string/non-array values return `false`.
+- `(has-immutable-refs VALUE)` checks the value and any string elements inside
+  an array. Non-string/non-array values return `false`.
 
-The collector now marks runtime allocations by each reachable value’s **`base`**
-pointer rather than its visible `data` pointer. This also works for views whose
-`data` points into an allocation, including nested string elements inside
-string arrays. GC roots include symbols, evaluation results, temporary evaluator
-root frames, and suspended recursive local bindings. Unreachable allocations
-are still wiped and freed only when `(gc)` is called; no reference counting or
-copy-on-write was introduced.
+Arrays can be mutable while individual string elements contain immutable
+references. The containing array can still replace those elements using
+`(arr-set)`. No implicit conversion makes the containing array immutable.
 
-The `base` pointer must identify the start of the original backing allocation,
-even for an empty or interior view. For string arrays, the array’s `base`
-identifies its descriptor storage, while each `String` element has its own
-backing pointer. Runtime-owned allocations are found by exact **base-pointer**
-identity; parser allocations, host-provided buffers, and symbol names remain
-outside the runtime allocation table. A read-only view does not by itself
-extend the lifetime of borrowed host-owned memory.
+```lisp
+(var "text" "hello")
+(var "view" (immutable-ref text))
+(assert (is-immutable-ref view))
+(assert (== (is-immutable-ref text) false))
 
-C hosts constructing `String` and `Array` descriptors should initialize the
-new metadata fields. As before, the host must retain borrowed source data
-for as long as the corresponding values may be used. CLI-provided strings and
-arrays are not immutable references yet; that optimization is planned for the
-immutable-reference integration step.
+(str-set "text" 0 (str-char "H"))
+(assert (== view "Hello")) ; Live view of the same backing bytes.
+
+; (str-set "view" 0 65) ; Evaluation failure: immutable reference.
+; (set "view" "other") ; Evaluation failure: in-place string write.
+(override "view" "other") ; Rebinding the variable is allowed.
+
+(var "words" (arr (immutable-ref "first") "second"))
+(assert (== (is-immutable-ref words) false))
+(assert (has-immutable-refs words))
+(arr-set "words" 0 "replacement")
+(assert (== (has-immutable-refs words) false))
+```
+
+Mutable string and array values continue to receive independent copies when
+bound to variables or user-function parameters. **Immutable references share
+storage**, preserving their flags, backing pointers, and nested string-element
+flags through assignments, argument binding, and array-element access.
+Constructors such as `(str)` still create new mutable string data; the
+explicit deep-copy operation `(copy)` is planned for the next stage.
+String-array constructors allocate their descriptor array but preserve any
+immutable string-element references without allocating their byte buffers.
+
+The immutable-reference flag belongs to the **reference**, not to the source
+allocation. `(freeze "NAME")` instead prevents rebinding the named symbol.
+A mutable symbol can hold an immutable reference and later be rebound with
+`(override)` or `(local)`. `(str-resize)` replaces the named string’s storage
+with a newly allocated writable string, so existing views continue referring
+to the old allocation. In-place writes through `(str-set)` and string `(set)`,
+and element writes through `(arr-set)`, reject immutable views.
+
+`String` and `Array` carry `base` and `immutable_ref` fields; `String` also
+carries `nul_terminated`. `data` identifies the first visible byte or element,
+whereas `base` identifies the beginning of the original backing allocation.
+For this stage, both pointers coincide; interior-pointer zero-copy slices are
+planned for a later stage. Non-NULL strings are still NUL-terminated.
+
+The existing manual collector uses each live value’s **`base`** pointer to
+mark runtime allocations. It also traces individual string elements in arrays,
+GC root frames, evaluation results, and suspended recursive local bindings.
+The collector never frees parser-owned expression strings, host-owned CLI
+buffers, or symbol-name storage. `(gc)` remains explicit and there is no
+reference counting or copy-on-write.
+
+**Lifetime:** An immutable view keeps *runtime-managed backing allocations*
+reachable through `(gc)` as long as the view remains reachable. It does not
+extend the lifetime of buffers supplied by a C host. Host-provided immutable
+references require their backing memory to remain alive for the duration of
+use. Changing a source variable by allocating replacement storage does not
+retarget an existing view; modifying the original backing bytes through a
+writable alias remains visible.
+
+**CLI arguments:** CLI-defined strings and arrays now borrow their original
+argument storage as immutable references. String-array elements borrow their
+individual argument strings too. The built-in `argv` and `args` arrays, and
+their string elements, are also immutable references. Numeric CLI variables
+remain ordinary mutable numbers. CLI `--arr-set` initialization still works
+*before* evaluation, but attempting to mutate these array or string views from
+a Lispico script fails. Their symbol bindings can still be replaced using
+`(override)` unless explicitly frozen using `--freeze`.
 
 ## Memory management and cleanup
 

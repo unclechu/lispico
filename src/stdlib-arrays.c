@@ -124,6 +124,11 @@ Datum std_arr(Interpreter *interpreter, const Datum *args, size_t argc) {
         // For strings making an individual copy
         String source = value.as.string;
 
+        if (source.immutable_ref) {
+          ((String *)data)[i] = source;
+          break;
+        }
+
         // +1 for the `\0` terminator
         char *string_data = allocate_runtime_data(interpreter, source.length + 1);
         if (string_data == NULL) goto allocation_failed;
@@ -398,6 +403,15 @@ Datum std_arr_set(Interpreter *interpreter, const Datum *args, size_t argc) {
   }
 
   Array array = symbol->as.array;
+  if (array.immutable_ref) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) cannot modify an immutable array reference",
+      fn_name
+    );
+    goto fail;
+  }
   uint32_t index = args[1].as.value.as.u32;
   if (index >= array.length || array.data == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) array index is out of bounds", fn_name);
@@ -421,7 +435,13 @@ Datum std_arr_set(Interpreter *interpreter, const Datum *args, size_t argc) {
         goto fail;
       }
 
-      // Copy strings into independently tracked, writable runtime memory.
+      if (source.immutable_ref) {
+        ((String *)array.data)[index] = source;
+        value.as.string = source;
+        break;
+      }
+
+      // Copy mutable strings into independently tracked, writable runtime memory.
       // Existing strings are kept until `clean_evaluation`, so no returned
       // string references become dangling during this evaluation.
       char *data = allocate_runtime_data(interpreter, source.length + 1);
@@ -625,6 +645,10 @@ Datum std_arr_concat(Interpreter *interpreter, const Datum *args, size_t argc) {
     if (source.element_type == TYPE_STRING) {
       for (uint32_t j = 0; j < source.length; ++j) {
         String string = ((const String *)source.data)[j];
+        if (string.immutable_ref) {
+          ((String *)data)[offset + j] = string;
+          continue;
+        }
         if (string.data == NULL) {
           // Preserve zero-initialized empty strings without allocating buffers.
           ((String *)data)[offset + j] = (String) {
@@ -637,7 +661,7 @@ Datum std_arr_concat(Interpreter *interpreter, const Datum *args, size_t argc) {
           continue;
         }
 
-        // Copy each string independently, preserving embedded NUL bytes.
+        // Copy mutable strings independently, preserving embedded NUL bytes.
         char *string_data = allocate_runtime_data(interpreter, string.length + 1);
         if (string_data == NULL) goto allocation_failed;
 
@@ -822,6 +846,10 @@ static Datum std_arr_range(
         goto fail;
       }
 
+      if (string.immutable_ref) {
+        ((String *)data)[i] = string;
+        continue;
+      }
       if (string.data == NULL) {
         // Preserve an empty entry without allocating an individual string.
         ((String *)data)[i] = (String) {

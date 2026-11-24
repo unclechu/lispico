@@ -8,6 +8,11 @@
 // Copy a `String` from process arguments into evaluator-owned runtime data.
 bool copy_runtime_string(Interpreter *interpreter, String source, String *destination) {
   if (source.length >= SIZE_MAX) return false;
+  if (source.immutable_ref) {
+    if (source.length != 0 && source.data == NULL) return false;
+    *destination = source;
+    return true;
+  }
 
   // Preserve an empty string represented by a NULL pointer.
   if (source.data == NULL) {
@@ -42,6 +47,11 @@ bool copy_runtime_string(Interpreter *interpreter, String source, String *destin
 // Zero-initialized string elements are left empty.
 // Supplied strings each get their own copy.
 bool copy_runtime_array(Interpreter *interpreter, Array source, Array *destination) {
+  if (source.immutable_ref) {
+    if (source.length != 0 && source.data == NULL) return false;
+    *destination = source;
+    return true;
+  }
   // Preserve an empty array represented by a NULL pointer.
   if (source.data == NULL) {
     if (source.length != 0) return false;
@@ -78,6 +88,13 @@ bool copy_runtime_array(Interpreter *interpreter, Array source, Array *destinati
     wipe_memory(data, size);
     for (uint32_t i = 0; i < source.length; ++i) {
       String string = ((const String *)source.data)[i];
+      if (string.length == SIZE_MAX || (string.length != 0 && string.data == NULL))
+        return false;
+      // Preserve even empty immutable elements, including a NULL-backed view.
+      if (string.immutable_ref) {
+        ((String *)data)[i] = string;
+        continue;
+      }
       if (string.data == NULL && string.length == 0) continue;
 
       String copied = {0};

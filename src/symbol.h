@@ -31,7 +31,8 @@ typedef enum {
 // read-only views may point inside their original allocation.
 //
 // `immutable_ref` restricts writes through this view, not through other
-// references to the same backing storage. No Lispico read-only views exist yet.
+// references to the same backing storage. An immutable reference is a
+// read-only view, not immutable underlying memory.
 //
 // `nul_terminated` indicates that `data[length]` is known to contain '\0'.
 // Strings currently retain this guarantee whenever `data` is non-NULL;
@@ -67,7 +68,7 @@ typedef struct {
   uint32_t length;
   void *data; // Raw C elements; string arrays contain `String` descriptors.
   void *base; // Backing allocation start, used by GC for interior views.
-  bool immutable_ref; // Future read-only views can share backing storage.
+  bool immutable_ref; // Read-only array view, independent of string elements.
 } Array;
 
 // A higher-level value (combining `Value` and `Array`).

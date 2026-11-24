@@ -9,8 +9,9 @@
 
 // CLI definitions are collected before evaluation. Names and string contents
 // initially refer to the process `argv` strings, which remain alive in `main()`.
-// Arrays own temporary element storage; the executable copies all arrays and
-// strings into evaluator-owned storage before evaluating the source.
+// Arrays own temporary element storage; the executable borrows CLI strings
+// and arrays as immutable references throughout evaluation. `clean_cli_args()`
+// must therefore run only after `clean_evaluation()` and `clean_symbols()`.
 typedef struct {
   const char *name;
   SymbolKind kind; // Either `SYM_VARIABLE` or `SYM_ARRAY`.

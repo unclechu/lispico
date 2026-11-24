@@ -488,6 +488,16 @@ static Datum std_var_impl(
       goto fail;
     }
 
+    if (source.immutable_ref) {
+      Symbol *symbol = symbol_define(interpreter, symbol_name, SYM_ARRAY);
+      if (symbol == NULL) {
+        extract_error_message_from_symbol_define_error(interpreter, &fail_msg, symbol_name);
+        goto fail;
+      }
+      symbol->as.array = source;
+      return (Datum) { .kind = SYM_ARRAY, .as.array = source };
+    }
+
     size_t size = (size_t)source.length * element_size;
 
     // allocate_runtime_data handles size == 0 by allocating one byte.
@@ -510,6 +520,10 @@ static Datum std_var_impl(
 
         // Preserve the zero-initialized empty-string representation.
         // It has no string buffer to copy, so no allocation is necessary.
+        if (string.immutable_ref) {
+          ((String *)data)[i] = string;
+          continue;
+        }
         if (string.data == NULL) continue;
 
         // +1 for the `\0` terminator, preserving embedded NUL bytes.
@@ -582,7 +596,9 @@ static Datum std_var_impl(
       goto fail;
     }
 
-    // String variables own independent writable storage.
+    if (string.immutable_ref) goto define_scalar;
+
+    // Mutable strings own independent writable storage.
     // Reserve one extra byte for a convenient '\0' terminator.
     char *data = allocate_runtime_data(interpreter, string.length + 1);
     if (data == NULL) {
@@ -599,20 +615,21 @@ static Datum std_var_impl(
     value.as.string.nul_terminated = true;
   }
 
-  // Important: Allocate the string before calling `symbol_define`, rather than
-  // using that replacement verbatim after symbol creation. Otherwise an
-  // allocation failure could leave a partially initialized symbol in the table.
-  Symbol *symbol = symbol_define(interpreter, symbol_name, SYM_VARIABLE);
+  define_scalar:
+    // Important: Allocate the string before calling `symbol_define`, rather than
+    // using that replacement verbatim after symbol creation. Otherwise an
+    // allocation failure could leave a partially initialized symbol in the table.
+    Symbol *symbol = symbol_define(interpreter, symbol_name, SYM_VARIABLE);
 
-  if (symbol == NULL) {
-    extract_error_message_from_symbol_define_error(interpreter, &fail_msg, symbol_name);
-    goto fail;
-  }
+    if (symbol == NULL) {
+      extract_error_message_from_symbol_define_error(interpreter, &fail_msg, symbol_name);
+      goto fail;
+    }
 
-  symbol->as.variable = value;
+    symbol->as.variable = value;
 
-  return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = value };
-  return return_value;
+    return_value = (Datum) { .kind = SYM_VARIABLE, .as.value = value };
+    return return_value;
 
   array_allocation_failed:
     snprintf(
@@ -674,6 +691,11 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
     Array destination = symbol->as.array;
     Array source = args[1].as.array;
     size_t element_size = 0;
+
+    if (destination.immutable_ref) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) cannot modify an immutable array reference", fn_name);
+      goto fail;
+    }
 
     if (destination.element_type != source.element_type) {
       snprintf(
@@ -759,6 +781,11 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
             fn_name
           );
           goto fail;
+        }
+
+        if (string.immutable_ref) {
+          ((String *)destination.data)[i] = string;
+          continue;
         }
 
         if (string.data == NULL) {
@@ -876,6 +903,11 @@ Datum std_set(Interpreter *interpreter, const Datum *args, size_t argc) {
     String destination = symbol->as.variable.as.string;
     String source = args[1].as.value.as.string;
 
+    if (destination.immutable_ref) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) cannot modify an immutable string reference", fn_name);
+      goto fail;
+    }
+
     if (
       destination.data == NULL ||
       (source.length != 0 && source.data == NULL) ||
@@ -979,6 +1011,12 @@ static Datum std_override_impl(
       goto fail;
     }
 
+    if (source.immutable_ref) {
+      symbol->kind = SYM_ARRAY;
+      symbol->as.array = source;
+      return (Datum) { .kind = SYM_ARRAY, .as.array = source };
+    }
+
     size_t size = (size_t)source.length * element_size;
 
     // Allocate and copy the replacement before touching the existing symbol.
@@ -1000,6 +1038,10 @@ static Datum std_override_impl(
           goto fail;
         }
 
+        if (string.immutable_ref) {
+          ((String *)data)[i] = string;
+          continue;
+        }
         if (string.data == NULL) continue;
 
         // Preserve embedded NUL bytes, and reserve +1 for the terminator.
@@ -1074,7 +1116,9 @@ static Datum std_override_impl(
       goto fail;
     }
 
-    // Strings own independent writable storage and are NUL-terminated.
+    if (string.immutable_ref) goto commit_scalar_override;
+
+    // Mutable strings own independent writable storage and are NUL-terminated.
     // Copy before replacing the symbol so self-assignment stays safe.
     char *data = allocate_runtime_data(interpreter, string.length + 1);
     if (data == NULL) goto allocation_failed;
@@ -1087,6 +1131,7 @@ static Datum std_override_impl(
     value.as.string.nul_terminated = true;
   }
 
+  commit_scalar_override:
   // The existing symbol may be a variable, array, label, or native function.
   // Its previous kind and storage do not restrict the new value.
   symbol->as.variable = value;

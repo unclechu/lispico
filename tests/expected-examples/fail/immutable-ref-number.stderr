@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/immutable-ref-number.lisp:1:1: (immutable-ref) expects a string or array
+1 | (immutable-ref 123)
+  | ↑

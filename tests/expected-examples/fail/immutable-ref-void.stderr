@@ -1,0 +1,5 @@
+[FAIL] Evaluation failed: examples/fail/immutable-ref-void.lisp:3:1: (immutable-ref) expects a string or array
+1 | (var "v" 123)
+2 | (reset "v")
+3 | (immutable-ref v)
+  | ↑

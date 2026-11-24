@@ -342,6 +342,16 @@ Datum std_str_set(Interpreter *interpreter, const Datum *args, size_t argc) {
 
   String destination = symbol->as.variable.as.string;
 
+  if (destination.immutable_ref) {
+    snprintf(
+      fail_msg,
+      sizeof(fail_msg),
+      "(%s) cannot modify an immutable string reference",
+      fn_name
+    );
+    goto fail;
+  }
+
   if (destination.data == NULL) {
     snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid string variable", fn_name);
     goto fail;

@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: examples/fail/immutable-array-set.lisp:2:1: (set) cannot modify an immutable array reference
+1 | (var "data" (immutable-ref (arr 1 2)))
+2 | (set "data" (arr 3 4))
+  | ↑

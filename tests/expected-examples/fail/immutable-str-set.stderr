@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: examples/fail/immutable-str-set.lisp:2:1: (str-set) cannot modify an immutable string reference
+1 | (var "text" (immutable-ref "hello"))
+2 | (str-set "text" 0 72)
+  | ↑

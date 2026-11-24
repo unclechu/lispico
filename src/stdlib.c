@@ -19,6 +19,7 @@
 #include "stdlib-gc.h"
 #include "stdlib-show.h"
 #include "stdlib-call.h"
+#include "stdlib-immutable-refs.h"
 
 #include "symbol-error.h"
 
@@ -28,6 +29,7 @@ bool populate_stdlib(Interpreter *interpreter, char (*error_message)[ERR_MSG_SIZ
   const char *symbol_name;
 
   POPULATE_STDLIB();
+  POPULATE_STDLIB_IMMUTABLE_REFS();
 
   return true;
 

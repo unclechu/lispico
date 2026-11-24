@@ -51,7 +51,12 @@ printf '(is-frozen "answer")\n' > "$TMP_DIR/frozen-answer.lisp"
 printf '(is-frozen "numbers")\n' > "$TMP_DIR/frozen-numbers.lisp"
 printf '(arr-set "numbers" 0 999)\n' > "$TMP_DIR/mutate-numbers.lisp"
 printf '(set "answer" 999)\n' > "$TMP_DIR/mutate-answer.lisp"
-printf '(str-set "answer" 0 90)\n(arr-get argv 4)\n' > "$TMP_DIR/string-copy.lisp"
+printf '(assert (is-immutable-ref answer))\n(arr-get argv 4)\n' > "$TMP_DIR/string-copy.lisp"
+printf '(str-set "answer" 0 90)\n' > "$TMP_DIR/immutable-cli-string.lisp"
+printf '(is-immutable-ref numbers)\n' > "$TMP_DIR/immutable-cli-array.lisp"
+printf '(has-immutable-refs names)\n' > "$TMP_DIR/immutable-cli-array-elements.lisp"
+printf '(is-immutable-ref argv)\n' > "$TMP_DIR/immutable-argv.lisp"
+printf '(has-immutable-refs (arr-concat names))\n' > "$TMP_DIR/immutable-empty-items.lisp"
 printf '(exit 7)\n' > "$TMP_DIR/exit.lisp"
 printf '123\n' > "$TMP_DIR/stdin.lisp"
 printf '\n  (+ 1 missing)\n' > "$TMP_DIR/location.lisp"
@@ -242,8 +247,21 @@ run_case 'scalar string with punctuation' 0 $'SYM_VARIABLE(TYPE_STRING("hello, [
   -p --var answer 's:hello, [world]!' "$TMP_DIR/answer.lisp"
 run_case 'empty scalar string' 0 $'SYM_VARIABLE(TYPE_STRING(""))\n' '' \
   -p --var answer s: "$TMP_DIR/answer.lisp"
-run_case 'scalar string uses runtime-owned copy' 0 $'SYM_VARIABLE(TYPE_STRING("s:Alpha"))\n' '' \
+run_case 'CLI scalar string borrows immutable argument bytes' 0 $'SYM_VARIABLE(TYPE_STRING("s:Alpha"))\n' '' \
   -p --var answer s:Alpha "$TMP_DIR/string-copy.lisp"
+run_case 'CLI string rejects in-place writes' 1 '' 'immutable string reference' \
+  -p --var answer s:Alpha "$TMP_DIR/immutable-cli-string.lisp"
+run_case 'CLI numeric array is an immutable reference' 0 $'SYM_VARIABLE(TYPE_U32(1))\n' '' \
+  -p --arr numbers u32 2 1 2 "$TMP_DIR/immutable-cli-array.lisp"
+run_case 'CLI string-array elements are immutable references' 0 $'SYM_VARIABLE(TYPE_U32(1))\n' '' \
+  -p --arr names s 2 Alice Bob "$TMP_DIR/immutable-cli-array-elements.lisp"
+run_case 'argv is an immutable array reference' 0 $'SYM_VARIABLE(TYPE_U32(1))\n' '' \
+  -p "$TMP_DIR/immutable-argv.lisp"
+run_case 'empty CLI string references survive array concatenation' 0 \
+  $'SYM_VARIABLE(TYPE_U32(1))\n' '' \
+  -p --arr-new names s 1 "$TMP_DIR/immutable-empty-items.lisp"
+run_case 'CLI array rejects in-place writes' 1 '' 'immutable array reference' \
+  -p --arr numbers u32 2 1 2 "$TMP_DIR/mutate-numbers.lisp"
 run_case 'dense u32 array' 0 $'SYM_ARRAY(ARRAY(TYPE_U32, [1, 2, 3, 4, 5, 6]))\n' '' \
   -p --arr numbers u32 6 1 2 3 4 5 6 "$TMP_DIR/numbers.lisp"
 run_case 'dense i32 array' 0 $'SYM_ARRAY(ARRAY(TYPE_I32, [10, -20, 30]))\n' '' \

@@ -66,24 +66,21 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
 
     if (definition->kind == SYM_VARIABLE) {
       Value value = definition->as.value;
-      if (value.type == TYPE_STRING) {
-        String copied = {0};
-        if (!copy_runtime_string(interpreter, value.as.string, &copied)) {
-          interface->report_failure(interface, "Unable to allocate CLI string value");
-          return;
-        }
-        value.as.string = copied;
-      }
+      if (value.type == TYPE_STRING) value.as.string.immutable_ref = true;
       sym->kind = SYM_VARIABLE;
       sym->as.variable = value;
     } else if (definition->kind == SYM_ARRAY) {
-      Array copied = {0};
-      if (!copy_runtime_array(interpreter, definition->as.array, &copied)) {
-        interface->report_failure(interface, "Unable to allocate CLI array value");
-        return;
+      // CLI array storage and its string elements remain owned by `CliOptions`
+      // throughout evaluation. Borrow both as read-only views.
+      Array view = definition->as.array;
+      view.immutable_ref = true;
+      if (view.element_type == TYPE_STRING && view.data != NULL) {
+        String *strings = view.data;
+        for (uint32_t j = 0; j < view.length; ++j)
+          strings[j].immutable_ref = true;
       }
       sym->kind = SYM_ARRAY;
-      sym->as.array = copied;
+      sym->as.array = view;
     } else {
       interface->report_failure(interface, "Unsupported CLI definition kind");
       return;
@@ -216,7 +213,7 @@ int main(int argc, char **argv) {
       .data = argv[i],
       .length = strlen(argv[i]),
       .base = argv[i],
-      .immutable_ref = false,
+      .immutable_ref = true,
       .nul_terminated = true,
     };
     ((String*) argv_as_Array.data)[i] = arg;
@@ -232,11 +229,14 @@ int main(int argc, char **argv) {
         .data = arg,
         .length = strlen(arg),
         .base = arg,
-        .immutable_ref = false,
+        .immutable_ref = true,
         .nul_terminated = true,
       };
     }
   }
+
+  argv_as_Array.immutable_ref = true;
+  args_as_Array.immutable_ref = true;
 
   SettingsState state = {
     .argc = argc,
