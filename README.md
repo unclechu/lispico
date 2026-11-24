@@ -1218,8 +1218,8 @@ features:
     + `(var "numbers" (arr 1 2 3))` — Define an array variable with type and
       length inferred from the array value (independent copy)
     + `(get "foo")` — Read a variable by its name, evaluated at runtime
-    + `(var-ref "foo")` — Return a variable’s resolved stored name as a string,
-      suitable for passing to name-based operations in other functions
+    + `(var-ref "foo")` — Return an immutable string reference to the resolved
+      stored name, suitable for name-based operations in other functions
     + `(variables)` — Return all defined symbols’ stored names
     + `(local-variables)` —
       Return visible symbols’ stored names without masked entries
@@ -1244,20 +1244,23 @@ features:
       including deep copies of all string-array elements
 
     `(var-ref "NAME")` resolves an evaluated string using ordinary scoped
-    variable lookup and returns an independently allocated string containing
-    the variable’s actual stored name. A global variable such as `foo` yields
-    `"foo"`; a local `foo` in a `(do)` at expression index `N` yields
-    `"_LOCAL_N_foo"`. Local shadowing is respected. The target must be an
-    existing scalar or array symbol (including a variable reset to `TYPE_VOID`);
-    labels, native functions, and user-defined function labels are not valid
-    targets. Frozen variables can be referenced, but remain immutable.
+    variable lookup and returns an **immutable string reference** directly to
+    the variable’s stored symbol-table name, without allocating. A global
+    variable such as `foo` yields `"foo"`; a local `foo` in a `(do)` at
+    expression index `N` yields `"_LOCAL_N_foo"`. Local shadowing is respected.
+    The target must be an existing scalar or array symbol (including a variable
+    reset to `TYPE_VOID`); labels, native functions, and user-defined function
+    labels are not valid targets. Frozen variables can be referenced, but remain
+    immutable.
 
-    A `(var-ref)` result is an ordinary string, **not a distinct reference
-    type or a pointer to an array/string allocation**. Name-based operations
-    such as `(str-set)`, `(arr-set)`, `(set)`, and `(get)` can use that string
-    to access the original variable, even when a called function does not
-    inherit the caller’s local scope. Only the name is copied when passing the
-    reference; the referenced string or array contents are not copied.
+    A `(var-ref)` result is an ordinary string descriptor with its
+    `immutable_ref` flag set, **not a distinct reference type or a pointer to
+    the variable’s string/array contents**. Its bytes are borrowed from the
+    symbol table and cannot be changed through the reference. Name-based
+    operations such as `(str-set)`, `(arr-set)`, `(set)`, and `(get)` can use
+    that string to access the original variable, even when a called function
+    does not inherit the caller’s local scope. Passing the reference into a
+    function copies neither the name bytes nor the referenced value.
     For example:
 
     ```lisp
@@ -1305,9 +1308,12 @@ features:
     ```
 
     Returning or passing a reference never makes the referenced variable
-    immutable or automatically prolongs its lifetime. The reference string
-    itself is runtime-managed and can be reclaimed by manual `(gc)` when
-    unreachable; `(var-ref)` does not perform GC.
+    immutable or prolongs its scope. The name’s storage belongs to the symbol
+    table, not to the runtime allocation table; `(gc)` cannot reclaim it and
+    `(var-ref)` performs no allocation or GC. **The borrowed name is valid
+    only until the symbol table is cleaned at the end of evaluation.** Copy
+    it with `(copy)` if independent, writable storage is needed. A copied
+    name still has the same scope/activation limitations as the original.
 
     `(reset "NAME")` sets an existing scalar or array variable’s value to
     actual `TYPE_VOID`, regardless of its previous type. For arrays, the symbol
@@ -1333,11 +1339,11 @@ features:
     evaluation failure.
 
     `(variables)` and `(local-variables)` take no arguments and return
-    independent string arrays (`s`) containing actual symbol-table names. All
-    occupied symbol-table entries are included, regardless of kind: scalar
-    variables, arrays, labels, and native functions, including frozen symbols
-    and variables reset to `TYPE_VOID`. Names are not modified or shortened for
-    display.
+    **mutable** string arrays (`s`) containing immutable references to the
+    actual symbol-table names. All occupied symbol-table entries are included,
+    regardless of kind: scalar variables, arrays, labels, and native functions,
+    including frozen symbols and variables reset to `TYPE_VOID`. Names are not
+    modified or shortened for display.
 
     `(variables)` enumerates the entire global symbol hash table, including
     generated `_LOCAL_N_…` names belonging to active or previously exited
@@ -1355,12 +1361,22 @@ features:
     Function calls use definition-site resolution and do not expose locals
     belonging to a hidden caller.
 
-    The results are snapshots: changing or resetting symbols does not modify
-    previously returned name arrays. Each string has independent runtime
-    storage, so repeated enumeration consumes runtime allocation slots until
-    an explicit `(gc)` or evaluation cleanup. Enumeration does not perform GC.
-    The names can be used with `(get)`, `(kind-of)`, `(is-frozen)`, and other
-    standard-library functions to implement custom filtering and debugging.
+    Each result allocates **one array of `String` descriptors**, not a new
+    character buffer per name. The array is mutable, but its string elements
+    are read-only views of the stored symbol names. Thus
+    `(is-immutable-ref (variables))` returns `false`, while
+    `(has-immutable-refs (variables))` returns `true` when any names exist.
+    Elements may be replaced with mutable strings, for example using `(copy)`.
+    `(arr-get)` preserves an element’s immutable-reference flag.
+
+    The returned arrays are snapshots of *which names were listed*; changing
+    or resetting variable values does not change those names. Their string
+    data remains borrowed from the symbol table, though, and is **not valid
+    after symbol-table cleanup** at the end of evaluation. Explicit `(gc)`
+    may reclaim unreferenced descriptor arrays, but not symbol-table names.
+    The functions do not perform GC. Names can be used with `(get)`,
+    `(kind-of)`, `(is-frozen)`, and other standard-library functions to
+    implement custom filtering and debugging.
 
     Example:
 
@@ -1372,7 +1388,10 @@ features:
       (var "global-from-do" 7)
 
       ; Includes "x", "_LOCAL_N_x", and "_LOCAL_N_temporary".
-      (variables)
+      (local "all-names" (variables))
+      (assert (== (is-immutable-ref all-names) false))
+      (assert (has-immutable-refs all-names))
+      (assert (is-immutable-ref (arr-get all-names 0)))
 
       ; Includes "_LOCAL_N_x", "_LOCAL_N_temporary", and "global-from-do",
       ; but excludes the masked global "x".

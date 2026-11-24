@@ -5,6 +5,8 @@
 
 (var "text" "hello")
 (assert (== (var-ref "text") "text"))
+(assert (is-immutable-ref (var-ref "text")))
+(assert (== (is-immutable-ref (copy (var-ref "text"))) false))
 (change-first-byte (var-ref "text"))
 (assert (== text "aello"))
 
@@ -51,4 +53,6 @@
 ; Ordinary variable lookup is independent of the user-function namespace.
 (fn "text" 77)
 (assert (== (var-ref "text") "text"))
+(assert (is-immutable-ref (var-ref "text")))
+(assert (== (is-immutable-ref (copy (var-ref "text"))) false))
 (assert (== (text) 77))

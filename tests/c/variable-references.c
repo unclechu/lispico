@@ -53,7 +53,7 @@ int main(void) {
   Interpreter interpreter = {0};
   assert(configure_interpreter_storage(&interpreter, &storage));
 
-  // The result is an independent string containing the stored symbol name.
+  // The result borrows the symbol’s name without a runtime allocation.
   Symbol *global = symbol_define(&interpreter, "value", SYM_VARIABLE);
   assert(global != NULL);
   global->as.variable = (Value) { .type = TYPE_U32, .as.u32 = 10 };
@@ -70,7 +70,11 @@ int main(void) {
   assert(reference.as.value.type == TYPE_STRING);
   assert(reference.as.value.as.string.length == 5);
   assert(strcmp(reference.as.value.as.string.data, "value") == 0);
-  assert(reference.as.value.as.string.data != global->name);
+  assert(reference.as.value.as.string.data == global->name);
+  assert(reference.as.value.as.string.base == global->name);
+  assert(reference.as.value.as.string.immutable_ref);
+  assert(reference.as.value.as.string.nul_terminated);
+  assert(interpreter.runtime_allocation_count == 0);
   clean_evaluation(&interpreter);
   clean_symbols(&interpreter);
 
@@ -82,6 +86,8 @@ int main(void) {
     "(fn \"change-arr\" (args \"target\") (arr-set target 0 7)) "
     "(var \"message\" \"hi\") "
     "(assert (== (var-ref \"message\") \"message\")) "
+    "(assert (is-immutable-ref (var-ref \"message\"))) "
+    "(assert (== (has-immutable-refs (copy (var-ref \"message\"))) false)) "
     "(change (var-ref \"message\")) "
     "(assert (== message \"xi\")) "
     "(do (local \"message\" \"yo\") "
@@ -144,6 +150,22 @@ int main(void) {
     "(assert (== (foo) 1))",
     EVAL_OK,
     NULL
+  );
+
+  // Name views cannot be used to write into symbol-table key storage.
+  check_program(
+    &interpreter,
+    "(var \"target\" 1) (var \"name\" (var-ref \"target\")) "
+    "(str-set \"name\" 0 97)",
+    EVAL_FAIL,
+    "(str-set) cannot modify an immutable string reference"
+  );
+  check_program(
+    &interpreter,
+    "(var \"name\" (arr-get (variables) 0)) "
+    "(str-set \"name\" 0 97)",
+    EVAL_FAIL,
+    "(str-set) cannot modify an immutable string reference"
   );
 
   check_program(

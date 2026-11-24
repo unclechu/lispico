@@ -136,13 +136,14 @@ static Datum std_variables_impl(
     goto fail;
   }
 
-  // Each name receives its own runtime allocation, as required for independent
-  // string elements and correct reachability when `(arr-get)` returns a name.
+  // Allocate only the mutable array of descriptors. Each element borrows its
+  // symbol-table name as an immutable reference, without allocating its bytes.
   String *names = allocate_runtime_data(interpreter, count * sizeof(*names));
   if (names == NULL) goto allocation_failed;
   wipe_memory(names, count == 0 ? 1 : count * sizeof(*names));
 
-  // Allocate each name string copy for the resulting array.
+  // Store borrowed, NUL-terminated names. These remain valid until the
+  // symbol table is cleaned; an immutable element cannot modify its name.
   size_t index = 0;
   for (uint32_t i = 0; i < interpreter->storage.symbol_capacity; ++i) {
     const Symbol *symbol = &interpreter->storage.symbols[i];
@@ -151,15 +152,11 @@ static Datum std_variables_impl(
     if (name == NULL) continue;
 
     size_t length = strlen(name);
-    char *copy = allocate_runtime_data(interpreter, length + 1); // +1 for `\0`
-    if (copy == NULL) goto allocation_failed;
-
-    memcpy(copy, name, length + 1); // +1 to also copy `\0`
     names[index++] = (String) {
-      .data = copy,
+      .data = name,
       .length = length,
-      .base = copy,
-      .immutable_ref = false,
+      .base = name,
+      .immutable_ref = true,
       .nul_terminated = true,
     };
   }
@@ -276,29 +273,19 @@ Datum std_var_ref(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  // Copy the stored name, not the variable’s string or array contents.
+  // Borrow the stable symbol-table name without allocating a string.
+  // The reference is read-only and lasts until the symbol table is cleaned.
   size_t length = strlen(symbol->name);
-  char *name = allocate_runtime_data(interpreter, length + 1); // +1 for '\0'
-  if (name == NULL) {
-    snprintf(
-      fail_msg,
-      sizeof(fail_msg),
-      "(%s) runtime allocation failed (OOM or allocation capacity reached)",
-      fn_name
-    );
-    goto fail;
-  }
-  memcpy(name, symbol->name, length + 1); // Include the terminator.
 
   return_value = (Datum) {
     .kind = SYM_VARIABLE,
     .as.value = {
       .type = TYPE_STRING,
       .as.string = {
-        .data = name,
+        .data = symbol->name,
         .length = length,
-        .base = name,
-        .immutable_ref = false,
+        .base = symbol->name,
+        .immutable_ref = true,
         .nul_terminated = true,
       },
     },

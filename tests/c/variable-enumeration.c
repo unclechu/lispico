@@ -5,6 +5,7 @@
 #include "../../src/storage.h"
 #include "../../src/stdlib-variables.h"
 #include "../../src/stdlib-gc.h"
+#include "../../src/evaluate-copy.h"
 #include "../../src/evaluate.h"
 
 static bool has_name(const Datum *names, const char *name) {
@@ -69,6 +70,18 @@ int main(void) {
   assert(has_name(&globals, "_LOCAL_999_manual"));
   assert(has_name(&globals, "jump"));
   assert(has_name(&globals, "native"));
+  assert(!globals.as.array.immutable_ref);
+  assert(interpreter.runtime_allocation_count == 3); // Two empty arrays and this one.
+  const String *global_names = globals.as.array.data;
+  for (uint32_t i = 0; i < globals.as.array.length; ++i) {
+    const String *name = &global_names[i];
+    Symbol *stored = symbol_lookup(&interpreter, name->data);
+    assert(stored != NULL);
+    assert(name->data == stored->name);
+    assert(name->base == stored->name);
+    assert(name->immutable_ref);
+    assert(name->nul_terminated);
+  }
 
   EvalLocalScopeFrame outer = { .expression_index = 12 };
   interpreter.local_scope = &outer;
@@ -160,19 +173,37 @@ int main(void) {
   assert(has_name(&globals, "_LOCAL_12_only"));
   assert(has_name(&globals, "_LOCAL_13_value"));
 
-  // Returned names remain independent after the original table is cleaned.
-  assert(has_name(&globals, "_LOCAL_13_value"));
-  clean_symbols(&interpreter);
+  // Result descriptors own their array, but borrow names from the symbol
+  // table. They remain valid through local-scope cleanup and manual GC,
+  // not after `clean_symbols()` ends the evaluation.
   assert(has_name(&globals, "_LOCAL_13_value"));
 
-  // An active evaluator GC root keeps the result and its names alive.
-  EvalGCRootFrame root = { .values = &globals, .count = 1 };
+  // Explicit `(copy)` can make the names independent and writable, even
+  // though the original descriptor array is mutable and its items are not.
+  Array copied_array = {0};
+  assert(copy_runtime_array_mutable(&interpreter, globals.as.array, &copied_array));
+  Datum copied_names = { .kind = SYM_ARRAY, .as.array = copied_array };
+  assert(has_name(&copied_names, "_LOCAL_13_value"));
+  const String *copied_strings = copied_array.data;
+  for (uint32_t i = 0; i < copied_array.length; ++i) {
+    assert(!copied_strings[i].immutable_ref);
+    assert(copied_strings[i].data != ((const String *)globals.as.array.data)[i].data);
+  }
+
+  // An active evaluator GC root keeps the descriptor array alive.
+  Datum roots[] = { globals, copied_names };
+  EvalGCRootFrame root = { .values = roots, .count = 2 };
   interpreter.gc_roots = &root;
   Datum reclaimed = std_gc(&interpreter, NULL, 0);
   assert(reclaimed.kind == SYM_VARIABLE);
   assert(interpreter.eval_outcome.kind == EVAL_OK);
   assert(has_name(&globals, "_LOCAL_13_value"));
   interpreter.gc_roots = NULL;
+  assert(has_name(&globals, "_LOCAL_13_value"));
+
+  // Only the deep copy survives clearing the symbol table’s name storage.
+  clean_symbols(&interpreter);
+  assert(has_name(&copied_names, "_LOCAL_13_value"));
 
   interpreter.eval_outcome.kind = EVAL_OK;
   Datum bad_arg = { .kind = SYM_VARIABLE, .as.value = { .type = TYPE_U32 } };
