@@ -2016,7 +2016,11 @@ features:
         stops due to `(goto)`, `(exit)`, or an evaluation failure. Jumping back
         into nested sequences restores the corresponding nesting depth.
 
-  * Assertions
+  * Assertions and explicit evaluation failures
+
+    + `(assert CONDITION [MESSAGE])` — Succeeds when `CONDITION` is a nonzero
+      numeric value. If the condition is false, reports an evaluation failure
+      with optional string message.
 
     + `(assert (== 10 (+ 5 5)) "Arithmetic failed")` → Success
 
@@ -2026,6 +2030,30 @@ features:
 
     + `(assert (== (+ 2 2) 5))` →
       Evaluation failure with error message: `(assert) assertion failed`
+
+    + `(fail [MESSAGE])` — Always reports an evaluation failure. The optional
+      argument must evaluate to a string. With no message, or an empty string,
+      it reports `(fail) evaluation failed`.
+
+    + `(fail "Something went wrong")` → Evaluation failure with message:
+      `(fail) evaluation failed: Something went wrong`
+
+    Both functions are ordinary native functions. Their arguments are
+    evaluated eagerly, including an optional `(assert)` message even if the
+    assertion succeeds. A dynamically constructed message can be made
+    conditional by placing `(fail)` inside an `(if)` branch:
+
+    ```lisp
+    (var "limit" 4)
+    (var "input" "Hello")
+    (if (> (str-size input) limit)
+      (fail (str "Input exceeds " (type s limit) " bytes")))
+    ```
+
+    On failure, Lispico reports the usual expression location and source
+    excerpt, unlike `(exit)`, which terminates evaluation without reporting
+    an evaluation failure. `(fail)` also works through native `(call)` and
+    `(apply)` dispatch.
 
   * Type inspection
 

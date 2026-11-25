@@ -1,0 +1,6 @@
+[FAIL] Evaluation failed: examples/fail-dynamic-message.lisp:4:3: (fail) evaluation failed: Input exceeds 4 bytes
+1 | (var "limit" 4)
+2 | (var "input" "Hello")
+3 | (if (> (str-size input) limit)
+4 |   (fail (str "Input exceeds " (type s limit) " bytes")))
+  |   ↑

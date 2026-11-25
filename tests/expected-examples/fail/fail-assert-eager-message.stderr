@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/fail-assert-eager-message.lisp:1:1: (assert) message must be a string
+1 | (assert true 123)
+  | ↑
