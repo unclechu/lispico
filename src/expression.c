@@ -24,6 +24,12 @@ void clean_expressions(Interpreter *interpreter) {
   interpreter->expression_allocation_count = 0;
   interpreter->expression_count = 0;
 
+  // Parsed expression indices may be reused by the next source.
+  #if EVAL_JUMP_CACHE_ENTRY_COUNT > 0
+    wipe_memory(interpreter->jump_cache, sizeof(interpreter->jump_cache));
+    wipe_memory(interpreter->jump_cache_replace_way, sizeof(interpreter->jump_cache_replace_way));
+  #endif
+
   if (expressions != NULL)
     wipe_memory(
       expressions,

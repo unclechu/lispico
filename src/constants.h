@@ -41,6 +41,21 @@ static_assert(
 // Maximum number of simultaneously registered deferred expressions
 #define EVAL_DEFER_CAPACITY 256u
 
+// Number of cached structural `(goto)` routes (two entries per bucket).
+// Set to zero to disable caching; otherwise use a power of two >= 2.
+#ifndef EVAL_JUMP_CACHE_ENTRY_COUNT
+  #define EVAL_JUMP_CACHE_ENTRY_COUNT 32u
+#endif
+
+static_assert(
+  EVAL_JUMP_CACHE_ENTRY_COUNT == 0 ||
+  (
+    EVAL_JUMP_CACHE_ENTRY_COUNT >= 2 &&
+    (EVAL_JUMP_CACHE_ENTRY_COUNT & (EVAL_JUMP_CACHE_ENTRY_COUNT - 1u)) == 0
+  ),
+  "EVAL_JUMP_CACHE_ENTRY_COUNT must be zero or a power of two >= 2"
+);
+
 // User-defined functions are registered as regular labels using this template
 #define EVAL_FN_LABEL_FORMAT_TEMPLATE "_FN_%s"
 

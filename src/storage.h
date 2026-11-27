@@ -9,6 +9,16 @@
 #include "symbol.h"
 #include "evaluate.h"
 
+#if EVAL_JUMP_CACHE_ENTRY_COUNT > 0
+  typedef struct {
+    uint32_t source_index;
+    uint32_t target_index;
+    uint32_t result_index;
+    uint8_t query_kind;
+    bool valid;
+  } EvalJumpCacheEntry;
+#endif
+
 // Record of an allocation owned by the evaluator.
 typedef struct {
   void *data;
@@ -193,6 +203,14 @@ typedef struct Interpreter {
   // Call site of the pending (goto), needed if the destination is unreachable.
   uint32_t pending_jump_expression_index;
   uint32_t resume_target_index;
+
+  // Cache only parsed-expression routing, never resolved symbol names.
+  // Each bucket holds two entries; a collision replaces its least recently
+  // used entry. No runtime allocations or host-provided buffers are needed.
+  #if EVAL_JUMP_CACHE_ENTRY_COUNT > 0
+    EvalJumpCacheEntry jump_cache[EVAL_JUMP_CACHE_ENTRY_COUNT];
+    uint8_t jump_cache_replace_way[EVAL_JUMP_CACHE_ENTRY_COUNT / 2u];
+  #endif
 
   // Pseudo-local scopes, one frame for each active `(do)`.
   // Initially is `NULL`. When evaluator enters a `(do)` block is sets this

@@ -948,6 +948,33 @@ features:
   (goto foo) ; Evaluation failure: destination is not reachable
   ```
 
+  **Jump-route caching:** The evaluator caches structural paths through
+  `(do)` sequences and `(if)` branches so that repeated `(goto)` calls do not
+  rescan the parsed expression tree. The cache holds 32 routes in 16 two-way
+  set-associative buckets by default, replacing the least recently used entry
+  in a bucket when both slots are occupied. Successful and unreachable routes
+  can both be cached. A cache miss uses the original traversal algorithm.
+
+  Only parsed-expression indices and query results are cached, **not symbol
+  names, label bindings, scope state, or evaluated values**. Each `(goto)`
+  still resolves the destination label at runtime, preserving dynamic labels,
+  local scope resolution, nested branch entry, and deferred-expression behavior.
+  The cache is private to each interpreter, requires no runtime allocation,
+  and is cleared by `clean_evaluation()` and `clean_expressions()`.
+
+  `EVAL_JUMP_CACHE_ENTRY_COUNT` in `src/constants.h` controls the number of
+  entries. It defaults to `32`; a positive value must be a power of two and
+  at least `2`. Set it to `0` to disable the cache, for example when running
+  comparative benchmarks:
+
+  ```sh
+  CFLAGS='-DEVAL_JUMP_CACHE_ENTRY_COUNT=0' ./build.sh
+  ```
+
+  A cached jump still pays for normal expression evaluation, variable lookup,
+  and dispatch. The primary saving is repeated search for a destination in
+  programs with many expressions before or around a label.
+
 - Supported instructions
 
   * <a id="basic-arithmetics"></a>Basic arithmetics

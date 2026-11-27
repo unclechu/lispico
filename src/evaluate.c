@@ -57,7 +57,7 @@ static void report_failure_interface(
 // Only `(do)` sequences and the branches of `(if)` can be entered by `(goto)`.
 // In particular, an `(if)` condition and ordinary function arguments are not
 // execution paths that can be resumed at an arbitrary nested expression.
-static bool contains_jump_target(
+static bool contains_jump_target_uncached(
   Interpreter *interpreter,
   uint32_t expression_index,
   uint32_t target_index
@@ -84,7 +84,7 @@ static bool contains_jump_target(
     uint32_t index = fn->next;
     while (index != EXPR_NONE) {
       if (index >= interpreter->expression_count) return false;
-      if (contains_jump_target(interpreter, index, target_index)) return true;
+      if (contains_jump_target_uncached(interpreter, index, target_index)) return true;
       index = interpreter->storage.expressions[index].next;
     }
   }
@@ -99,8 +99,8 @@ static bool contains_jump_target(
     if (true_index == EXPR_NONE || true_index >= interpreter->expression_count) return false;
     uint32_t false_index = interpreter->storage.expressions[true_index].next;
     return (
-      contains_jump_target(interpreter, true_index, target_index) ||
-      contains_jump_target(interpreter, false_index, target_index)
+      contains_jump_target_uncached(interpreter, true_index, target_index) ||
+      contains_jump_target_uncached(interpreter, false_index, target_index)
     );
   }
 
@@ -109,7 +109,7 @@ static bool contains_jump_target(
 
 // Find the expression to start executing in a sequence to reach a jump target.
 // For nested targets, return the enclosing `(do)` or `(if)` expression.
-static uint32_t find_sequence_jump_entry(
+static uint32_t find_sequence_jump_entry_uncached(
   Interpreter *interpreter,
   uint32_t first_expression_index,
   uint32_t target_index
@@ -118,11 +118,154 @@ static uint32_t find_sequence_jump_entry(
 
   while (index != EXPR_NONE) {
     if (index >= interpreter->expression_count) return EXPR_NONE;
-    if (contains_jump_target(interpreter, index, target_index)) return index;
+    if (contains_jump_target_uncached(interpreter, index, target_index)) return index;
     index = interpreter->storage.expressions[index].next;
   }
 
   return EXPR_NONE;
+}
+
+// A lookup never changes jump semantics: misses run the original tree walk.
+// Separate query kinds prevent a subtree-containment result from being
+// mistaken for an entry expression index (including `EXPR_NONE` misses).
+enum {
+  JUMP_ROUTE_SEQUENCE = 1,
+  JUMP_ROUTE_CONTAINS = 2,
+};
+
+static uint32_t jump_route_lookup(
+  Interpreter *interpreter,
+  uint32_t source_index,
+  uint32_t target_index,
+  uint8_t query_kind
+) {
+  // Cache lookup and replacement-way update (on cache hit).
+  //
+  // Look for an already cached jump route in its two-entry bucket.
+  // On a hit, return the cached result and mark the other entry as the
+  // preferred replacement candidate. On a miss, fall through to the
+  // original jump-resolution algorithm.
+  #if EVAL_JUMP_CACHE_ENTRY_COUNT > 0
+    // A route is identified by its source expression index, target expression
+    // index, and query kind. Mix all three fields so nearby indices and
+    // different query kinds are less likely to compete for the same bucket.
+    //
+    // The odd multipliers are established 32-bit integer-hashing constants:
+    //   0x9e3779b1: a golden-ratio-derived multiplier used in Knuth-style
+    //               multiplicative hashing (decimal 2654435761).
+    //   0x85ebca6b: the first multiplier from the MurmurHash3 32-bit finalizer.
+    //   0xc2b2ae35: the second multiplier from that same finalizer.
+    // We use them as three distinct mixing constants, not as the complete
+    // MurmurHash3 algorithm. Unsigned 32-bit multiplication wraps modulo 2^32.
+    uint32_t hash = source_index * 0x9e3779b1u;
+    hash ^= target_index * 0x85ebca6bu;
+    hash ^= (uint32_t) query_kind * 0xc2b2ae35u;
+
+    // Fold the upper 16 hash bits into the lower 16 using XOR. Bucket
+    // selection below uses low bits only, so this lets high-bit differences
+    // influence the selected bucket too. This is a lightweight mixing step,
+    // not a cryptographic hash or a full avalanche finalizer.
+    hash ^= hash >> 16;
+
+    // Each bucket holds two cache entries (two ways). With 32 total entries,
+    // there are 16 buckets. The configured entry count is a power of two,
+    // so the bucket count is also a power of two: masking with (count - 1)
+    // selects a bucket just like modulo, without an integer division.
+    uint32_t bucket = hash & ((EVAL_JUMP_CACHE_ENTRY_COUNT / 2u) - 1u);
+
+    // Buckets occupy consecutive pairs in the flat cache array. The first
+    // slot of bucket B is at index 2*B; the other is at index 2*B + 1.
+    uint32_t first = bucket * 2u;
+
+    // Each bucket contains two entries (ways). Check both to see whether
+    // either already holds the route we are looking for.
+    for (uint32_t way = 0; way < 2; ++way) {
+      const EvalJumpCacheEntry *entry = &interpreter->jump_cache[first + way];
+
+      // A cache hit requires a valid entry whose entire key matches:
+      // the source expression index, target expression index, and query kind.
+      // Checking all three prevents reusing a result from a different route
+      // or from a different type of jump-resolution query.
+      if (
+        entry->valid &&
+        entry->source_index == source_index &&
+        entry->target_index == target_index &&
+        entry->query_kind == query_kind
+      ) {
+        // This way was just used, so prefer replacing the other way next
+        // time a new route needs to occupy this bucket.
+        //
+        // Since way is either 0 or 1, (1u - way) selects the opposite way:
+        //   way 0 was used → replace way 1 next
+        //   way 1 was used → replace way 0 next
+        //
+        // This implements a simple two-way least-recently-used (LRU) policy.
+        // On a cache hit, the used entry becomes the most recently used,
+        // protecting it from the next replacement within this bucket.
+        interpreter->jump_cache_replace_way[bucket] = (uint8_t) (1u - way);
+
+        // Return the cached result without traversing the expression tree.
+        // EXPR_NONE is also a valid cached result for an unreachable target,
+        // so returning it does not necessarily mean the lookup missed.
+        return entry->result_index;
+      }
+    }
+  #endif
+
+  uint32_t result =
+    query_kind == JUMP_ROUTE_SEQUENCE
+      ? find_sequence_jump_entry_uncached(interpreter, source_index, target_index)
+      : (uint32_t) contains_jump_target_uncached(interpreter, source_index, target_index);
+
+  // Cache the uncached result.
+  //
+  // Store the computed route in the cache and update the next replacement way.
+  #if EVAL_JUMP_CACHE_ENTRY_COUNT > 0
+    uint32_t way = interpreter->jump_cache_replace_way[bucket];
+    if (!interpreter->jump_cache[first].valid) {
+      way = 0;
+    } else if (!interpreter->jump_cache[first + 1u].valid) {
+      way = 1;
+    }
+
+    interpreter->jump_cache[first + way] = (EvalJumpCacheEntry) {
+      .source_index = source_index,
+      .target_index = target_index,
+      .result_index = result,
+      .query_kind = query_kind,
+      .valid = true,
+    };
+
+    interpreter->jump_cache_replace_way[bucket] = (uint8_t) (1u - way);
+  #endif
+
+  return result;
+}
+
+static uint32_t find_sequence_jump_entry(
+  Interpreter *interpreter,
+  uint32_t first_expression_index,
+  uint32_t target_index
+) {
+  return jump_route_lookup(
+    interpreter,
+    first_expression_index,
+    target_index,
+    JUMP_ROUTE_SEQUENCE
+  );
+}
+
+static bool contains_jump_target(
+  Interpreter *interpreter,
+  uint32_t expression_index,
+  uint32_t target_index
+) {
+  return jump_route_lookup(
+    interpreter,
+    expression_index,
+    target_index,
+    JUMP_ROUTE_CONTAINS
+  ) != 0;
 }
 
 static bool evaluate_expression(
@@ -1767,6 +1910,11 @@ void clean_evaluation(Interpreter *interpreter) {
   interpreter->pending_jump_expression_index = EXPR_NONE;
   interpreter->resume_target_index = EXPR_NONE;
   interpreter->current_native_call_expression_index = EXPR_NONE;
+
+  #if EVAL_JUMP_CACHE_ENTRY_COUNT > 0
+    wipe_memory(interpreter->jump_cache, sizeof(interpreter->jump_cache));
+    wipe_memory(interpreter->jump_cache_replace_way, sizeof(interpreter->jump_cache_replace_way));
+  #endif
 
   // (do) scopes and (depth)
   wipe_memory(&interpreter->local_scope, sizeof(interpreter->local_scope));
