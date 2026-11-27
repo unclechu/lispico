@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/break-in-defer.lisp:1:18: (defer) deferred expression cannot interrupt its enclosing sequence
+1 | (repeat 1 (defer (break)))
+  |                  ↑

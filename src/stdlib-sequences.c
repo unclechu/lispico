@@ -145,3 +145,70 @@ Datum std_get_arg(Interpreter *interpreter, const Datum *args, size_t argc) {
     wipe_memory(fail_msg, sizeof(fail_msg));
     return return_value;
 }
+
+// Read and validate a requested number of enclosing loops. A loop inside a
+// called function is visible only to that invocation, not to its caller.
+static uint32_t validate_loop_depth(
+  Interpreter *interpreter,
+  const Datum *args,
+  size_t argc,
+  const char *fn_name
+) {
+  char fail_msg[ERR_MSG_SIZE] = {'\0'};
+  if (argc > 1) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) expects 0 or 1 argument", fn_name);
+    goto fail;
+  }
+
+  uint32_t count = 1;
+  if (argc == 1) {
+    if (args[0].kind != SYM_VARIABLE || args[0].as.value.type != TYPE_U32) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) count must be u32", fn_name);
+      goto fail;
+    }
+    count = args[0].as.value.as.u32;
+  }
+
+  if (count == 0) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) count must be greater than 0", fn_name);
+    goto fail;
+  }
+
+  uint32_t depth = get_loop_break_depth(interpreter, count);
+  if (depth == 0) {
+    snprintf(fail_msg, sizeof(fail_msg), "(%s) count exceeds enclosing loops", fn_name);
+    goto fail;
+  }
+  return depth;
+
+  fail:
+    report_evaluation_failure(interpreter, fail_msg);
+    wipe_memory(fail_msg, sizeof(fail_msg));
+    return 0;
+}
+
+// (loop-break-depth [N]) — Number of sequence scopes needed to exit N loops.
+Datum std_loop_break_depth(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum result = { .kind = SYM_EMPTY };
+  uint32_t depth = validate_loop_depth(interpreter, args, argc, "loop-break-depth");
+  if (depth == 0) return result;
+
+  result = (Datum) {
+    .kind = SYM_VARIABLE,
+    .as.value = { .type = TYPE_U32, .as.u32 = depth },
+  };
+  return result;
+}
+
+// (break [N]) — Leave N enclosing loops, including their implicit scopes.
+Datum std_break(Interpreter *interpreter, const Datum *args, size_t argc) {
+  Datum result = { .kind = SYM_EMPTY };
+  uint32_t depth = validate_loop_depth(interpreter, args, argc, "break");
+  if (depth == 0) return result;
+
+  // The evaluator unwinds through `(do)` and loop scopes, running defers.
+  // As with `(leave)`, the most recent evaluation result is forwarded.
+  (void)get_last_evaluation_value(interpreter, &result);
+  interpreter->pending_leave_count = depth;
+  return result;
+}

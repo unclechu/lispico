@@ -26,6 +26,7 @@ See [examples](examples), they are also used as regression tests.
   * [Strings](#strings)
   * [Arrays](#arrays)
   * [Control flow and sequences](#control-flow-and-sequences)
+  * [Loops](#loops)
   * [Leaving sequences (`leave`)](#leaving-sequences)
   * [Deferred expressions (`defer`)](#deferred-expressions)
   * [Shebang support](#shebang-support)
@@ -2037,11 +2038,101 @@ features:
         + `(if true (depth))` → `0`
 
       + `(if)`, `(and)`, `(or)`, and ordinary native function calls do not
-        increment the nesting depth themselves.
+        increment the nesting depth themselves. Each loop iteration adds
+        one implicit sequence scope.
 
       + The depth is restored when leaving a sequence, including when evaluation
         stops due to `(goto)`, `(exit)`, or an evaluation failure. Jumping back
         into nested sequences restores the corresponding nesting depth.
+
+  * <a id="loops"></a>Loops
+
+    Lispico provides two evaluator loop special forms. They directly repeat
+    existing parsed expression indices, without registering labels or
+    resolving `(goto)` destinations on each iteration.
+
+    + `(while CONDITION EXPRESSION)` — Evaluate `CONDITION` before each
+      iteration and evaluate `EXPRESSION` while the condition is true.
+      Conditions accept the same numeric truth values as `(if)`: `u32`,
+      `i32`, and `f32`. A false first condition skips the body entirely.
+
+    + `(repeat N EXPRESSION)` — Evaluate `N` exactly once before the loop.
+      `N` must evaluate to `u32`. Execute the body exactly `N` times;
+      `(repeat 0 EXPRESSION)` never evaluates `EXPRESSION`.
+
+    + `(repeat EXPRESSION)` — Indefinite loop, normally terminated by
+      `(break)`, `(leave)`, `(return)`, `(goto)`, or `(exit)`.
+      **Argument count distinguishes the two repeat forms**. In particular,
+      `(repeat 0)` is an indefinite loop evaluating the numeric literal,
+      whereas `(repeat 0 EXPRESSION)` is a zero-iteration loop.
+
+    Each loop iteration creates a fresh **implicit `(do)` sequence scope**.
+    It is included in `(depth)` and may contain local bindings and `(defer)`
+    registrations, even without an explicit `(do)` in the body. An explicit
+    `(do)` body adds a further scope. The previous iteration’s locals are
+    reset before the next iteration starts. Deferred expressions registered
+    in the implicit iteration scope execute **on that iteration’s exit**,
+    including when a condition is false, a break is requested, or control
+    transfers outside the loop. `(while)` evaluates its condition inside that
+    scope, including the final false condition check.
+
+    Defers are supported in loops, but should be used with care in hot loops:
+    each iteration executes its own deferred expressions. Ordinary nested
+    `(do)` scopes and `(defer)` follow their existing semantics.
+
+    + `(break)` / `(break 1)` — Exit the nearest enclosing loop.
+    + `(break N)` — Exit `N` enclosing loops. `N` must be a positive `u32`.
+    + `(loop-break-depth)` / `(loop-break-depth 1)` — Return the number of
+      active sequence scopes to exit the nearest loop.
+    + `(loop-break-depth N)` — Return the number of scopes needed to exit
+      `N` enclosing loops. Both operations fail if `N` is zero, has the
+      wrong type, or exceeds the available enclosing loops.
+
+    Thus `(break N)` exits the same scopes as
+    `(leave (loop-break-depth N))`, and runs their deferred expressions.
+    `(break)` and `(loop-break-depth)` are ordinary native functions, unlike
+    the two loop special forms. They cannot reach through a user-defined
+    function-call boundary to a loop belonging to the caller. A function’s
+    own loops remain breakable; `(return)` and `(leave (fn-return-depth))`
+    still unwind all the loops inside the current function.
+
+    On normal completion, a loop returns the result of its final body
+    evaluation, or `SYM_EMPTY` when no body ran. An explicit leave/break
+    forwards the usual last evaluation value. Invalid conditions, counts,
+    or loop-control requests produce evaluation failures with source
+    locations. A `(goto)` can jump **out of** loops and can target labels
+    reachable inside an explicit body `(do)`; jumping **into** a loop body
+    from outside is not supported as a structural `(goto)` route.
+
+    ```lisp
+    (var "count" 0)
+    (while (< count 5) (set "count" (+ count 1)))
+    (assert (== count 5))
+
+    (repeat 0 (fail "Unreachable"))
+
+    (repeat 3
+      (do
+        (local "value" 1)
+        (assert (== value 1))))
+
+    (repeat
+      (do
+        (if (== count 8) (break))
+        (set "count" (+ count 1))))
+
+    (assert (== count 8))
+
+    (fn "early-answer"
+      (repeat 10
+        (repeat 10
+          (return 42))))
+    (assert (== (early-answer) 42))
+    ```
+
+    See `examples/loops.lisp` and `examples/loops-functions.lisp` for
+    depth calculations, multi-loop breaks, per-iteration defers, nested
+    functions, recursion, and early returns.
 
   * Assertions and explicit evaluation failures
 
@@ -2190,6 +2281,8 @@ features:
   - `(if)`
   - `(and)`
   - `(or)`
+  - `(while)`
+  - `(repeat)`
   - `(leave)`
   - `(return)`
   - `(defer)`
@@ -2580,6 +2673,9 @@ features:
           (leave (depth))
           (println "Never printed"))))
     ```
+
+  + An implicit loop-iteration scope counts as an ordinary sequence scope,
+    so `(leave (loop-break-depth N))` can exit N enclosing loops.
 
   + `(leave)` differs from `(goto)` and `(exit)`:
     + `(leave)` terminates the requested number of enclosing `(do)` sequences.

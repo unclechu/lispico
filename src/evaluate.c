@@ -608,6 +608,15 @@ static bool evaluate_sequence(
           interpreter->pending_leave_count--;
 
           if (interpreter->pending_leave_count == 0) {
+            // A leave that finishes at a loop’s implicit iteration scope
+            // terminates that loop instead of starting another iteration.
+            if (
+              interpreter->loop_frame != NULL &&
+              interpreter->loop_frame->sequence_depth == interpreter->current_sequence_depth &&
+              interpreter->loop_frame->function_call == interpreter->function_call
+            ) {
+              interpreter->loop_frame->exit_requested = true;
+            }
             *result = interpreter->eval_outcome.result;
             goto finish;
           }
@@ -1105,6 +1114,119 @@ bool evaluate_user_function(
     return ok;
 }
 
+// Evaluate a loop without synthesizing expression nodes or allocating
+// per-iteration state. Every iteration creates its own implicit `(do)` scope,
+// so locals and registered defers are cleaned up after that iteration.
+static bool evaluate_loop(
+  Interpreter *interpreter,
+  uint32_t loop_expression_index,
+  uint32_t condition_index,
+  uint32_t body_index,
+  bool is_while,
+  bool indefinite,
+  uint32_t count,
+  Datum *result
+) {
+  EvalLoopFrame loop = {
+    .function_call = interpreter->function_call,
+    .previous = interpreter->loop_frame,
+  };
+  interpreter->loop_frame = &loop;
+
+  Datum loop_result = { .kind = SYM_EMPTY };
+  PUSH_GC_ROOT(interpreter, loop_result_gc_root, &loop_result, 1);
+  bool ok = true;
+
+  for (
+    uint32_t iteration = 0;
+    indefinite || is_while || iteration < count;
+    ++iteration
+  ) {
+    EvalLocalScopeFrame scope = {
+      .expression_index = loop_expression_index,
+      .previous = interpreter->local_scope,
+    };
+    if (!enter_local_scope(interpreter, &scope)) {
+      ok = false;
+      goto finish;
+    }
+
+    interpreter->current_sequence_depth++;
+    loop.sequence_depth = interpreter->current_sequence_depth;
+    loop.exit_requested = false;
+    uint32_t defer_start = interpreter->deferred_expression_count;
+    bool execute_body = true;
+    bool body_started = false;
+    bool iteration_ok = true;
+
+    if (is_while) {
+      Datum condition = { .kind = SYM_EMPTY };
+      PUSH_GC_ROOT(interpreter, loop_condition_gc_root, &condition, 1);
+      iteration_ok = evaluate_expression(interpreter, condition_index, &condition);
+      if (iteration_ok) {
+        if (condition.kind != SYM_VARIABLE) {
+          report_evaluation_failure(interpreter, "(while) condition must be a numeric value");
+          iteration_ok = false;
+        } else {
+          switch (condition.as.value.type) {
+            case TYPE_U32: execute_body = condition.as.value.as.u32 != 0; break;
+            case TYPE_I32: execute_body = condition.as.value.as.i32 != 0; break;
+            case TYPE_F32: execute_body = condition.as.value.as.f32 != 0.0f; break;
+            default:
+              report_evaluation_failure(interpreter, "(while) condition must be a numeric value");
+              iteration_ok = false;
+              break;
+          }
+        }
+      }
+      POP_GC_ROOT(interpreter, loop_condition_gc_root);
+      wipe_memory(&condition, sizeof(condition));
+    }
+
+    if (iteration_ok && execute_body) {
+      // `body_index` is the final argument, so its sibling chain is empty.
+      // Using `evaluate_sequence` gives the loop body the usual `(goto)`,
+      // `(leave)`, and `(defer)` behavior of an implicit `(do)`.
+      body_started = true;
+      iteration_ok = evaluate_sequence(interpreter, body_index, &loop_result, false);
+    }
+
+    if (!body_started) {
+      // When the condition is false or interrupts control flow, the loop
+      // scope still needs its deferred expressions to run before cleanup.
+      if (interpreter->pending_leave_count != 0) {
+        interpreter->pending_leave_count--;
+        if (interpreter->pending_leave_count == 0) {
+          loop.exit_requested = true;
+          loop_result = interpreter->eval_outcome.result;
+          iteration_ok = true;
+        }
+      }
+      if (!run_deferred_expressions(interpreter, defer_start)) iteration_ok = false;
+    }
+
+    // User defers have finished. Reset iteration locals and restore the
+    // enclosing scope before deciding whether to repeat or propagate control.
+    interpreter->current_sequence_depth--;
+    leave_local_scope(interpreter, &scope, scope.previous);
+
+    if (!iteration_ok) {
+      ok = false;
+      goto finish;
+    }
+    if (loop.exit_requested || !execute_body) break;
+  }
+
+  *result = loop_result;
+
+  finish:
+    POP_GC_ROOT(interpreter, loop_result_gc_root);
+    interpreter->loop_frame = loop.previous;
+    wipe_memory(&loop, sizeof(loop));
+    wipe_memory(&loop_result, sizeof(loop_result));
+    return ok;
+}
+
 static bool evaluate_expression_impl(
   Interpreter *interpreter,
   uint32_t current_expression_index,
@@ -1294,6 +1416,94 @@ static bool evaluate_expression_impl(
           wipe_memory(name, sizeof(name));
           wipe_memory(label_name, sizeof(label_name));
           return definition_ok;
+      }
+
+      // Special forms: direct evaluator loops with per-iteration `(do)` scopes.
+      if (strcmp(function_name, "while") == 0 || strcmp(function_name, "repeat") == 0) {
+        bool is_while = strcmp(function_name, "while") == 0;
+        uint32_t first_index = fn->next;
+        if (first_index == EXPR_NONE || first_index >= interpreter->expression_count) {
+          report_evaluation_failure(
+            interpreter,
+            is_while
+              ? "(while) expects exactly 2 expressions"
+              : "(repeat) expects 1 or 2 expressions"
+          );
+          return false;
+        }
+
+        uint32_t second_index = interpreter->storage.expressions[first_index].next;
+        if (
+          (is_while && second_index == EXPR_NONE) ||
+          (
+            second_index != EXPR_NONE &&
+            (
+              second_index >= interpreter->expression_count ||
+              interpreter->storage.expressions[second_index].next != EXPR_NONE
+            )
+          )
+        ) {
+          report_evaluation_failure(
+            interpreter,
+            is_while
+              ? "(while) expects exactly 2 expressions"
+              : "(repeat) expects 1 or 2 expressions"
+          );
+          return false;
+        }
+
+        if (is_while)
+          // Conditional `(while)`.
+          return evaluate_loop(
+            interpreter,
+            current_expression_index,
+            first_index, // Condition index
+            second_index, // Body index
+            true, // Is `(while)`
+            false, // Is not indefinite
+            0, // Amount of iterations (not related to `(while)`)
+            result
+          );
+
+        // A single `(repeat EXPR)` loops indefinitely. In the two-argument
+        // form `(repeat N EXPR)`, evaluate N once before running the body.
+        if (second_index == EXPR_NONE)
+          // Indefinite `(repeat)`.
+          return evaluate_loop(
+            interpreter,
+            current_expression_index,
+            EXPR_NONE, // Condition index (`(repeat)` does not have it)
+            first_index, // Body index
+            false, // Is not `(while)`
+            true, // Is indefinite
+            0, // Amount of iterations (not related when is indefinite)
+            result
+          );
+
+        Datum count = { .kind = SYM_EMPTY };
+        if (!evaluate_expression(interpreter, first_index, &count)) {
+          wipe_memory(&count, sizeof(count));
+          return false;
+        }
+        if (count.kind != SYM_VARIABLE || count.as.value.type != TYPE_U32) {
+          report_evaluation_failure(interpreter, "(repeat) count must be u32");
+          wipe_memory(&count, sizeof(count));
+          return false;
+        }
+        uint32_t repetitions = count.as.value.as.u32;
+        wipe_memory(&count, sizeof(count));
+
+        // Fininte `(repeat N)`.
+        return evaluate_loop(
+          interpreter,
+          current_expression_index,
+          EXPR_NONE, // Condition index (`(repeat)` does not have it)
+          second_index, // Body index
+          false, // Is not `(while)`
+          false, // Is not indefinite (only N/`repetitions` iterations)
+          repetitions, // Amount of iterations
+          result
+        );
       }
 
       // Special form: boolean conjunction and disjunction with short-circuiting.
@@ -1920,9 +2130,11 @@ void clean_evaluation(Interpreter *interpreter) {
   wipe_memory(&interpreter->local_scope, sizeof(interpreter->local_scope));
   wipe_memory(&interpreter->active_local_scope, sizeof(interpreter->active_local_scope));
   wipe_memory(&interpreter->function_call, sizeof(interpreter->function_call));
+  wipe_memory(&interpreter->loop_frame, sizeof(interpreter->loop_frame));
   interpreter->local_scope = NULL;
   interpreter->active_local_scope = NULL;
   interpreter->function_call = NULL;
+  interpreter->loop_frame = NULL;
   interpreter->current_sequence_depth = 0;
 
   // (leave)

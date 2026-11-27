@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/while-missing-condition.lisp:1:1: (while) expects exactly 2 expressions
+1 | (while)
+  | ↑

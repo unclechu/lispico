@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/repeat-invalid-count.lisp:1:1: (repeat) count must be u32
+1 | (repeat "three" true)
+  | ↑

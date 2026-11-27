@@ -148,6 +148,16 @@ typedef struct EvalFunctionCallFrame {
   struct EvalFunctionCallFrame *previous;
 } EvalFunctionCallFrame;
 
+// Active loop frame. Each iteration gets a fresh implicit `(do)` activation,
+// but the frame remains active across all iterations of its loop.
+// A function boundary hides loop frames belonging to its caller.
+typedef struct EvalLoopFrame {
+  uint32_t sequence_depth;
+  bool exit_requested;
+  struct EvalFunctionCallFrame *function_call;
+  struct EvalLoopFrame *previous;
+} EvalLoopFrame;
+
 // Storage supplied and owned by the host application.
 typedef struct {
   Expression *expressions;
@@ -227,6 +237,9 @@ typedef struct Interpreter {
   // Current user-defined function invocation, if any.
   EvalFunctionCallFrame *function_call;
 
+  // Innermost executing loop (includes loops hidden by function calls).
+  EvalLoopFrame *loop_frame;
+
   // (depth) and (leave)
   uint32_t current_sequence_depth;
   uint32_t pending_leave_count;
@@ -274,6 +287,24 @@ static inline void request_evaluation_jump(Interpreter *interpreter, uint32_t in
 
 static inline uint32_t get_current_sequence_depth(Interpreter *interpreter) {
   return interpreter->current_sequence_depth;
+}
+
+// Number of sequence scopes to exit N loops within this function invocation.
+// Returns zero when fewer than N loops are active or N is zero.
+static inline uint32_t get_loop_break_depth(const Interpreter *interpreter, uint32_t count) {
+  if (count == 0) return 0;
+
+  for (
+    const EvalLoopFrame *loop = interpreter->loop_frame;
+    loop != NULL;
+    loop = loop->previous
+  ) {
+    if (loop->function_call != interpreter->function_call) continue;
+    count--;
+    if (count == 0) return interpreter->current_sequence_depth - loop->sequence_depth + 1;
+  }
+
+  return 0;
 }
 
 // Number of `(do)` scopes to leave to exit the current function, including

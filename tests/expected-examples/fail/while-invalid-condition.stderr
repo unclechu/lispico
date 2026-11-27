@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/while-invalid-condition.lisp:1:1: (while) condition must be a numeric value
+1 | (while "not numeric" true)
+  | ↑
