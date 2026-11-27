@@ -75,7 +75,7 @@ measure-example() {
       "$SOURCE" &>/dev/null || exit_code=$?
   else
     /usr/bin/env time -q -f '%e %M' -o "$TMP_FILE" timeout -- "$TIMEOUT" \
-      "$LISPICO_EXECUTABLE" -ps "$SOURCE" &>/dev/null || exit_code=$?
+      "$LISPICO_EXECUTABLE" --source-highlight=none -ps "$SOURCE" &>/dev/null || exit_code=$?
   fi
 
   read -r elapsed peak_ram < "$TMP_FILE"
