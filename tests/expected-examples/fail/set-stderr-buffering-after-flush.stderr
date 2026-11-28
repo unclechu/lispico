@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: examples/fail/set-stderr-buffering-after-flush.lisp:2:1: (set-stderr-buffering) stream has already been used or configured
+1 | (flush-stderr)
+2 | (set-stderr-buffering 32)
+  | ↑

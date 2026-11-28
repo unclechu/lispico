@@ -2013,6 +2013,35 @@ features:
       without actually terminating a string. Original string length is the
       actual string limit.
 
+      + Flush buffered output explicitly:
+        + `(flush-stdout)` — Flush stdout using C’s `fflush()`.
+        + `(flush-stderr)` — Flush stderr using C’s `fflush()`.
+      + Configure standard-stream buffering before the first stream operation:
+        + `(set-stdout-buffering 0)` — Disable stdout buffering.
+        + `(set-stderr-buffering 0)` — Disable stderr buffering.
+        + `(set-stdout-buffering N)` — Full buffering with an allocated
+          buffer of exactly `N` bytes (`N` must be a positive `u32`).
+        + `(set-stderr-buffering N)` — Same for stderr.
+        + `(set-stdout-buffering "line")` — Line buffering with the C
+          library’s chosen default buffer size; likewise for stderr.
+
+      Each stream may be configured only once, before it is used by any
+      Lispico printing or flushing function. Even printing an empty string
+      or flushing an empty stream counts as use. A second configuration, or
+      configuring a previously used stream, fails. The streams and their
+      buffering settings belong to the host **process**, not an individual
+      interpreter: parallel interpreters share stdout and stderr. The
+      implementation synchronizes printing, flushing, and configuration
+      using the respective POSIX `FILE` stream lock. The exact `N` bytes of
+      buffer storage remain owned by Lispico’s host I/O layer through
+      process exit, not by the runtime GC. The C library may still flush
+      before filling the requested buffer.
+
+      These functions report I/O/configuration failures through ordinary
+      Lispico evaluation failure; on success they return `empty`. They
+      cannot detect earlier stream use performed directly by unrelated C
+      libraries or host code outside Lispico’s printing helpers.
+
   * Early exit (by default last expression is returned from the program)
 
     + `(exit 0 123)` where `0` is exit status code and `123` is returned value

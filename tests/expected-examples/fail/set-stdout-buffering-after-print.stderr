@@ -1,0 +1,4 @@
+[FAIL] Evaluation failed: examples/fail/set-stdout-buffering-after-print.lisp:2:1: (set-stdout-buffering) stream has already been used or configured
+1 | (print "used stdout")
+2 | (set-stdout-buffering 32)
+  | ↑

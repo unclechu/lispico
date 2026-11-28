@@ -1,0 +1,3 @@
+[FAIL] Evaluation failed: examples/fail/set-stderr-buffering-invalid-mode.lisp:1:1: (set-stderr-buffering) expects u32 buffer size (0 disables buffering) or string “line”
+1 | (set-stderr-buffering -1)
+  | ↑
