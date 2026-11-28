@@ -13,6 +13,7 @@
 #include "src/parse.h"
 #include "src/stdlib-print.h"
 #include "src/stdlib-sleep.h"
+#include "src/stdlib-time.h"
 #include "src/stdlib-env-var.h"
 #include "src/stdlib-file-io.h"
 #include "src/stdlib-tty.h"
@@ -50,6 +51,7 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   const char *symbol_name;
   POPULATE_STDLIB_PRINT();
   POPULATE_STDLIB_SLEEP();
+  POPULATE_STDLIB_TIME();
   POPULATE_STDLIB_ENV_VAR();
   POPULATE_STDLIB_FILE_IO();
   POPULATE_STDLIB_TTY();

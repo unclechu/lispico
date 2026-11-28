@@ -2765,6 +2765,34 @@ features:
 
       **TODO** Raspberry Pi Pico support will be implemented separately.
 
+- <a id="monotonic-time"></a>Monotonic time
+
+  The optional POSIX desktop module `src/stdlib-time.{c,h}` provides
+  `(monotonic-ms)`. Host applications can include `src/stdlib-time.h` and
+  register `POPULATE_STDLIB_TIME()`. The desktop `interpreter.c` registers it
+  alongside the other platform-specific extensions, not in the core stdlib.
+
+  * `(monotonic-ms)` — Return whole milliseconds from `CLOCK_MONOTONIC`
+    as a `u32`. Accepts no arguments, and makes no GC-managed allocations.
+
+    + The timestamp is an arbitrary monotonic clock reading, not Unix time.
+      It has millisecond units, but actual timer resolution depends on the
+      platform. Sub-millisecond fractions are truncated.
+    + The result contains the low 32 bits of the millisecond count, so it
+      wraps approximately every 49.7 days (`2^32` milliseconds).
+    + Subtract two `u32` timestamps to measure elapsed time across a wrap,
+      provided the actual interval is shorter than one full wrap period.
+    + A failed OS clock read reports an evaluation failure.
+    + POSIX `clock_gettime(CLOCK_MONOTONIC, ...)` is used on desktop systems.
+      **TODO** Raspberry Pi Pico timing support will be implemented separately.
+
+    ```lisp
+    (var "started" (monotonic-ms))
+    (sleep-ms 20)
+    (var "elapsed" (- (monotonic-ms) started))
+    (assert (>= elapsed 20))
+    ```
+
 * <a id="leaving-sequences"></a>Leaving sequences early
 
   + `(leave [COUNT [VALUE]])` — Immediately terminates one or more active
