@@ -719,6 +719,7 @@ typedef struct {
   uint32_t first_argument_index;
   size_t named_argument_count;
   bool variadic;
+  bool immutable_arguments;
 } UserFunctionDefinition;
 
 static bool get_user_function_definition(
@@ -788,8 +789,20 @@ static bool get_user_function_definition(
 
     if (name == NULL || name->data == NULL) goto incorrect_arguments_declaration;
 
-    if (strcmp(name->data, "args") == 0 || strcmp(name->data, "var-args") == 0) {
-      definition->variadic = strcmp(name->data, "var-args") == 0;
+    if (
+      strcmp(name->data, "args") == 0 ||
+      strcmp(name->data, "var-args") == 0 ||
+      strcmp(name->data, "immutable-args") == 0 ||
+      strcmp(name->data, "immutable-var-args") == 0
+    ) {
+      definition->variadic = (
+        strcmp(name->data, "var-args") == 0 ||
+        strcmp(name->data, "immutable-var-args") == 0
+      );
+      definition->immutable_arguments = (
+        strcmp(name->data, "immutable-args") == 0 ||
+        strcmp(name->data, "immutable-var-args") == 0
+      );
       definition->first_argument_index = declaration_name->next;
       body_index = possible_declarations->next;
       definition->body_index = body_index;
@@ -869,20 +882,33 @@ static bool get_user_function_definition(
 }
 
 // Bind a declared single argument as a local in the implicit function scope.
-// Ordinary values use the existing `(local)` copy semantics. Labels and
-// `TYPE_VOID` can also be passed without adding a new symbol representation.
+// Ordinary values use the existing `(local)` copy semantics. Immutable
+// declarations borrow string and array storage through read-only descriptors.
+// Labels and `TYPE_VOID` can also be passed without a new symbol representation.
 static bool bind_user_function_argument(
   Interpreter *interpreter,
   const Datum *name,
-  const Datum *value
+  const Datum *value,
+  bool immutable_arguments
 ) {
-  // Use `(local)` for ordinary values to preserve its existing copy semantics.
+  // Use `(local)` for ordinary values. Mark string and array descriptors as
+  // immutable before binding so `(local)` shares their backing storage.
   // Labels and `TYPE_VOID` require direct symbol assignment.
   if (
     value->kind != SYM_LABEL &&
     !(value->kind == SYM_VARIABLE && value->as.value.type == TYPE_VOID)
   ) {
     Datum binding[] = { *name, *value };
+    if (immutable_arguments) {
+      if (binding[1].kind == SYM_ARRAY) {
+        binding[1].as.array.immutable_ref = true;
+      } else if (
+        binding[1].kind == SYM_VARIABLE &&
+        binding[1].as.value.type == TYPE_STRING
+      ) {
+        binding[1].as.value.as.string.immutable_ref = true;
+      }
+    }
     (void)std_local(interpreter, binding, 2);
     wipe_memory(binding, sizeof(binding));
     return interpreter->eval_outcome.kind == EVAL_OK;
@@ -999,6 +1025,7 @@ bool evaluate_user_function(
     .call_depth = call_depth,
     .arguments = args,
     .argument_count = argc,
+    .immutable_arguments = definition.immutable_arguments,
     .previous = interpreter->function_call,
   };
 
@@ -1070,7 +1097,12 @@ bool evaluate_user_function(
       },
     };
 
-    bool bound = bind_user_function_argument(interpreter, &name, &args[i]);
+    bool bound = bind_user_function_argument(
+      interpreter,
+      &name,
+      &args[i],
+      definition.immutable_arguments
+    );
     wipe_memory(&name, sizeof(name));
     if (!bound) goto finish;
     name_index = name_expr->next;

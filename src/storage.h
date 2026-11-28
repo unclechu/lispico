@@ -130,6 +130,7 @@ typedef struct EvalFunctionCallFrame {
 
   const Datum *arguments;
   size_t argument_count;
+  bool immutable_arguments;
 
   // LIFO stack chain.
   //

@@ -138,7 +138,17 @@ Datum std_get_arg(Interpreter *interpreter, const Datum *args, size_t argc) {
     goto fail;
   }
 
-  return interpreter->function_call->arguments[index];
+  // Immutable declarations also expose unnamed arguments as read-only
+  // views. Do not modify the caller’s original argument descriptors.
+  Datum value = interpreter->function_call->arguments[index];
+  if (interpreter->function_call->immutable_arguments) {
+    if (value.kind == SYM_ARRAY) {
+      value.as.array.immutable_ref = true;
+    } else if (value.kind == SYM_VARIABLE && value.as.value.type == TYPE_STRING) {
+      value.as.value.as.string.immutable_ref = true;
+    }
+  }
+  return value;
 
   fail:
     report_evaluation_failure(interpreter, fail_msg);

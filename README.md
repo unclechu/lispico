@@ -1601,6 +1601,45 @@ features:
       first and permits additional ones. Function arguments retain their
       individual types; no heterogeneous array type is required.
 
+    + `(immutable-args)` and `(immutable-var-args)` are allocation-free
+      alternatives to `(args)` and `(var-args)` for string and array bindings.
+      They have the same fixed/variadic argument-count rules, but named string
+      and array arguments become read-only views of the original storage
+      instead of independent mutable copies. The caller’s references remain
+      unchanged and writable. Numeric values, labels, and `TYPE_VOID` retain
+      their original types and values. The immutable-reference flag applies
+      to the string or array descriptor, not recursively to an array’s items.
+      For these declarations, `(get-arg)` also returns a read-only view of
+      string and array arguments, including unnamed variadic arguments.
+      Ordinary `(args)` and `(var-args)` keep their existing behavior.
+
+      ```lisp
+      (fn "peek" (immutable-args "text") (do
+        (assert (is-immutable-ref text))
+        (assert (is-immutable-ref (get-arg 0)))
+        text))
+      (var "original" "hello")
+      (var "view" (peek original))
+      (str-set "original" 0 72)
+      (assert (== view "Hello"))
+
+      (fn "log" (immutable-var-args "first") (do
+        (eprint "[DEBUG]")
+        (local "i" 0)
+        (repeat argc (do
+          (eprint " ")
+          (eprint (get-arg i))
+          (set "i" (+ i 1))))
+        (eprintln "")))
+      (log "one" "two" "three")
+      ```
+
+      Immutable argument views do not allocate by themselves. A function
+      that writes through `(eprint)`/`(eprintln)` without joining strings
+      can therefore take plain string literals without allocating runtime
+      storage for the argument bindings. Explicit string/array constructions
+      in the caller may still allocate as usual.
+
     + `(fn)` definitions are allowed only at the top level. Evaluate the
       function name when defining it, allowing dynamically constructed names.
       Register a public, ordinary label named `_FN_<name>` in the existing
@@ -1621,8 +1660,9 @@ features:
       argument bindings and cleanup. Return the function body’s evaluation
       result like an ordinary expression, including from nested calls. Preserve
       and restore the caller’s evaluation and scope context on return or
-      failure. Named argument values are copied into locals, so changes to
-      their strings or arrays do not modify the caller’s arguments.
+      failure. Ordinary named argument values are copied into locals, so
+      changes to their strings or arrays do not modify the caller’s arguments.
+      Immutable argument declarations instead borrow read-only views.
 
     + Every call defines an implicit function-local `argc` (`u32`) containing
       the number of supplied arguments. A user-defined argument named `argc`
@@ -1633,13 +1673,13 @@ features:
     + `(get-arg INDEX)` reads a zero-based argument from the current function
       call, preserving its original type. `INDEX` must be `u32` and within
       the supplied argument count. Calling it outside a function fails.
-      `(args)` and `(var-args)` are declarations only, not callable functions.
-      Names in argument declarations must be string literals.
+      All four argument declaration forms are declarations only, not callable
+      functions. Names in argument declarations must be string literals.
 
     + A function definition returns the previous evaluation result, similarly
       to `(label)`. Calls can be nested in ordinary expressions; fixed-arity
-      functions require the declared argument count, while `(var-args)`
-      accepts any count at least as large as its required named arguments.
+      functions require the declared argument count, while the two variadic
+      declarations accept any count at least as large as their named arguments.
       At most `EVAL_ARG_CAPACITY` arguments can be passed in a direct call.
 
     + Preserve the existing `(leave COUNT)` semantics inside functions: `COUNT`
@@ -3740,6 +3780,8 @@ strings are nonempty and have non-NULL data pointers):
 | Operation                                         | Runtime allocations | Storage behavior                                   |
 | ---                                               | ---:                | ---                                                |
 | `(immutable-ref STRING)`                          | 0                   | Borrow existing byte storage                       |
+| `(fn … (immutable-args …) …)` binding a string    | 0                   | Borrow the caller’s string as a read-only view     |
+| `(get-arg N)` in an immutable declaration         | 0                   | Borrow a string/array as a read-only view          |
 | `(str-slice STRING FROM LENGTH)`                  | 0                   | Interior read-only view                            |
 | `(var-ref "NAME")`                                | 0                   | Borrow a symbol-table name                         |
 | `(variables)` with two defined symbols            | 1                   | Mutable descriptor array; borrowed names           |
