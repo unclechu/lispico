@@ -15,6 +15,7 @@
 #include "src/stdlib-sleep.h"
 #include "src/stdlib-env-var.h"
 #include "src/stdlib-file-io.h"
+#include "src/stdlib-tty.h"
 #include "src/parse-cli-args.h"
 #include "src/source-highlight.h"
 #include "src/source-registry.h"
@@ -51,6 +52,7 @@ static void eval_settings_cb(EvalSettingsInterface *interface) {
   POPULATE_STDLIB_SLEEP();
   POPULATE_STDLIB_ENV_VAR();
   POPULATE_STDLIB_FILE_IO();
+  POPULATE_STDLIB_TTY();
 
   // CLI definitions come last, intentionally allowing overrides of built-in
   // symbols, including `argc`, `argv`, `args` and native standard-library

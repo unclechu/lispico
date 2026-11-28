@@ -2561,6 +2561,92 @@ features:
   To read piped input, supply a source file to the interpreter so stdin remains
   available to the script, then use `(read-file "/dev/stdin")` inside it.
 
+- <a id="tty-functions"></a>TTY (interactive terminal input)
+
+  POSIX desktop terminal support is implemented in the optional module
+  `src/stdlib-tty.{c,h}`. To enable it in a host application, include
+  `src/stdlib-tty.h` and call `POPULATE_STDLIB_TTY()` when registering native
+  functions. The desktop `interpreter.c` registers these functions as
+  extensions, **not** as part of the platform-independent `populate_stdlib()`.
+  This module uses `termios`, `poll()`, `read()`, and `ioctl(TIOCGWINSZ)`;
+  it is not implemented for Raspberry Pi Pico yet.
+
+  * `(tty-enable)` — Configure standard input for character-at-a-time terminal
+    input, without input echo or the need to press Enter. Returns `empty`.
+
+    + Requires stdin to be a TTY. Stores its prior terminal attributes and
+      disables `ICANON`, `ECHO`, and `ECHONL`. `VMIN=0` and `VTIME=0` ensure
+      individual reads do not block independently of the polling timeout.
+    + This is **noncanonical/no-echo** mode, not full raw mode: normal signal
+      processing (including Ctrl+C) and other terminal input transformations
+      remain in effect.
+    + A repeated call while enabled is a successful no-op. The terminal mode
+      is process-wide and shared by parallel interpreter instances; nested
+      enable/disable ownership is not tracked.
+
+  * `(tty-disable)` — Restore stdin’s saved attributes from the last successful
+    `(tty-enable)`. Returns `empty`, including when already disabled.
+
+    + Terminal state is also restored on **normal process exit** with
+      `atexit()`, as a fallback for programs that omit `(tty-disable)`.
+      Use `(defer (tty-disable))` to restore it as soon as the game loop ends.
+    + **No POSIX signal handlers are installed.** Abrupt termination (for
+      example, default SIGINT handling or a crash) does not run `atexit()`;
+      the user may have to run `stty sane` to repair the shell terminal.
+
+  * `(tty-read-byte [TIMEOUT_MS])` — Read one byte from standard input:
+
+    + With no arguments, **block until a byte is received** (or report a
+      terminal I/O error). No timeout is imposed.
+    + `0` polls immediately without waiting.
+    + A positive `u32` timeout waits up to the specified duration, restarting
+      interrupted polls without resetting the overall deadline.
+    + A received byte becomes `u32` in the range 0–255 (including NUL = 0).
+      When a timed read expires without input, it returns `empty`, **not** 0.
+      Since `(local)` cannot bind `empty`, check timeout results directly or
+      use the blocking form when a byte is required.
+    + Requires `(tty-enable)` first; read errors and terminal hangups fail.
+    + An arrow key typically produces multiple bytes, such as ESC, `[`, `A`.
+      For simple games, WASD keys avoid escape-sequence parsing.
+    + Like the TTY mode, reads belong to the process. Concurrent TTY input
+      operations are serialized with stdin’s `flockfile()` lock; a waiting
+      `(tty-read-byte)` also holds that lock until it completes.
+    + Don’t mix this API with buffered reads of the same stdin descriptor,
+      such as `(read-file "/dev/stdin")`. Those can buffer input independently
+      and prevent the TTY reader from seeing it.
+
+  * `(tty-size ARRAY_NAME)` — Query the current terminal size and update the
+    first two elements of an existing named **mutable `u32` array of length
+    at least 2**. Index 0 receives the number of columns; index 1 receives
+    the number of rows (think of X and Y). All remaining elements are preserved.
+
+    + Accepts both ordinary and scoped local array names, e.g.
+      `(tty-size "dimensions")`. Frozen symbols and immutable array
+      references cannot be modified.
+    + Does **not** allocate a new array or any GC-managed memory, and returns
+      `empty` on success.
+    + Prefers an attached stdout terminal; if stdout is redirected, falls
+      back to stdin and then stderr. Does not require `(tty-enable)`.
+    + Reports failure when no standard stream is a terminal or when the
+      terminal cannot report nonzero dimensions.
+    + To detect terminal resizing, poll `(tty-size)` in your game loop and
+      compare its results with the previously observed dimensions. No
+      SIGWINCH handler is registered.
+
+  For an interactive demo that exercises all four functions, see
+  `examples/interactive/tty-keys.lisp`. For example:
+
+  ```lisp
+  (arr-new "dimensions" u32 4)
+  (tty-size "dimensions") ; Updates only elements 0 and 1
+
+  (tty-enable)
+  (do
+    (defer (tty-disable))
+    (local "key" (tty-read-byte))
+    (println "Received byte: " key))
+  ```
+
 - <a id="environment-variables"></a>Environment variables
 
   These two functions are provided by the optional desktop module
