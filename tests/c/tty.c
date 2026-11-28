@@ -90,13 +90,29 @@ int main(void) {
   // Failures involving wrong arguments occur before any terminal operations.
   check_program(&interpreter, "(tty-enable 1)", EVAL_FAIL, "does not take any arguments");
   check_program(&interpreter, "(tty-disable 1)", EVAL_FAIL, "does not take any arguments");
-  check_program(&interpreter, "(tty-read-byte 0 1)", EVAL_FAIL, "expects zero or one argument");
-  check_program(&interpreter, "(tty-read-byte -1)", EVAL_FAIL, "timeout must be u32");
-  check_program(&interpreter, "(tty-read-byte 1.)", EVAL_FAIL, "timeout must be u32");
+  check_program(&interpreter, "(tty-read-byte 0)", EVAL_FAIL, "expects zero or two arguments");
+  check_program(&interpreter, "(tty-read-byte 0 1 2)", EVAL_FAIL, "expects zero or two arguments");
+  check_program(&interpreter, "(tty-read-byte 0 1)", EVAL_FAIL, "expects a u32 timeout and a string variable name");
+  check_program(&interpreter, "(tty-read-byte -1 \"key\")", EVAL_FAIL, "expects a u32 timeout");
+  check_program(&interpreter, "(tty-read-byte 1. \"key\")", EVAL_FAIL, "expects a u32 timeout");
+  check_program(&interpreter, "(tty-read-byte \"key\" \"other\")", EVAL_FAIL, "expects a u32 timeout");
+  check_program(&interpreter, "(tty-read-byte 0 \"\")", EVAL_FAIL, "invalid variable name");
+  check_program(&interpreter, "(tty-read-byte 0 \"missing\")", EVAL_FAIL, "is not defined");
+  check_program(&interpreter,
+    "(var \"key\" 0) (freeze \"key\") (tty-read-byte 0 \"key\")",
+    EVAL_FAIL, "frozen");
+  check_program(&interpreter,
+    "(var \"key\" \"value\") (tty-read-byte 0 \"key\")",
+    EVAL_FAIL, "must be u32");
+  check_program(&interpreter,
+    "(arr-new \"key\" u32 2) (tty-read-byte 0 \"key\")",
+    EVAL_FAIL, "must be u32");
   check_program(&interpreter, "(tty-size)", EVAL_FAIL, "expects exactly 1");
   check_program(&interpreter, "(tty-size 123)", EVAL_FAIL, "expects an array variable name");
   check_program(&interpreter, "(tty-size \"missing\")", EVAL_FAIL, "is not defined");
-  check_program(&interpreter, "(tty-read-byte 0)", EVAL_FAIL, "requires (tty-enable)");
+  check_program(&interpreter,
+    "(var \"key\" 0) (tty-read-byte 0 \"key\")",
+    EVAL_FAIL, "requires (tty-enable)");
   check_program(&interpreter, "(tty-read-byte)", EVAL_FAIL, "requires (tty-enable)");
 
   // A subprocess with no attached TTY must report errors instead of
@@ -196,20 +212,48 @@ int main(void) {
   assert(active.c_cc[VMIN] == 0);
   assert(active.c_cc[VTIME] == 0);
 
-  // A poll without input returns empty, not the numeric NUL byte.
-  EvalOutcome empty = check_program(&interpreter, "(tty-read-byte 0)", EVAL_OK, NULL);
-  assert(empty.result.kind == SYM_EMPTY);
-  empty = check_program(&interpreter, "(tty-read-byte 10)", EVAL_OK, NULL);
-  assert(empty.result.kind == SYM_EMPTY);
+  // Timed reads return false on timeout and must not modify the variable.
+  // Check both argument orders, including scoped local variables.
+  check_program(&interpreter,
+    "(var \"key\" 777) "
+    "(assert (== (tty-read-byte 0 \"key\") false)) "
+    "(assert (== key 777)) "
+    "(assert (== (tty-read-byte \"key\" 10) false)) "
+    "(assert (== key 777)) "
+    "(do (local \"key\" 888) "
+    "  (assert (== (tty-read-byte \"key\" 0) false)) "
+    "  (assert (== key 888))) "
+    "(assert (== key 777))",
+    EVAL_OK, NULL);
 
-  assert(write(master, "xy", 2) == 2);
+  assert(write(master, "xyz", 3) == 3);
   check_byte(&interpreter, "(tty-read-byte)", 'x');
-  check_byte(&interpreter, "(tty-read-byte 0)", 'y');
+  check_program(&interpreter,
+    "(var \"key\" 999) "
+    "(assert (== (tty-read-byte 0 \"key\") true)) "
+    "(assert (== key 121)) "
+    "(assert (== (tty-read-byte \"key\" 0) true)) "
+    "(assert (== key 122))",
+    EVAL_OK, NULL);
+  // Named writes resolve the closest local variable, without overwriting
+  // the global of the same name.
+  assert(write(master, "L", 1) == 1);
+  check_program(&interpreter,
+    "(var \"key\" 10) "
+    "(do (local \"key\" 20) "
+    "  (assert (== (tty-read-byte 0 \"key\") true)) "
+    "  (assert (== key 76))) "
+    "(assert (== key 10))",
+    EVAL_OK, NULL);
   unsigned char nul = 0;
   assert(write(master, &nul, 1) == 1);
-  check_byte(&interpreter, "(tty-read-byte)", 0);
+  check_program(&interpreter,
+    "(var \"key\" 999) "
+    "(assert (== (tty-read-byte \"key\" 0) true)) "
+    "(assert (== key 0))",
+    EVAL_OK, NULL);
 
-  // The terminal must not echo the three typed bytes back to the master.
+  // The terminal must not echo typed bytes back to the master.
   struct pollfd master_input = { .fd = master, .events = POLLIN };
   assert(poll(&master_input, 1, 0) == 0);
 
@@ -222,9 +266,11 @@ int main(void) {
     if (write(master, "z", 1) != 1) _exit(1);
     _exit(0);
   }
-  EvalOutcome timed = check_program(&interpreter, "(tty-read-byte 500)", EVAL_OK, NULL);
-  assert(timed.result.kind == SYM_VARIABLE);
-  assert(timed.result.as.value.as.u32 == 'z');
+  check_program(&interpreter,
+    "(var \"key\" 999) "
+    "(assert (== (tty-read-byte 500 \"key\") true)) "
+    "(assert (== key 122))",
+    EVAL_OK, NULL);
   int writer_status = 0;
   assert(waitpid(writer, &writer_status, 0) == writer);
   assert(WIFEXITED(writer_status) && WEXITSTATUS(writer_status) == 0);
@@ -253,7 +299,9 @@ int main(void) {
   assert(restored.c_oflag == original.c_oflag);
   assert(restored.c_cc[VMIN] == original.c_cc[VMIN]);
   assert(restored.c_cc[VTIME] == original.c_cc[VTIME]);
-  check_program(&interpreter, "(tty-read-byte 0)", EVAL_FAIL, "requires (tty-enable)");
+  check_program(&interpreter,
+    "(var \"key\" 0) (tty-read-byte \"key\" 0)",
+    EVAL_FAIL, "requires (tty-enable)");
 
   // Process-exit cleanup restores terminal mode even without an explicit
   // `(tty-disable)` in a child that terminates normally.

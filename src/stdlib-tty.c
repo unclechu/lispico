@@ -161,40 +161,106 @@ static bool monotonic_milliseconds(uint64_t *result) {
   return true;
 }
 
-// (tty-read-byte [TIMEOUT_MS]) — Read one terminal byte. Without arguments,
-// block until a byte arrives. With a timeout, return empty when it expires;
-// zero polls immediately. Arrow keys and other terminal escape sequences are
-// returned one byte at a time.
+// (tty-read-byte) — Block until one byte is received, returning it as u32.
+// (tty-read-byte TIMEOUT_MS VARIABLE_NAME) — Wait at most TIMEOUT_MS and
+// write a received byte into an existing mutable u32 variable. The two
+// arguments can be supplied in either order. Return true when a byte was
+// written, false on timeout. A timeout never changes the destination.
+// Arrow keys and other terminal escape sequences arrive one byte at a time.
 Datum std_tty_read_byte(Interpreter *interpreter, const Datum *args, size_t argc) {
   Datum return_value = { .kind = SYM_EMPTY };
   char fail_msg[ERR_MSG_SIZE] = {'\0'};
   const char fn_name[] = "tty-read-byte";
+  char symbol_name[SYMBOL_NAME_SIZE] = {'\0'};
+  Symbol *destination = NULL;
+  uint32_t timeout_ms = 0;
 
-  if (argc > 1) {
+  if (argc != 0 && argc != 2) {
     snprintf(
       fail_msg,
       sizeof(fail_msg),
-      "(%s) expects zero or one argument, got: %zu",
+      "(%s) expects zero or two arguments, got: %zu",
       fn_name,
       argc
     );
     goto fail;
   }
-  if (
-    argc == 1 &&
-    (
-      args[0].kind != SYM_VARIABLE ||
-      args[0].as.value.type != TYPE_U32
-    )
-  ) {
-    snprintf(fail_msg, sizeof(fail_msg), "(%s) timeout must be u32 milliseconds", fn_name);
-    goto fail;
+
+  if (argc == 2) {
+    const Datum *name_arg = NULL;
+    const Datum *timeout_arg = NULL;
+
+    // Accept (TIMEOUT_MS NAME) and (NAME TIMEOUT_MS), but not two
+    // arguments of the same type or an unsupported value type.
+    if (
+      args[0].kind == SYM_VARIABLE &&
+      args[0].as.value.type == TYPE_U32 &&
+      args[1].kind == SYM_VARIABLE &&
+      args[1].as.value.type == TYPE_STRING
+    ) {
+      timeout_arg = &args[0];
+      name_arg = &args[1];
+    } else if (
+      args[0].kind == SYM_VARIABLE &&
+      args[0].as.value.type == TYPE_STRING &&
+      args[1].kind == SYM_VARIABLE &&
+      args[1].as.value.type == TYPE_U32
+    ) {
+      name_arg = &args[0];
+      timeout_arg = &args[1];
+    } else {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) expects a u32 timeout and a string variable name",
+        fn_name
+      );
+      goto fail;
+    }
+
+    if (!get_variable_name(name_arg, &symbol_name)) {
+      snprintf(fail_msg, sizeof(fail_msg), "(%s) invalid variable name", fn_name);
+      goto fail;
+    }
+
+    destination = symbol_lookup_scoped(interpreter, symbol_name);
+    if (destination == NULL) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) variable “%s” is not defined",
+        fn_name,
+        symbol_name
+      );
+      goto fail;
+    }
+    if (!validate_symbol_mutable(destination, fn_name, &fail_msg)) goto fail;
+    if (
+      destination->kind != SYM_VARIABLE ||
+      destination->as.variable.type != TYPE_U32
+    ) {
+      snprintf(
+        fail_msg,
+        sizeof(fail_msg),
+        "(%s) variable “%s” must be u32",
+        fn_name,
+        symbol_name
+      );
+      goto fail;
+    }
+
+    timeout_ms = timeout_arg->as.value.as.u32;
+    // Booleans are u32 values. A timeout returns false and leaves the
+    // destination untouched; a successful read sets this result to true.
+    return_value = (Datum) {
+      .kind = SYM_VARIABLE,
+      .as.value = { .type = TYPE_U32, .as.u32 = 0u },
+    };
   }
 
   // A missing timeout means blocking input; an explicit zero polls without
   // waiting. Only timed reads need a monotonic deadline.
   bool blocking = argc == 0;
-  uint32_t timeout_ms = blocking ? 0 : args[0].as.value.as.u32;
   flockfile(stdin);
   if (!tty_enabled) {
     funlockfile(stdin);
@@ -233,11 +299,16 @@ Datum std_tty_read_byte(Interpreter *interpreter, const Datum *args, size_t argc
         unsigned char byte = 0;
         ssize_t amount = read(STDIN_FILENO, &byte, 1);
         if (amount == 1) {
+          if (blocking) {
+            return_value = (Datum) {
+              .kind = SYM_VARIABLE,
+              .as.value = { .type = TYPE_U32, .as.u32 = byte },
+            };
+          } else {
+            destination->as.variable.as.u32 = byte;
+            return_value.as.value.as.u32 = 1u;
+          }
           funlockfile(stdin);
-          return_value = (Datum) {
-            .kind = SYM_VARIABLE,
-            .as.value = { .type = TYPE_U32, .as.u32 = byte },
-          };
           return return_value;
         }
         if (amount == 0) {

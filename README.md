@@ -2594,26 +2594,40 @@ features:
       example, default SIGINT handling or a crash) does not run `atexit()`;
       the user may have to run `stty sane` to repair the shell terminal.
 
-  * `(tty-read-byte [TIMEOUT_MS])` — Read one byte from standard input:
+  * `(tty-read-byte)` — Block until a byte is received from standard input,
+    returning its `u32` value in the range 0–255 (including NUL = 0). A
+    terminal I/O error causes an evaluation failure.
 
-    + With no arguments, **block until a byte is received** (or report a
-      terminal I/O error). No timeout is imposed.
-    + `0` polls immediately without waiting.
-    + A positive `u32` timeout waits up to the specified duration, restarting
-      interrupted polls without resetting the overall deadline.
-    + A received byte becomes `u32` in the range 0–255 (including NUL = 0).
-      When a timed read expires without input, it returns `empty`, **not** 0.
-      Since `(local)` cannot bind `empty`, check timeout results directly or
-      use the blocking form when a byte is required.
+  * `(tty-read-byte TIMEOUT_MS VARIABLE_NAME)` or
+    `(tty-read-byte VARIABLE_NAME TIMEOUT_MS)` — Read one byte with a timeout
+    and store it in an existing named **mutable `u32` variable**.
+
+    + `TIMEOUT_MS` must be a `u32`. `0` polls immediately; a positive timeout
+      waits up to that many milliseconds. Interrupted polls resume without
+      resetting the overall deadline.
+    + `VARIABLE_NAME` is a string naming an existing variable, including a
+      visible scoped local. Undefined names, frozen symbols, arrays, and
+      variables of types other than `u32` cause evaluation failures.
+    + Returns `true` (`u32` 1) **only if** a byte was received and written.
+      Returns `false` (`u32` 0) on timeout and **does not modify** the
+      destination. Both argument orders are equivalent.
+    + Neither form allocates GC-managed memory, and neither uses `empty` to
+      represent a normal input timeout.
     + Requires `(tty-enable)` first; read errors and terminal hangups fail.
     + An arrow key typically produces multiple bytes, such as ESC, `[`, `A`.
       For simple games, WASD keys avoid escape-sequence parsing.
-    + Like the TTY mode, reads belong to the process. Concurrent TTY input
-      operations are serialized with stdin’s `flockfile()` lock; a waiting
-      `(tty-read-byte)` also holds that lock until it completes.
-    + Don’t mix this API with buffered reads of the same stdin descriptor,
-      such as `(read-file "/dev/stdin")`. Those can buffer input independently
-      and prevent the TTY reader from seeing it.
+    + Reads and terminal mode changes are process-wide and serialized with
+      stdin’s `flockfile()` lock; a waiting `(tty-read-byte)` holds this lock.
+    + Don’t mix this API with independently buffered reads of the same stdin
+      descriptor, such as `(read-file "/dev/stdin")`.
+
+    Example of a nonblocking, allocation-free input poll:
+
+    ```lisp
+    (var "key" 0)
+    (if (tty-read-byte "key" 0)
+      (println "Received byte: " key))
+    ```
 
   * `(tty-size ARRAY_NAME)` — Query the current terminal size and update the
     first two elements of an existing named **mutable `u32` array of length
